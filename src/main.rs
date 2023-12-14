@@ -4,6 +4,7 @@ use chumsky::{input::Stream, prelude::*};
 use logos::Logos;
 use miette::{miette, LabeledSpan};
 use parser::{parser, LogosToken};
+mod analyzer;
 mod parser;
 
 fn main() {
@@ -19,7 +20,7 @@ fn main() {
         .spanned::<LogosToken, SimpleSpan>((SRC.len()..SRC.len()).into());
 
     match parser().parse(token_stream).into_result() {
-        Ok(stuff) => println!("{stuff:?}"),
+        Ok(stuff) => analyzer::analyzer(stuff),
         Err(errs) => {
             for err in errs {
                 let span: Range<usize> = (*err.span()).into();
