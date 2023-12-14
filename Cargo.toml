@@ -1,7 +1,11 @@
 [package]
-name = "ShortLang"
+name = "short_lang"
 version = "0.1.0"
 edition = "2021"
+
+[[bin]]
+name = "ShortLang"
+path = "src/main.rs"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -9,3 +13,4 @@ edition = "2021"
 chumsky = { git = "https://github.com/zesterer/chumsky"}
 logos = "0.13.0"
 miette = {version = "5.10.0", features = ["fancy"]}
+regex = "1.10.2"
