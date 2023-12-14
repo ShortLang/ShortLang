@@ -1,9 +1,6 @@
 use std::{fmt, ops::Range};
 
-use chumsky::{
-    input::{Stream, ValueInput},
-    prelude::*,
-};
+use chumsky::{input::ValueInput, prelude::*};
 use logos::Logos;
 
 pub type Span = SimpleSpan<usize>;
@@ -184,6 +181,7 @@ pub enum ExprKind {
     Int(u64),
     Float(f64),
     Bool(bool),
+    InlineFunction(String, Vec<String>, Box<Expr>),
     String(String),
     Ident(String),
     Binary(Box<Expr>, BinaryOp, Box<Expr>),
@@ -194,7 +192,10 @@ pub fn parser<'a, I>() -> impl Parser<'a, I, Vec<Expr>, extra::Err<Rich<'a, Logo
 where
     I: ValueInput<'a, Token = LogosToken<'a>, Span = SimpleSpan>,
 {
-    recursive(|expr| {
+    let ident = select! {
+        LogosToken::Ident(s) => s,
+    };
+    recursive(|_expr| {
         let inline = recursive(|e| {
             let val = select! {
                 LogosToken::Int(i) => ExprKind::Int(i.parse().unwrap()),
@@ -224,8 +225,7 @@ where
                               result.push(char::from_u32(value).unwrap());
                             }
                         },
-                        // Add more cases
-
+                        // Add more cases later
                         _ => result.push(ch), // Invalid escape, just keep char
                       }
                     } else {
@@ -301,7 +301,34 @@ where
                 .clone()
                 .or(expr_.delimited_by(just(LogosToken::LParen), just(LogosToken::RParen)))
         });
-        inline
+        let var = ident
+            .then_ignore(just(LogosToken::Eq))
+            .then(inline.clone())
+            .map_with(|(name, expr), f| {
+                let span: Span = f.span();
+                Expr::new(span.into(), ExprKind::Set(name.to_string(), Box::new(expr)))
+            });
+        let args = ident
+            .clone()
+            .separated_by(just(LogosToken::Comma))
+            .allow_trailing()
+            .collect::<Vec<_>>();
+        let function = ident
+            .then(args.delimited_by(just(LogosToken::LParen), just(LogosToken::RParen)))
+            .then_ignore(just(LogosToken::Eq))
+            .then(inline.clone())
+            .map_with(|((name, args), expr), f| {
+                let span: Span = f.span();
+                Expr::new(
+                    span.into(),
+                    ExprKind::InlineFunction(
+                        name.to_string(),
+                        args.iter().map(|x| x.to_string()).collect::<Vec<_>>(),
+                        Box::new(expr),
+                    ),
+                )
+            });
+        function.or(var).or(inline)
     })
     .repeated()
     .collect::<Vec<Expr>>()
