@@ -6,13 +6,12 @@ use logos::Logos;
 pub type Span = SimpleSpan<usize>;
 #[derive(Logos, Debug, Clone, PartialEq)]
 #[logos(skip r"[ \r\f\t]+")]
-#[logos(skip r"#[^\n]*")]
 pub enum LogosToken<'a> {
     #[regex(r#"\d+"#, priority = 2)]
     Int(&'a str),
     #[regex(r#"((\d+(\.\d+)?)|((\.\d+))|(\.\d+))([Ee](\+|-)?\d+)?"#)]
     Float(&'a str),
-    #[token("\n")]
+    #[regex(r#"\n"#)]
     Newline,
     #[token("true")]
     True,
@@ -42,6 +41,8 @@ pub enum LogosToken<'a> {
     Eq,
     #[token("!")]
     Bang,
+    #[token("&")]
+    AndOne,
     #[token("&&")]
     And,
     #[token("||")]
@@ -83,8 +84,6 @@ pub enum LogosToken<'a> {
     // LineComment,
     #[regex(r#"[A-Za-z_]([A-Za-z]|_|\d)*"#)]
     Ident(&'a str),
-    #[token("return")]
-    KwReturn,
     #[token("fn")]
     KwFn,
     Error,
@@ -130,7 +129,7 @@ impl<'a> fmt::Display for LogosToken<'a> {
             LogosToken::RSquare => write!(f, "]"),
             LogosToken::LBrace => write!(f, "{{"),
             LogosToken::RBrace => write!(f, "}}"),
-            LogosToken::KwReturn => write!(f, "return"),
+            LogosToken::AndOne => write!(f, "&"),
         }
     }
 }
@@ -184,7 +183,9 @@ pub enum ExprKind {
     Int(u64),
     Float(f64),
     Bool(bool),
+    Return(Box<Expr>),
     InlineFunction(String, Vec<String>, Box<Expr>),
+    MultilineFunction(String, Vec<String>, Vec<Expr>),
     String(String),
     Ident(String),
     Binary(Box<Expr>, BinaryOp, Box<Expr>),
@@ -198,7 +199,7 @@ where
     let ident = select! {
         LogosToken::Ident(s) => s,
     };
-    recursive(|_expr| {
+    recursive(|expr| {
         let inline = recursive(|e| {
             let val = select! {
                 LogosToken::Int(i) => ExprKind::Int(i.parse().unwrap()),
@@ -321,7 +322,7 @@ where
                 Expr::new(span.into(), ExprKind::Set(name.to_string(), Box::new(expr)))
             });
         let args = ident.clone().repeated().collect::<Vec<_>>();
-        let function = ident
+        let inline_function = ident
             .then(args)
             .then_ignore(just(LogosToken::Eq))
             .then(inline.clone())
@@ -336,11 +337,41 @@ where
                     ),
                 )
             });
-        var.or(function)
-            .or(inline)
-            .padded_by(just(LogosToken::Newline).repeated().or_not())
+        let block = expr
+            .clone()
+            .repeated()
+            .collect::<Vec<_>>()
+            .padded_by(just(LogosToken::Newline).or_not());
+
+        let multiline_function = ident
+            .then(args)
+            .then_ignore(just(LogosToken::Eq))
+            .then(block.delimited_by(just(LogosToken::LBrace), just(LogosToken::RBrace)))
+            .map_with(|((name, args), exprs), f| {
+                let span: Span = f.span();
+                Expr::new(
+                    span.into(),
+                    ExprKind::MultilineFunction(
+                        name.to_string(),
+                        args.iter().map(|x| x.to_string()).collect::<Vec<_>>(),
+                        exprs,
+                    ),
+                )
+            });
+        let return_stmt = just(LogosToken::AndOne)
+            .ignore_then(inline.clone())
+            .map_with(|expr, f| {
+                let span: Span = f.span();
+                Expr::new(span.into(), ExprKind::Return(Box::new(expr)))
+            });
+
+        (var.or(multiline_function)
+            .or(inline_function)
+            .or(return_stmt)
+            .or(inline))
+        .then_ignore(just(LogosToken::Newline).or(just(LogosToken::Semi)))
     })
-    .separated_by(just(LogosToken::Newline).or(just(LogosToken::Semi)))
-    .allow_trailing()
+    .padded_by(just(LogosToken::Newline).repeated().or_not())
+    .repeated()
     .collect::<Vec<Expr>>()
 }

@@ -8,14 +8,18 @@ mod analyzer;
 mod parser;
 
 fn main() {
-    const SRC: &str = r##"hello_world = 123; x = hello_world; h = 1 + p; g r e e t i n g = r + x"##;
+    const SRC: &str = r##"
+f x = {
+    f = x + 1
+    &f
+}
+    "##;
     let token_iter = LogosToken::lexer(SRC)
         .spanned()
         .map(|(tok, span)| match tok {
             Ok(tok) => (tok, span.into()),
             Err(()) => (LogosToken::Error, span.into()),
         });
-
     let token_stream = Stream::from_iter(token_iter)
         .spanned::<LogosToken, SimpleSpan>((SRC.len()..SRC.len()).into());
 
