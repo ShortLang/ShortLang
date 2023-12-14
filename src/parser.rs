@@ -232,6 +232,8 @@ where
                       result.push(ch);
                     }
                   };
+                    result.remove(0);
+                    result.remove(result.len() - 1);
                     ExprKind::String(result)
                 },
                 LogosToken::Ident(s) => ExprKind::Ident(s.to_string()),
@@ -240,24 +242,19 @@ where
             }
             .map_with(|a, f| {
                 let span: Span = f.span();
-
+                if let ExprKind::Ident(ref x) = a {
+                    let mut string = x.to_string();
+                    if string.starts_with("_") {
+                        string.remove(0);
+                        return Expr::new(span.into(), ExprKind::String(string.replace("_", " ")));
+                    }
+                }
                 Expr::new(span.into(), a)
             })
             .or(e
                 .clone()
                 .delimited_by(just(LogosToken::LParen), just(LogosToken::RParen)));
 
-            let ss = ident
-                .clone()
-                .then_ignore(just(LogosToken::Semi))
-                .map_with(|a, f| {
-                    let span: Span = f.span();
-                    Expr::new(
-                        span.into(),
-                        ExprKind::String(a.to_string().replace("_", " ")),
-                    )
-                });
-            let val = ss.or(val);
             let op = just(LogosToken::Times)
                 .to(BinaryOp::Mul)
                 .or(just(LogosToken::Slash).to(BinaryOp::Div));
