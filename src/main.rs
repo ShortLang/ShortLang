@@ -8,7 +8,7 @@ mod analyzer;
 mod parser;
 
 fn main() {
-    const SRC: &str = r##" "helo" + _hello "##;
+    const SRC: &str = r##"hello_world = 123; x = hello_world; h = 1 + p; g r e e t i n g = r + x"##;
     let token_iter = LogosToken::lexer(SRC)
         .spanned()
         .map(|(tok, span)| match tok {

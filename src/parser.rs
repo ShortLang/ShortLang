@@ -5,13 +5,15 @@ use logos::Logos;
 
 pub type Span = SimpleSpan<usize>;
 #[derive(Logos, Debug, Clone, PartialEq)]
-#[logos(skip r"[ \r\f\n\t]+")]
+#[logos(skip r"[ \r\f\t]+")]
 #[logos(skip r"#[^\n]*")]
 pub enum LogosToken<'a> {
     #[regex(r#"\d+"#, priority = 2)]
     Int(&'a str),
     #[regex(r#"((\d+(\.\d+)?)|((\.\d+))|(\.\d+))([Ee](\+|-)?\d+)?"#)]
     Float(&'a str),
+    #[token("\n")]
+    Newline,
     #[token("true")]
     True,
     #[token("false")]
@@ -112,6 +114,7 @@ impl<'a> fmt::Display for LogosToken<'a> {
             LogosToken::LParen => write!(f, "("),
             LogosToken::Comma => write!(f, ","),
             LogosToken::RParen => write!(f, ")"),
+            LogosToken::Newline => write!(f, "newline"),
             LogosToken::Error => write!(f, "unknown character"),
             LogosToken::Plus => write!(f, "+"),
             LogosToken::Minus => write!(f, "-"),
@@ -333,8 +336,11 @@ where
                     ),
                 )
             });
-        var.or(function).or(inline)
+        var.or(function)
+            .or(inline)
+            .padded_by(just(LogosToken::Newline).repeated().or_not())
     })
-    .repeated()
+    .separated_by(just(LogosToken::Newline).or(just(LogosToken::Semi)))
+    .allow_trailing()
     .collect::<Vec<Expr>>()
 }
