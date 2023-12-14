@@ -9,6 +9,7 @@ mod parser;
 
 fn main() {
     const SRC: &str = r##"
+// this is a function
 f x = {
     f = x + 1
     &f

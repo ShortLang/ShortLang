@@ -6,6 +6,8 @@ use logos::Logos;
 pub type Span = SimpleSpan<usize>;
 #[derive(Logos, Debug, Clone, PartialEq)]
 #[logos(skip r"[ \r\f\t]+")]
+// skip comments
+#[logos(skip r"//.*")]
 pub enum LogosToken<'a> {
     #[regex(r#"\d+"#, priority = 2)]
     Int(&'a str),
