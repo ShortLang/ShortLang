@@ -7,7 +7,7 @@ use parser::{parser, LogosToken};
 mod parser;
 
 fn main() {
-    const SRC: &str = r##"x = 6 f(n) = n + 1 * x"##;
+    const SRC: &str = r##"x = hello_world; g r e e t i n g = r + x"##;
     let token_iter = LogosToken::lexer(SRC)
         .spanned()
         .map(|(tok, span)| match tok {
