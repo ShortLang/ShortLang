@@ -246,6 +246,18 @@ where
             .or(e
                 .clone()
                 .delimited_by(just(LogosToken::LParen), just(LogosToken::RParen)));
+
+            let ss = ident
+                .clone()
+                .then_ignore(just(LogosToken::Semi))
+                .map_with(|a, f| {
+                    let span: Span = f.span();
+                    Expr::new(
+                        span.into(),
+                        ExprKind::String(a.to_string().replace("_", " ")),
+                    )
+                });
+            let val = ss.or(val);
             let op = just(LogosToken::Times)
                 .to(BinaryOp::Mul)
                 .or(just(LogosToken::Slash).to(BinaryOp::Div));
@@ -308,13 +320,9 @@ where
                 let span: Span = f.span();
                 Expr::new(span.into(), ExprKind::Set(name.to_string(), Box::new(expr)))
             });
-        let args = ident
-            .clone()
-            .separated_by(just(LogosToken::Comma))
-            .allow_trailing()
-            .collect::<Vec<_>>();
+        let args = ident.clone().repeated().collect::<Vec<_>>();
         let function = ident
-            .then(args.delimited_by(just(LogosToken::LParen), just(LogosToken::RParen)))
+            .then(args)
             .then_ignore(just(LogosToken::Eq))
             .then(inline.clone())
             .map_with(|((name, args), expr), f| {
@@ -328,7 +336,7 @@ where
                     ),
                 )
             });
-        function.or(var).or(inline)
+        var.or(function).or(inline)
     })
     .repeated()
     .collect::<Vec<Expr>>()
