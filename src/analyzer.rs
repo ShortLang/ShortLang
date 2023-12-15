@@ -1,86 +1,98 @@
 use crate::parser::Expr;
-use crate::parser::ExprKind::{Binary, Bool, Float, Ident, InlineFunction, Int, Set, String};
+use crate::parser::ExprKind::{Binary, Ident, InlineFunction, MultilineFunction, Return, Set};
 use miette::{miette, LabeledSpan, Severity};
+use std::collections::HashMap;
 
-pub fn analyze(source: &std::string::String, expressions: Vec<Expr>) {
-    let mut declared: Vec<(std::string::String, std::ops::Range<usize>)> = Vec::new();
-    let mut used: Vec<(std::string::String, std::ops::Range<usize>)> = Vec::new();
+pub struct VariableInfo {
+    pub range: std::ops::Range<usize>,
+    pub is_used: bool,
+}
 
+pub fn analyze(source: &String, expressions: Vec<Expr>) {
+    let mut scopes: Vec<HashMap<String, VariableInfo>> = Vec::new();
+    scopes.push(HashMap::new()); // Add the global scope
     for expression in expressions {
-        let mut current_expr = expression;
-        let mut other: Option<Box<Expr>> = None;
+        analyze_expr(&expression, &mut scopes, source);
+    }
+    check_unused_variables(&scopes, source);
+}
 
-        loop {
-            match current_expr.inner {
-                Set(name, expr) => {
-                    if !declared.iter().any(|(n, _)| n == &name) {
-                        declared.push((name.clone(), current_expr.span.clone()));
-                    }
-                    current_expr = *expr;
-                }
-                Ident(name) => {
-                    if !used.iter().any(|(n, _)| n == &name) {
-                        used.push((name.clone(), current_expr.span));
-                    }
-                    if let Some(expr) = other {
-                        current_expr = *expr;
-                        other = None;
-                    } else {
-                        break;
-                    }
-                }
-                Binary(left, _, right) => {
-                    current_expr = *left;
-                    other = Some(right);
-                }
-                InlineFunction(_, _, body) => {
-                    current_expr = *body;
-                }
-                Int(_) | Float(_) | Bool(_) => {
-                    if let Some(expr) = other {
-                        current_expr = *expr;
-                        other = None;
-                    } else {
-                        break;
-                    }
-                }
-                _ => {
-                    println!("Error: unknown expression type");
-                    break;
-                }
+fn analyze_expr(expr: &Expr, scopes: &mut Vec<HashMap<String, VariableInfo>>, source: &String) {
+    match &expr.inner {
+        Set(name, current_expr) => {
+            scopes.last_mut().unwrap().insert(
+                name.clone(),
+                VariableInfo {
+                    range: expr.span.clone(),
+                    is_used: false,
+                },
+            );
+            analyze_expr(current_expr, scopes, source);
+        }
+        Ident(name) => {
+            if let Some(var_info) = scopes
+                .iter_mut()
+                .rev()
+                .find_map(|scope| scope.get_mut(name))
+            {
+                var_info.is_used = true;
+            } else {
+                println!(
+                    "{:?}",
+                    miette!(
+                        severity = Severity::Error,
+                        labels = vec![LabeledSpan::at(
+                            expr.span.clone(),
+                            "Undefined variable: ".to_owned() + name
+                        )],
+                        "NameError: Variable is undefined in the current scope"
+                    )
+                    .with_source_code(source.clone())
+                );
             }
         }
-    }
-
-    for variable in &used {
-        if !declared.iter().any(|(n, _)| n == &variable.0) {
-            println!(
-                "{:?}",
-                miette!(
-                    labels = vec![LabeledSpan::at(
-                        variable.1.clone(),
-                        "Undefined variable: ".to_owned() + &variable.0
-                    )],
-                    "NameError: Variable is undefined in the current scope"
-                )
-                .with_source_code(source.clone())
-            );
+        Binary(left, _, right) => {
+            analyze_expr(left, scopes, source);
+            analyze_expr(right, scopes, source);
         }
+        InlineFunction(_, _, expr) => {
+            scopes.push(HashMap::new());
+            analyze_expr(expr, scopes, source);
+            check_unused_variables(scopes, source);
+            scopes.pop();
+        }
+        MultilineFunction(_, _, expr) => {
+            scopes.push(HashMap::new());
+            for expr in expr {
+                analyze_expr(expr, scopes, source);
+            }
+            check_unused_variables(scopes, source);
+            scopes.pop();
+        }
+        Return(expr) => {
+            analyze_expr(expr, scopes, source);
+        }
+        _ => {}
     }
-    for variable in &declared {
-        if !used.iter().any(|(n, _)| n == &variable.0) {
-            println!(
-                "{:?}",
-                miette!(
-                    severity = Severity::Warning,
-                    labels = vec![LabeledSpan::at(
-                        variable.1.clone(),
-                        "Unused variable: ".to_owned() + &variable.0
-                    )],
-                    "Variable is unused in the current scope"
-                )
-                .with_source_code(source.clone())
-            );
+}
+
+fn check_unused_variables(scopes: &Vec<HashMap<String, VariableInfo>>, source: &String) {
+    if let Some(scope) = scopes.last() {
+        for (name, var_info) in scope {
+            if !var_info.is_used {
+                println!(
+                    "{:?}",
+                    miette!(
+                        severity = Severity::Warning,
+                        labels = vec![LabeledSpan::at(
+                            var_info.range.clone(),
+                            "Unused variable: ".to_owned() + &name
+                        )],
+                        "Variable is unused in the current scope"
+                    )
+                    .with_source_code(source.clone())
+                );
+            }
         }
     }
 }
