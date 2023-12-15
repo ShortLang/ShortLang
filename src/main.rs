@@ -6,8 +6,8 @@ use miette::{miette, LabeledSpan};
 use parser::{parser, LogosToken};
 
 mod analyzer;
-mod parser;
 mod compiler;
+mod parser;
 
 fn main() {
     const SRC: &str = r##"
