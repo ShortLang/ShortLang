@@ -4,7 +4,9 @@ use chumsky::{input::Stream, prelude::*};
 use logos::Logos;
 use miette::{miette, LabeledSpan};
 use parser::{parser, LogosToken};
+
 mod analyzer;
+mod compiler;
 mod parser;
 
 fn main() {
