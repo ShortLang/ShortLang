@@ -10,7 +10,6 @@ use regex::Regex;
 mod analyzer;
 mod parser;
 
-#[allow(non_snake_case)]
 fn main() {
     let args: Vec<String> = env::args().collect();
     let default_filename = String::from("main.sl");
@@ -21,7 +20,15 @@ fn main() {
         std::process::exit(1);
     }) + "\n";
     let comment_regex = Regex::new(r"//.*").unwrap();
-    let uses_comments = comment_regex.is_match(&src);
+    if comment_regex.is_match(&src) {
+        println!(
+            "{:?}",
+            miette!(
+                severity = miette::Severity::Warning,
+                "Input file contains comments, this is not recommended."
+            )
+        );
+    }
 
     let token_iter = LogosToken::lexer(&src)
         .spanned()
