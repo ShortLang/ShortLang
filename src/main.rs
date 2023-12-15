@@ -4,8 +4,10 @@ use chumsky::{input::Stream, prelude::*};
 use logos::Logos;
 use miette::{miette, LabeledSpan};
 use parser::{parser, LogosToken};
+
 mod analyzer;
 mod parser;
+mod compiler;
 
 fn main() {
     const SRC: &str = r##"
