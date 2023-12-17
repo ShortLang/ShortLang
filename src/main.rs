@@ -5,18 +5,14 @@ use logos::Logos;
 use miette::{miette, LabeledSpan};
 use parser::{parser, LogosToken};
 
+use crate::vm::VM;
+
 mod analyzer;
-mod compiler;
 mod parser;
+mod vm;
 
 fn main() {
-    const SRC: &str = r##"
-// this is a function
-f x = {
-    f = x + 1
-    &f
-}
-    "##;
+    const SRC: &str = r##"5 + 6 / 2 print()"##;
     let token_iter = LogosToken::lexer(SRC)
         .spanned()
         .map(|(tok, span)| match tok {
@@ -27,7 +23,11 @@ f x = {
         .spanned::<LogosToken, SimpleSpan>((SRC.len()..SRC.len()).into());
 
     match parser().parse(token_stream).into_result() {
-        Ok(stuff) => analyzer::analyzer(stuff),
+        Ok(stuff) => {
+            // analyzer::analyzer(stuff.clone());
+            let mut vm = VM::new(stuff, SRC.to_string());
+            vm.compile();
+        }
         Err(errs) => {
             for err in errs {
                 let span: Range<usize> = (*err.span()).into();

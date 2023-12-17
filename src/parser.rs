@@ -5,16 +5,14 @@ use logos::Logos;
 
 pub type Span = SimpleSpan<usize>;
 #[derive(Logos, Debug, Clone, PartialEq)]
-#[logos(skip r"[ \r\f\t]+")]
+#[logos(skip r"[ \r\n\f\t]+")]
 // skip comments
 #[logos(skip r"//.*")]
 pub enum LogosToken<'a> {
-    #[regex(r#"\d+"#, priority = 2)]
+    #[regex(r#"[-+]?\d+"#, priority = 2)]
     Int(&'a str),
-    #[regex(r#"((\d+(\.\d+)?)|((\.\d+))|(\.\d+))([Ee](\+|-)?\d+)?"#)]
+    #[regex(r#"[-+]?((\d+(\.\d+)?)|((\.\d+))|(\.\d+))([Ee](\+|-)?\d+)?"#)]
     Float(&'a str),
-    #[regex(r#"\n"#)]
-    Newline,
     #[token("true")]
     True,
     #[token("false")]
@@ -115,7 +113,6 @@ impl<'a> fmt::Display for LogosToken<'a> {
             LogosToken::LParen => write!(f, "("),
             LogosToken::Comma => write!(f, ","),
             LogosToken::RParen => write!(f, ")"),
-            LogosToken::Newline => write!(f, "newline"),
             LogosToken::Error => write!(f, "unknown character"),
             LogosToken::Plus => write!(f, "+"),
             LogosToken::Minus => write!(f, "-"),
@@ -182,12 +179,13 @@ impl BinaryOp {
 
 #[derive(Debug, Clone)]
 pub enum ExprKind {
-    Int(u64),
+    Int(i64),
     Float(f64),
     Bool(bool),
     Return(Box<Expr>),
     InlineFunction(String, Vec<String>, Box<Expr>),
     MultilineFunction(String, Vec<String>, Vec<Expr>),
+    Call(String, Option<Vec<Expr>>),
     String(String),
     Ident(String),
     Binary(Box<Expr>, BinaryOp, Box<Expr>),
@@ -312,8 +310,17 @@ where
                         ExprKind::Binary(Box::new(lhs), op, Box::new(rhs)),
                     )
                 });
-            expr_
-                .clone()
+            let args = e.separated_by(just(LogosToken::Comma)).collect::<Vec<_>>();
+            let call = ident
+                .then(
+                    args.or_not()
+                        .delimited_by(just(LogosToken::LParen), just(LogosToken::RParen)),
+                )
+                .map_with(|(name, args), f| {
+                    let span: Span = f.span();
+                    Expr::new(span.into(), ExprKind::Call(name.to_string(), args))
+                });
+            call.or(expr_.clone())
                 .or(expr_.delimited_by(just(LogosToken::LParen), just(LogosToken::RParen)))
         });
         let var = ident
@@ -339,11 +346,7 @@ where
                     ),
                 )
             });
-        let block = expr
-            .clone()
-            .repeated()
-            .collect::<Vec<_>>()
-            .padded_by(just(LogosToken::Newline).or_not());
+        let block = expr.clone().repeated().collect::<Vec<_>>();
 
         let multiline_function = ident
             .then(args)
@@ -367,13 +370,11 @@ where
                 Expr::new(span.into(), ExprKind::Return(Box::new(expr)))
             });
 
-        (var.or(multiline_function)
+        var.or(multiline_function)
             .or(inline_function)
             .or(return_stmt)
-            .or(inline))
-        .then_ignore(just(LogosToken::Newline).or(just(LogosToken::Semi)))
+            .or(inline)
     })
-    .padded_by(just(LogosToken::Newline).repeated().or_not())
     .repeated()
     .collect::<Vec<Expr>>()
 }

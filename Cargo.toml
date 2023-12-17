@@ -5,15 +5,7 @@ edition = "2021"
 
 [dependencies]
 chumsky = { git = "https://github.com/zesterer/chumsky"}
+lazy_static = "1.4.0"
 logos = "0.13.0"
 miette = {version = "5.10.0", features = ["fancy"]}
 
-[dependencies.inkwell]
-git = "https://github.com/TheDan64/inkwell"
-branch = "master"
-features = ["llvm16-0"]
-
-[dependencies.llvm-sys-160]
-package = "llvm-sys"
-version = "160.0.0"
-features = ["prefer-static"]
