@@ -1,11 +1,15 @@
 [package]
-name = "ShortLang"
+name = "short_lang"
 version = "0.1.0"
 edition = "2021"
+
+[[bin]]
+name = "ShortLang"
+path = "src/main.rs"
 
 [dependencies]
 chumsky = { git = "https://github.com/zesterer/chumsky"}
 lazy_static = "1.4.0"
 logos = "0.13.0"
 miette = {version = "5.10.0", features = ["fancy"]}
-
+regex = "1.10.2"
