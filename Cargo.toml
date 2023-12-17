@@ -1,19 +1,14 @@
 [package]
-name = "ShortLang"
+name = "short_lang"
 version = "0.1.0"
 edition = "2021"
+
+[[bin]]
+name = "ShortLang"
+path = "src/main.rs"
 
 [dependencies]
 chumsky = { git = "https://github.com/zesterer/chumsky"}
 logos = "0.13.0"
 miette = {version = "5.10.0", features = ["fancy"]}
-
-[dependencies.inkwell]
-git = "https://github.com/TheDan64/inkwell"
-branch = "master"
-features = ["llvm16-0"]
-
-[dependencies.llvm-sys-160]
-package = "llvm-sys"
-version = "160.0.0"
-features = ["prefer-static"]
+regex = "1.10.2"
