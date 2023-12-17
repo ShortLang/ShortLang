@@ -6,7 +6,6 @@ use chumsky::{input::Stream, prelude::*};
 use logos::Logos;
 use miette::{miette, LabeledSpan};
 use parser::{parser, LogosToken};
-use regex::Regex;
 mod analyzer;
 mod parser;
 
@@ -19,16 +18,6 @@ fn main() {
         println!("Error: Input file could not be read");
         std::process::exit(1);
     }) + "\n";
-    let comment_regex = Regex::new(r"//.*").unwrap();
-    if comment_regex.is_match(&src) {
-        println!(
-            "{:?}",
-            miette!(
-                severity = miette::Severity::Warning,
-                "Input file contains comments, this is not recommended."
-            )
-        );
-    }
 
     let token_iter = LogosToken::lexer(&src)
         .spanned()

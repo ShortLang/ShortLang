@@ -12,13 +12,3 @@ chumsky = { git = "https://github.com/zesterer/chumsky"}
 logos = "0.13.0"
 miette = {version = "5.10.0", features = ["fancy"]}
 regex = "1.10.2"
-
-[dependencies.inkwell]
-git = "https://github.com/TheDan64/inkwell"
-branch = "master"
-features = ["llvm15-0"]
-
-[dependencies.llvm-sys-150]
-package = "llvm-sys"
-version = "150.0.0"
-features = ["prefer-static"]
