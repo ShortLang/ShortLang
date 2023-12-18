@@ -1,7 +1,7 @@
-hello_world = 123;
+hello_world = 123
 x = hello_world // wow funny comment
-h = 1 + p; g r e e t i n g s = b + x // this is a comment
+h = 1 + x
+g r e e t i n g s = n + x // this is a comment
 f i = {
-   a=1
+   a=i+1
 }
-b = 1 + a;

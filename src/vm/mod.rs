@@ -14,6 +14,8 @@ use self::{
     memory::{mark, sweep},
 };
 
+use super::SRC;
+
 const GC_TRIGGER: usize = 1000;
 
 use value::Value;
@@ -24,18 +26,16 @@ pub struct VM {
     stack: Vec<*mut Value>,
     constants: Vec<Value>,
     instructions: Vec<(Instr, Range<usize>)>,
-    source: String,
     exprs: Vec<Expr>,
     iteration: usize,
 }
 
 impl VM {
-    pub fn new(exprs: Vec<Expr>, source: String) -> Self {
+    pub fn new(exprs: Vec<Expr>) -> Self {
         Self {
             pc: 0,
             stack: vec![],
             iteration: 0,
-            source,
             constants: vec![],
             instructions: vec![],
             exprs,
@@ -139,7 +139,7 @@ impl VM {
                 labels = vec![LabeledSpan::at(span, reason)],
                 "Runtime Error"
             )
-            .with_source_code(self.source.clone())
+            .with_source_code(SRC.clone())
         );
         std::process::exit(1);
     }

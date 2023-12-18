@@ -1,3 +1,4 @@
+use super::SRC;
 use crate::parser::Expr;
 use crate::parser::ExprKind::{Binary, Ident, InlineFunction, MultilineFunction, Return, Set};
 use miette::{miette, LabeledSpan, Severity};
@@ -9,26 +10,26 @@ pub struct VariableInfo {
     pub is_used: bool,
 }
 
-pub fn analyze(source: &String, expressions: Vec<Expr>) {
+pub fn analyze(expressions: Vec<Expr>) {
     let mut scopes: Vec<HashMap<String, VariableInfo>> = Vec::new();
     let mut errors = Vec::new();
     let mut warnings = Vec::new();
 
-    if Regex::new(r"//.*").unwrap().is_match(source) {
+    if Regex::new(r"//.*").unwrap().is_match(&**SRC) {
         warnings.push(Box::from(
             miette!(
                 severity = Severity::Warning,
                 "Input file contains comments, this is not recommended for ShortLang"
             )
-            .with_source_code(source.clone()),
+            .with_source_code(SRC.clone()),
         ));
     }
 
     scopes.push(HashMap::new()); // Add the global scope
     for expression in expressions {
-        analyze_expr(&expression, &mut scopes, source, &mut errors, &mut warnings);
+        analyze_expr(&expression, &mut scopes, &mut errors, &mut warnings);
     }
-    check_unused_variables(&scopes, source, &mut warnings);
+    check_unused_variables(&scopes, &mut warnings);
 
     for error in &errors {
         println!("{:?}", error);
@@ -37,10 +38,10 @@ pub fn analyze(source: &String, expressions: Vec<Expr>) {
         for warning in &warnings {
             println!("{:?}", warning);
         }
-        if !warnings.is_empty() {
-            println!("Analysis completed with {} warnings", warnings.len());
-        } else {
+        if warnings.is_empty() {
             println!("Analysis completed successfully");
+        } else {
+            println!("Analysis completed with {} warnings", warnings.len());
         }
     } else {
         println!("Analysis failed with {} errors", errors.len());
@@ -51,7 +52,6 @@ pub fn analyze(source: &String, expressions: Vec<Expr>) {
 fn analyze_expr(
     expr: &Expr,
     scopes: &mut Vec<HashMap<String, VariableInfo>>,
-    source: &String,
     errors: &mut Vec<Box<dyn miette::Diagnostic>>,
     warnings: &mut Vec<Box<dyn miette::Diagnostic>>,
 ) {
@@ -64,7 +64,7 @@ fn analyze_expr(
                     is_used: false,
                 },
             );
-            analyze_expr(current_expr, scopes, source, errors, warnings);
+            analyze_expr(current_expr, scopes, errors, warnings);
         }
         Ident(name) => {
             if let Some(var_info) = scopes
@@ -87,54 +87,91 @@ fn analyze_expr(
                         "Value `{}` is not defined in this scope",
                         name
                     )
-                    .with_source_code(source.clone()),
+                    .with_source_code(SRC.clone()),
                 ));
             }
         }
         Binary(left, _, right) => {
-            analyze_expr(left, scopes, source, errors, warnings);
-            analyze_expr(right, scopes, source, errors, warnings);
+            analyze_expr(left, scopes, errors, warnings);
+            analyze_expr(right, scopes, errors, warnings);
         }
-        InlineFunction(_, _, expr) => {
-            scopes.push(HashMap::new());
-            analyze_expr(expr, scopes, source, errors, warnings);
-            check_unused_variables(scopes, source, warnings);
-            scopes.pop();
+        InlineFunction(_, args, curr_expr) => {
+            process_function(
+                args,
+                expr,
+                &vec![*curr_expr.clone()],
+                scopes,
+                errors,
+                warnings,
+            );
         }
-        MultilineFunction(_, _, expr) => {
-            scopes.push(HashMap::new());
-            for expr in expr {
-                analyze_expr(expr, scopes, source, errors, warnings);
-            }
-            check_unused_variables(scopes, source, warnings);
-            scopes.pop();
+        MultilineFunction(_, args, curr_expr) => {
+            process_function(args, expr, curr_expr, scopes, errors, warnings);
         }
         Return(expr) => {
-            analyze_expr(expr, scopes, source, errors, warnings);
+            analyze_expr(expr, scopes, errors, warnings);
         }
         _ => {}
     }
 }
 
+fn process_function(
+    args: &Vec<String>,
+    expr: &Expr,
+    curr_expr: &Vec<Expr>,
+    scopes: &mut Vec<HashMap<String, VariableInfo>>,
+    errors: &mut Vec<Box<dyn miette::Diagnostic>>,
+    warnings: &mut Vec<Box<dyn miette::Diagnostic>>,
+) {
+    scopes.push(HashMap::new());
+    for arg in args {
+        if scopes.last().unwrap().contains_key(arg) {
+            warnings.push(Box::from(
+                miette!(
+                    severity = Severity::Warning,
+                    help = "Consider renaming one of the arguments",
+                    labels = vec![LabeledSpan::at(expr.span.clone(), "duplicate argument")],
+                    "Argument `{}` is defined multiple times",
+                    arg
+                )
+                .with_source_code(SRC.clone()),
+            ));
+        } else {
+            scopes.last_mut().unwrap().insert(
+                arg.clone(),
+                VariableInfo {
+                    range: expr.span.clone(),
+                    is_used: false,
+                },
+            );
+        }
+    }
+    for expr in curr_expr {
+        analyze_expr(expr, scopes, errors, warnings);
+    }
+    check_unused_variables(scopes, warnings);
+    scopes.pop();
+}
+
 fn check_unused_variables(
     scopes: &Vec<HashMap<String, VariableInfo>>,
-    source: &String,
     warnings: &mut Vec<Box<dyn miette::Diagnostic>>,
 ) {
     if let Some(scope) = scopes.last() {
         for (name, var_info) in scope {
-            if !var_info.is_used {
-                warnings.push(Box::from(
-                    miette!(
-                        severity = Severity::Warning,
-                        help = "Remove the variable or use it",
-                        labels = vec![LabeledSpan::at(var_info.range.clone(), "unused variable")],
-                        "Variable `{}` is unused",
-                        name
-                    )
-                    .with_source_code(source.clone()),
-                ));
+            if var_info.is_used {
+                continue;
             }
+            warnings.push(Box::from(
+                miette!(
+                    severity = Severity::Warning,
+                    help = "Remove the variable or use it",
+                    labels = vec![LabeledSpan::at(var_info.range.clone(), "unused variable")],
+                    "Variable `{}` is unused",
+                    name
+                )
+                .with_source_code(SRC.clone()),
+            ));
         }
     }
 }
