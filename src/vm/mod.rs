@@ -14,12 +14,11 @@ use self::{
     memory::{mark, sweep},
 };
 
-use super::SRC;
-
 const GC_TRIGGER: usize = 1000;
 
 use value::Value;
 pub struct VM {
+    src: String,
     pc: usize,
     // Vector of pointers to the values
     // TODO: Make this limited sized using some kind of library
@@ -31,13 +30,14 @@ pub struct VM {
 }
 
 impl VM {
-    pub fn new(exprs: Vec<Expr>) -> Self {
+    pub fn new(src: &str, exprs: Vec<Expr>) -> Self {
         Self {
             pc: 0,
             stack: vec![],
             iteration: 0,
             constants: vec![],
             instructions: vec![],
+            src: src.to_owned(),
             exprs,
         }
     }
@@ -139,7 +139,7 @@ impl VM {
                 labels = vec![LabeledSpan::at(span, reason)],
                 "Runtime Error"
             )
-            .with_source_code(SRC.clone())
+            .with_source_code(self.src.clone())
         );
         std::process::exit(1);
     }
