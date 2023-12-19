@@ -1,7 +1,9 @@
 mod bytecode;
 mod memory;
 mod value;
+
 use miette::{miette, LabeledSpan};
+use std::ptr::NonNull;
 use std::{collections::HashMap, ops::Range};
 
 use crate::{
@@ -20,17 +22,20 @@ use value::Value;
 pub struct VM {
     src: String,
     pc: usize,
+
     // Vector of pointers to the values
     // TODO: Make this limited sized using some kind of library
-    stack: Vec<*mut Value>,
+    stack: Vec<NonNull<Value>>,
+
     variables_id: HashMap<String, u32>,
-    variables: Vec<HashMap<u32, Option<*mut Value>>>,
+    variables: Vec<HashMap<u32, Option<NonNull<Value>>>>,
 
     constants: Vec<Value>,
     var_id_count: usize,
     instructions: Vec<(Instr, Range<usize>)>,
     exprs: Vec<Expr>,
     iteration: usize,
+    // functions: HashMap<String, usize>,
 }
 
 impl VM {
@@ -205,10 +210,12 @@ impl VM {
                     _ => todo!(),
                 }
             }
+
             // ..implement other stuff later
             _ => todo!(),
         }
     }
+
     pub fn add_constant(&mut self, val: Value) -> usize {
         self.constants.push(val);
         self.constants.len()
@@ -226,7 +233,8 @@ impl VM {
         );
         std::process::exit(1);
     }
-    fn get_var(&mut self, id: u32) -> Option<*mut Value> {
+
+    fn get_var(&mut self, id: u32) -> Option<NonNull<Value>> {
         let mut scope_index = (self.variables.len() - 1) as i64;
         while scope_index >= 0 {
             if let Some(scope) = self.variables.get(scope_index as usize) {
@@ -238,6 +246,7 @@ impl VM {
         }
         return None;
     }
+
     fn run_byte(&mut self, instr: Instr, span: Range<usize>) -> bool {
         use bytecode::Bytecode::*;
         let args = instr.1.clone();
@@ -251,9 +260,10 @@ impl VM {
                 return true;
             }
             TYPEOF => unsafe {
-                let value = &*self.stack.pop().unwrap();
-                let ty = value.get_type();
-                self.stack.push(alloc_new_value(Value::String(ty)));
+                let value = self.stack.pop().unwrap();
+                let ty = value.as_ref().get_type();
+                self.stack
+                    .push(NonNull::new_unchecked(alloc_new_value(Value::String(ty))));
             },
             MAKE_VAR => {
                 self.variables
@@ -280,20 +290,24 @@ impl VM {
                 }
             }
 
-            LOAD_CONST => {
+            LOAD_CONST => unsafe {
                 let constant_index = args[0];
                 let constant = self.constants.get(constant_index as usize);
                 match constant {
-                    Some(c) => self.stack.push(alloc_new_value(c.to_owned())),
+                    Some(c) => self
+                        .stack
+                        .push(NonNull::new_unchecked(alloc_new_value(c.to_owned()))),
                     None => self.runtime_error("Stack overflow", span),
                 }
-            }
+            },
+
             ADD => unsafe {
-                let b = &*self.stack.pop().unwrap();
-                let a = &*self.stack.pop().unwrap();
+                let b = self.stack.pop().unwrap().as_ref();
+                let a = self.stack.pop().unwrap().as_ref();
                 let result = a.binary_add(b);
+
                 match result {
-                    Some(r) => self.stack.push(alloc_new_value(r)),
+                    Some(r) => self.stack.push(NonNull::new_unchecked(alloc_new_value(r))),
                     None => self.runtime_error(
                         format!(
                             "Cannot add values of type {:?} and {:?}",
@@ -305,12 +319,14 @@ impl VM {
                     ),
                 }
             },
+
             SUB => unsafe {
-                let b = &*self.stack.pop().unwrap();
-                let a = &*self.stack.pop().unwrap();
+                let b = self.stack.pop().unwrap().as_ref();
+                let a = self.stack.pop().unwrap().as_ref();
                 let result = a.binary_sub(b);
+
                 match result {
-                    Some(r) => self.stack.push(alloc_new_value(r)),
+                    Some(r) => self.stack.push(NonNull::new_unchecked(alloc_new_value(r))),
                     None => {
                         // give an error message
                         self.runtime_error(
@@ -325,12 +341,14 @@ impl VM {
                     }
                 }
             },
+
             MUL => unsafe {
-                let b = &*self.stack.pop().unwrap();
-                let a = &*self.stack.pop().unwrap();
+                let b = self.stack.pop().unwrap().as_ref();
+                let a = self.stack.pop().unwrap().as_ref();
                 let result = a.binary_mul(b);
+
                 match result {
-                    Some(r) => self.stack.push(alloc_new_value(r)),
+                    Some(r) => self.stack.push(NonNull::new_unchecked(alloc_new_value(r))),
                     None => {
                         // give an error message
                         self.runtime_error(
@@ -345,23 +363,24 @@ impl VM {
                     }
                 }
             },
+
             PRINT => unsafe {
-                let val = &*self.stack.pop().unwrap();
+                let val = self.stack.pop().unwrap().as_ref();
                 println!("{}", val.to_string());
             },
-            HALT => {
-                return true;
-            }
+
             DIV => unsafe {
-                let b = &*self.stack.pop().unwrap();
-                let a = &*self.stack.pop().unwrap();
+                let b = self.stack.pop().unwrap().as_ref();
+                let a = self.stack.pop().unwrap().as_ref();
+
                 if b.is_zero() {
                     self.runtime_error("Cannot divide by zero", span);
                     return true;
                 }
+
                 let result = a.binary_div(b);
                 match result {
-                    Some(r) => self.stack.push(alloc_new_value(r)),
+                    Some(r) => self.stack.push(NonNull::new_unchecked(alloc_new_value(r))),
                     None => {
                         // give an error message
                         self.runtime_error(
@@ -382,15 +401,17 @@ impl VM {
         self.iteration += 1;
         self.instructions.len() <= self.pc
     }
-    pub fn gc_recollect(&self) {
-        for item in self.stack.iter() {
-            mark(*item)
+
+    pub fn gc_recollect(&mut self) {
+        for item in &mut self.stack {
+            mark(unsafe { item.as_mut() })
         }
+
         // Marking the values in the variables
         for scope in self.variables.iter() {
             for item in scope.values() {
                 if item.is_some() {
-                    mark(item.unwrap())
+                    mark(unsafe { item.unwrap().as_mut() })
                 }
             }
         }
