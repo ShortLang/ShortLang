@@ -36,8 +36,8 @@ impl Analyzer {
         }
 
         self.scopes.push(HashMap::new()); // Add the global scope
-        for expression in self.parsed_exprs {
-            self.analyze_expr(&expression);
+        for i in 0..self.parsed_exprs.len() {
+            self.analyze_expr(&self.parsed_exprs[i].clone());
         }
 
         self.check_unused_variables();
@@ -62,7 +62,7 @@ impl Analyzer {
         }
     }
 
-    fn check_unused_variables(&self) {
+    fn check_unused_variables(&mut self) {
         if let Some(scope) = self.scopes.last() {
             for (name, var_info) in scope {
                 if var_info.is_used {
@@ -83,7 +83,7 @@ impl Analyzer {
         }
     }
 
-    fn analyze_expr(self, expr: &Expr) {
+    fn analyze_expr(&mut self, expr: &Expr) {
         match &expr.inner {
             Set(name, current_expr) => {
                 self.scopes.last_mut().unwrap().insert(
