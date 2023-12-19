@@ -3,6 +3,7 @@ use std::ops::Range;
 use std::{env, fs};
 
 use chumsky::{input::Stream, prelude::*};
+use lazy_static::lazy_static;
 use logos::Logos;
 use miette::{miette, LabeledSpan};
 use parser::{parser, LogosToken};
@@ -13,17 +14,22 @@ mod analyzer;
 mod parser;
 mod vm;
 
-fn main() {
-    let args: Vec<String> = env::args().collect();
-    let default_filename = String::from("main.sl");
-    let filename = args.get(1).unwrap_or(&default_filename);
-
-    let src = fs::read_to_string(filename).unwrap_or_else(|_| {
+lazy_static! {
+    pub static ref SRC: String = fs::read_to_string(
+        &env::args()
+            .collect::<Vec<_>>()
+            .get(1)
+            .unwrap_or(&String::from("main.sl"))
+            .to_string()
+    )
+    .unwrap_or_else(|_| {
         println!("Error: Input file could not be read");
         std::process::exit(1);
     }) + "\n";
+}
 
-    let token_iter = LogosToken::lexer(&src)
+fn main() {
+    let token_iter = LogosToken::lexer(&SRC)
         .spanned()
         .map(|(tok, span)| match tok {
             Ok(tok) => (tok, span.into()),
@@ -31,12 +37,12 @@ fn main() {
         });
 
     let token_stream = Stream::from_iter(token_iter)
-        .spanned::<LogosToken, SimpleSpan>((src.len()..src.len()).into());
+        .spanned::<LogosToken, SimpleSpan>((SRC.len()..SRC.len()).into());
 
     match parser().parse(token_stream).into_result() {
         Ok(stuff) => {
-            analyzer::analyze(&src, stuff.clone());
-            let mut vm = VM::new(stuff, src.to_string());
+            analyzer::analyze(stuff.clone());
+            let mut vm = VM::new(stuff);
             vm.compile();
         }
         Err(errs) => {
@@ -49,7 +55,7 @@ fn main() {
                         labels = vec![LabeledSpan::at(span, reason)],
                         "Parsing error"
                     )
-                    .with_source_code(src.clone())
+                    .with_source_code(SRC.clone())
                 );
             }
         }
