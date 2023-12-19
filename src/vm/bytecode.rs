@@ -8,20 +8,22 @@ pub enum Bytecode {
 
     // Variables
     REPLACE = 0x3,
-
+    GET_VAR = 0x4,
+    MAKE_VAR = 0x5,
     // Operations
-    ADD = 0x5,
-    SUB = 0x6,
-    MUL = 0x7,
-    DIV = 0x8,
-    EQ = 0x9,
-    NEQ = 0xA,
-    GT = 0xB,
-    LT = 0xC,
-    GE = 0xD,
-    LE = 0xE,
+    ADD = 0x6,
+    SUB = 0x7,
+    MUL = 0x8,
+    DIV = 0x9,
+    EQ = 0xA,
+    NEQ = 0xB,
+    GT = 0xC,
+    LT = 0xD,
+    GE = 0xE,
+    LE = 0xF,
     // Some built in functions
-    PRINT = 0xF,
+    PRINT = 0x10,
+    TYPEOF = 0x11,
 }
 
 #[derive(Clone, Debug)]

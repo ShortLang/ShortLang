@@ -9,9 +9,9 @@ pub type Span = SimpleSpan<usize>;
 // skip comments
 #[logos(skip r"//.*")]
 pub enum LogosToken<'a> {
-    #[regex(r#"[-+]?\d+"#, priority = 2)]
+    #[regex(r#"\d+"#, priority = 2)]
     Int(&'a str),
-    #[regex(r#"[-+]?((\d+(\.\d+)?)|((\.\d+))|(\.\d+))([Ee](\+|-)?\d+)?"#)]
+    #[regex(r#"((\d+(\.\d+)?)|((\.\d+))|(\.\d+))([Ee](\+|-)?\d+)?"#)]
     Float(&'a str),
     #[token("true")]
     True,
@@ -73,6 +73,14 @@ pub enum LogosToken<'a> {
     RSquare,
     #[token("{")]
     LBrace,
+    #[token("+=")]
+    AddEq,
+    #[token("-=")]
+    SubEq,
+    #[token("*=")]
+    MulEq,
+    #[token("/=")]
+    DivEq,
     #[token("}")]
     RBrace,
     #[token(";")]
@@ -129,6 +137,10 @@ impl<'a> fmt::Display for LogosToken<'a> {
             LogosToken::LBrace => write!(f, "{{"),
             LogosToken::RBrace => write!(f, "}}"),
             LogosToken::AndOne => write!(f, "&"),
+            LogosToken::AddEq => write!(f, "+="),
+            LogosToken::SubEq => write!(f, "-="),
+            LogosToken::MulEq => write!(f, "*="),
+            LogosToken::DivEq => write!(f, "/="),
         }
     }
 }
@@ -159,6 +171,10 @@ pub enum BinaryOp {
     Eq,
     Or,
     And,
+    AddEq,
+    SubEq,
+    MulEq,
+    DivEq,
 }
 
 impl BinaryOp {
@@ -185,6 +201,7 @@ pub enum ExprKind {
     Return(Box<Expr>),
     InlineFunction(String, Vec<String>, Box<Expr>),
     MultilineFunction(String, Vec<String>, Vec<Expr>),
+    EqStmt(String, BinaryOp, Box<Expr>),
     Call(String, Option<Vec<Expr>>),
     String(String),
     Ident(String),
@@ -310,18 +327,18 @@ where
                         ExprKind::Binary(Box::new(lhs), op, Box::new(rhs)),
                     )
                 });
-            let args = e.separated_by(just(LogosToken::Comma)).collect::<Vec<_>>();
+            let args = e
+                .separated_by(just(LogosToken::Comma))
+                .collect::<Vec<_>>()
+                .or_not();
             let call = ident
-                .then(
-                    args.or_not()
-                        .delimited_by(just(LogosToken::LParen), just(LogosToken::RParen)),
-                )
+                .then(args.delimited_by(just(LogosToken::LParen), just(LogosToken::RParen)))
                 .map_with(|(name, args), f| {
                     let span: Span = f.span();
                     Expr::new(span.into(), ExprKind::Call(name.to_string(), args))
                 });
-            call.or(expr_.clone())
-                .or(expr_.delimited_by(just(LogosToken::LParen), just(LogosToken::RParen)))
+
+            call.or(expr_)
         });
         let var = ident
             .then_ignore(just(LogosToken::Eq))
@@ -369,8 +386,25 @@ where
                 let span: Span = f.span();
                 Expr::new(span.into(), ExprKind::Return(Box::new(expr)))
             });
+        let eq_stmt = ident
+            .then(choice((
+                just(LogosToken::AddEq).to(BinaryOp::AddEq),
+                just(LogosToken::SubEq).to(BinaryOp::SubEq),
+                just(LogosToken::MulEq).to(BinaryOp::MulEq),
+                just(LogosToken::DivEq).to(BinaryOp::DivEq),
+            )))
+            .then(inline.clone())
+            .map_with(|((name, bin_eq), expr), f| {
+                let span: Span = f.span();
+                Expr::new(
+                    span.into(),
+                    ExprKind::EqStmt(name.to_string(), bin_eq, Box::new(expr)),
+                )
+            });
 
-        var.or(multiline_function)
+        eq_stmt
+            .or(var)
+            .or(multiline_function)
             .or(inline_function)
             .or(return_stmt)
             .or(inline)

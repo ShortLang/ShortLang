@@ -2,7 +2,7 @@ mod bytecode;
 mod memory;
 mod value;
 use miette::{miette, LabeledSpan};
-use std::ops::Range;
+use std::{collections::HashMap, ops::Range};
 
 use crate::{
     parser::{BinaryOp, Expr, ExprKind},
@@ -22,7 +22,11 @@ pub struct VM {
     // Vector of pointers to the values
     // TODO: Make this limited sized using some kind of library
     stack: Vec<*mut Value>,
+    variables_id: HashMap<String, u32>,
+    variables: Vec<HashMap<u32, Option<*mut Value>>>,
+
     constants: Vec<Value>,
+    var_id_count: usize,
     instructions: Vec<(Instr, Range<usize>)>,
     source: String,
     exprs: Vec<Expr>,
@@ -35,6 +39,9 @@ impl VM {
             pc: 0,
             stack: vec![],
             iteration: 0,
+            variables: vec![HashMap::new()],
+            var_id_count: 0,
+            variables_id: HashMap::new(),
             source,
             constants: vec![],
             instructions: vec![],
@@ -77,6 +84,76 @@ impl VM {
                     expr.span,
                 ));
             }
+            ExprKind::EqStmt(name, op, val) => {
+                let id = self.variables_id.clone();
+                let id = id.get(&name);
+                if self.variables_id.get(&name).is_none() {
+                    self.runtime_error("Variable not found", expr.span.clone());
+                    return;
+                }
+                let id = id.unwrap();
+                self.instructions
+                    .push((Instr(Bytecode::GET_VAR, vec![*id]), expr.span.clone()));
+                self.compile_expr(*val);
+                match op {
+                    BinaryOp::AddEq => {
+                        self.instructions
+                            .push((Instr(Bytecode::ADD, vec![]), expr.span.clone()));
+                    }
+                    BinaryOp::SubEq => {
+                        self.instructions
+                            .push((Instr(Bytecode::SUB, vec![]), expr.span.clone()));
+                    }
+                    BinaryOp::MulEq => {
+                        self.instructions
+                            .push((Instr(Bytecode::MUL, vec![]), expr.span.clone()));
+                    }
+                    BinaryOp::DivEq => {
+                        self.instructions
+                            .push((Instr(Bytecode::DIV, vec![]), expr.span.clone()));
+                    }
+
+                    _ => unreachable!(),
+                }
+                self.instructions
+                    .push((Instr(Bytecode::REPLACE, vec![*id]), expr.span));
+            }
+            ExprKind::Ident(x) => {
+                let id = self.variables_id.get(&x);
+                if id.is_none() {
+                    self.runtime_error("Variable not found", expr.span);
+                    return;
+                }
+                let id = id.unwrap();
+                self.instructions
+                    .push((Instr(Bytecode::GET_VAR, vec![*id]), expr.span));
+            }
+            ExprKind::Set(name, value) => {
+                // Check if the variable exists
+                // If not create a new one
+                if self.variables_id.get(&name).is_none() {
+                    self.variables_id.insert(name, self.var_id_count as u32);
+                    self.instructions
+                        .push((Instr(Bytecode::MAKE_VAR, vec![]), expr.span.clone()));
+                    self.compile_expr(*value);
+                    self.instructions.push((
+                        Instr(Bytecode::REPLACE, vec![self.var_id_count as u32]),
+                        expr.span,
+                    ));
+                    self.var_id_count += 1;
+                    return;
+                }
+                self.compile_expr(*value);
+                self.instructions.push((
+                    Instr(
+                        Bytecode::REPLACE,
+                        vec![self.variables_id.get(&name).unwrap().clone()],
+                    ),
+                    expr.span,
+                ));
+                println!("{:?}", self.instructions);
+                self.var_id_count += 1;
+            }
             ExprKind::String(string) => {
                 let index = self.add_constant(Value::String(string));
                 self.instructions.push((
@@ -100,6 +177,12 @@ impl VM {
                 if name.as_str() == "print" {
                     self.instructions
                         .push((Instr(Bytecode::PRINT, vec![]), expr.span));
+                } else if name.as_str() == "halt" {
+                    self.instructions
+                        .push((Instr(Bytecode::HALT, vec![]), expr.span));
+                } else if name.as_str() == "typeof" {
+                    self.instructions
+                        .push((Instr(Bytecode::TYPEOF, vec![]), expr.span));
                 }
             }
 
@@ -143,7 +226,18 @@ impl VM {
         );
         std::process::exit(1);
     }
-
+    fn get_var(&mut self, id: u32) -> Option<*mut Value> {
+        let mut scope_index = (self.variables.len() - 1) as i64;
+        while scope_index >= 0 {
+            if let Some(scope) = self.variables.get(scope_index as usize) {
+                if let Some(&v) = scope.get(&id) {
+                    return Some(v.unwrap());
+                }
+            }
+            scope_index -= 1;
+        }
+        return None;
+    }
     fn run_byte(&mut self, instr: Instr, span: Range<usize>) -> bool {
         use bytecode::Bytecode::*;
         let args = instr.1.clone();
@@ -155,6 +249,35 @@ impl VM {
             HALT => {
                 self.gc_recollect();
                 return true;
+            }
+            TYPEOF => unsafe {
+                let value = &*self.stack.pop().unwrap();
+                let ty = value.get_type();
+                self.stack.push(alloc_new_value(Value::String(ty)));
+            },
+            MAKE_VAR => {
+                self.variables
+                    .last_mut()
+                    .unwrap()
+                    .insert(self.var_id_count as u32, None);
+            }
+            REPLACE => {
+                let id = args[0] as usize;
+                let value = self.stack.pop().unwrap();
+
+                self.variables
+                    .last_mut()
+                    .unwrap()
+                    .insert(id as u32, Some(value));
+            }
+            GET_VAR => {
+                let id = args[0];
+                let v = self.get_var(id);
+                if self.get_var(id).is_some() {
+                    self.stack.push(v.unwrap())
+                } else {
+                    self.runtime_error("Variable not found", span)
+                }
             }
 
             LOAD_CONST => {
@@ -226,6 +349,9 @@ impl VM {
                 let val = &*self.stack.pop().unwrap();
                 println!("{}", val.to_string());
             },
+            HALT => {
+                return true;
+            }
             DIV => unsafe {
                 let b = &*self.stack.pop().unwrap();
                 let a = &*self.stack.pop().unwrap();
@@ -260,6 +386,15 @@ impl VM {
         for item in self.stack.iter() {
             mark(*item)
         }
+        // Marking the values in the variables
+        for scope in self.variables.iter() {
+            for item in scope.values() {
+                if item.is_some() {
+                    mark(item.unwrap())
+                }
+            }
+        }
+        // Delete the useless memory
         sweep();
     }
 }
