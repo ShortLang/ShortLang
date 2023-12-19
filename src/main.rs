@@ -3,7 +3,6 @@ use std::ops::Range;
 use std::{env, fs};
 
 use chumsky::{input::Stream, prelude::*};
-use lazy_static::lazy_static;
 use logos::Logos;
 use miette::{miette, LabeledSpan};
 use parser::{parser, LogosToken};
@@ -14,22 +13,20 @@ mod analyzer;
 mod parser;
 mod vm;
 
-lazy_static! {
-    pub static ref SRC: String = fs::read_to_string(
+fn main() {
+    let src = fs::read_to_string(
         &env::args()
             .collect::<Vec<_>>()
             .get(1)
             .unwrap_or(&String::from("main.sl"))
-            .to_string()
+            .to_string(),
     )
     .unwrap_or_else(|_| {
         println!("Error: Input file could not be read");
         std::process::exit(1);
     }) + "\n";
-}
 
-fn main() {
-    let token_iter = LogosToken::lexer(&SRC)
+    let token_iter = LogosToken::lexer(&src)
         .spanned()
         .map(|(tok, span)| match tok {
             Ok(tok) => (tok, span.into()),
@@ -37,14 +34,15 @@ fn main() {
         });
 
     let token_stream = Stream::from_iter(token_iter)
-        .spanned::<LogosToken, SimpleSpan>((SRC.len()..SRC.len()).into());
+        .spanned::<LogosToken, SimpleSpan>((src.len()..src.len()).into());
 
     match parser().parse(token_stream).into_result() {
         Ok(stuff) => {
-            analyzer::analyze(stuff.clone());
+            analyzer::Analyzer::new(&src, stuff.clone()).analyze();
             let mut vm = VM::new(stuff);
             vm.compile();
         }
+
         Err(errs) => {
             for err in errs {
                 let span: Range<usize> = (*err.span()).into();
@@ -55,7 +53,7 @@ fn main() {
                         labels = vec![LabeledSpan::at(span, reason)],
                         "Parsing error"
                     )
-                    .with_source_code(SRC.clone())
+                    .with_source_code(src.clone())
                 );
             }
         }
