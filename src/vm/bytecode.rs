@@ -27,7 +27,9 @@ pub enum Bytecode {
     // Some built in functions
     PRINT,
     TYPEOF,
+
+    FUNCTION,
 }
 
 #[derive(Clone, Debug)]
-pub struct Instr(pub Bytecode, pub Vec<u32>);
+pub struct Instr(pub Bytecode, pub Vec<super::value::Value>);

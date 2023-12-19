@@ -35,7 +35,9 @@ pub struct VM {
     instructions: Vec<(Instr, Range<usize>)>,
     exprs: Vec<Expr>,
     iteration: usize,
-    // functions: HashMap<String, usize>,
+
+    /// ptr to corresponding function bytecode
+    functions: HashMap<String, usize>,
 }
 
 impl VM {
@@ -51,6 +53,7 @@ impl VM {
             instructions: vec![],
             src: src.to_owned(),
             exprs,
+            functions: HashMap::new(),
         }
     }
 
@@ -77,7 +80,7 @@ impl VM {
             ExprKind::Int(integer) => {
                 let index = self.add_constant(Value::Int(integer));
                 self.instructions.push((
-                    Instr(Bytecode::LOAD_CONST, vec![index as u32 - 1]),
+                    Instr(Bytecode::LOAD_CONST, vec![(index as u32 - 1).into()]),
                     expr.span,
                 ));
             }
@@ -85,7 +88,7 @@ impl VM {
             ExprKind::Float(float) => {
                 let index = self.add_constant(Value::Float(float));
                 self.instructions.push((
-                    Instr(Bytecode::LOAD_CONST, vec![index as u32 - 1]),
+                    Instr(Bytecode::LOAD_CONST, vec![(index as u32 - 1).into()]),
                     expr.span,
                 ));
             }
@@ -98,7 +101,7 @@ impl VM {
                 }
                 let id = id.unwrap();
                 self.instructions
-                    .push((Instr(Bytecode::GET_VAR, vec![*id]), expr.span.clone()));
+                    .push((Instr(Bytecode::GET_VAR, vec![id.into()]), expr.span.clone()));
                 self.compile_expr(*val);
                 match op {
                     BinaryOp::AddEq => {
@@ -121,7 +124,7 @@ impl VM {
                     _ => unreachable!(),
                 }
                 self.instructions
-                    .push((Instr(Bytecode::REPLACE, vec![*id]), expr.span));
+                    .push((Instr(Bytecode::REPLACE, vec![id.into()]), expr.span));
             }
             ExprKind::Ident(x) => {
                 let id = self.variables_id.get(&x);
@@ -131,7 +134,7 @@ impl VM {
                 }
                 let id = id.unwrap();
                 self.instructions
-                    .push((Instr(Bytecode::GET_VAR, vec![*id]), expr.span));
+                    .push((Instr(Bytecode::GET_VAR, vec![id.into()]), expr.span));
             }
             ExprKind::Set(name, value) => {
                 // Check if the variable exists
@@ -142,7 +145,7 @@ impl VM {
                         .push((Instr(Bytecode::MAKE_VAR, vec![]), expr.span.clone()));
                     self.compile_expr(*value);
                     self.instructions.push((
-                        Instr(Bytecode::REPLACE, vec![self.var_id_count as u32]),
+                        Instr(Bytecode::REPLACE, vec![(self.var_id_count as u32).into()]),
                         expr.span,
                     ));
                     self.var_id_count += 1;
@@ -152,7 +155,7 @@ impl VM {
                 self.instructions.push((
                     Instr(
                         Bytecode::REPLACE,
-                        vec![self.variables_id.get(&name).unwrap().clone()],
+                        vec![self.variables_id.get(&name).unwrap().clone().into()],
                     ),
                     expr.span,
                 ));
@@ -162,14 +165,14 @@ impl VM {
             ExprKind::String(string) => {
                 let index = self.add_constant(Value::String(string));
                 self.instructions.push((
-                    Instr(Bytecode::LOAD_CONST, vec![index as u32 - 1]),
+                    Instr(Bytecode::LOAD_CONST, vec![(index as u32 - 1).into()]),
                     expr.span,
                 ));
             }
             ExprKind::Bool(boolean) => {
                 let index = self.add_constant(Value::Bool(boolean));
                 self.instructions.push((
-                    Instr(Bytecode::LOAD_CONST, vec![index as u32 - 1]),
+                    Instr(Bytecode::LOAD_CONST, vec![(index as u32 - 1).into()]),
                     expr.span,
                 ));
             }
@@ -210,6 +213,10 @@ impl VM {
                     _ => todo!(),
                 }
             }
+
+            // ExprKind::InlineFunction(name, params, body) => {
+                // self.instructions.push((Instr(Bytecode::FUNCTION, params), expr.span))
+            // }
 
             // ..implement other stuff later
             _ => todo!(),
@@ -272,7 +279,7 @@ impl VM {
                     .insert(self.var_id_count as u32, None);
             }
             REPLACE => {
-                let id = args[0] as usize;
+                let id = args[0].as_int() as u32;
                 let value = self.stack.pop().unwrap();
 
                 self.variables
@@ -281,8 +288,8 @@ impl VM {
                     .insert(id as u32, Some(value));
             }
             GET_VAR => {
-                let id = args[0];
-                let v = self.get_var(id);
+                let id = args[0].as_int() as u32;
+                let v = self.get_var(id as _);
                 if self.get_var(id).is_some() {
                     self.stack.push(v.unwrap())
                 } else {
@@ -291,8 +298,9 @@ impl VM {
             }
 
             LOAD_CONST => unsafe {
-                let constant_index = args[0];
-                let constant = self.constants.get(constant_index as usize);
+                let constant_index = args[0].as_int() as usize;
+                let constant = self.constants.get(constant_index);
+
                 match constant {
                     Some(c) => self
                         .stack
@@ -397,6 +405,7 @@ impl VM {
             },
             _ => {}
         }
+
         self.pc += 1;
         self.iteration += 1;
         self.instructions.len() <= self.pc
