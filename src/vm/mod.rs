@@ -37,7 +37,7 @@ pub struct VM {
     iteration: usize,
 
     /// ptr to corresponding function bytecode
-    functions: HashMap<String, usize>,
+    functions: HashMap<String, (usize, Option<(usize, usize)>)>,
 }
 
 impl VM {
@@ -77,6 +77,10 @@ impl VM {
         }
 
         self.run();
+
+        // for instr in &self.instructions {
+        //     println!("instr: {:?}", instr.0);
+        // }
     }
 
     fn compile_expr(&mut self, expr: Expr, expr_idx: Option<usize>) {
@@ -255,7 +259,7 @@ impl VM {
             }
 
             ExprKind::MultilineFunction(name, ..) | ExprKind::InlineFunction(name, ..) => {
-                self.functions.insert(name, expr_idx.unwrap());
+                self.functions.insert(name, (expr_idx.unwrap(), None));
             }
 
             ExprKind::Return(..) => {
@@ -371,16 +375,17 @@ impl VM {
                     .map(|i| i.into_iter().map(|e| self.eval(e)).collect::<Vec<_>>())
                     .unwrap_or(vec![]);
 
-                let func_expr_ptr = self.functions[&name];
+                let func_expr_ptr = self.functions[&name].0;
                 let func_expr = self.exprs[func_expr_ptr].inner.clone();
 
                 match func_expr {
                     ExprKind::MultilineFunction(_, parameter_names, body) => {
-                        self.call_function(&parameter_names, &params, &body);
+                        self.call_function(&name, &parameter_names, &params, &body);
                     }
 
                     ExprKind::InlineFunction(_, parameter_names, body) => {
                         self.call_function(
+                            &name,
                             &parameter_names,
                             &params,
                             &vec![Expr {
@@ -422,9 +427,7 @@ impl VM {
             EQ => self.compare_values(span, |a, b| a.equal_to(b)),
             NEQ => self.compare_values(span, |a, b| a.not_equal_to(b)),
 
-            PRINT => unsafe {
-                println!("{}", self.stack.pop().unwrap().as_ref().to_string())
-            }
+            PRINT => unsafe { println!("{}", self.stack.pop().unwrap().as_ref().to_string()) },
 
             _ => {}
         }
@@ -435,7 +438,13 @@ impl VM {
     }
 
     // this function needs to be optimization
-    fn call_function(&mut self, parameter_names: &[String], args: &[Value], body: &[Expr]) {
+    fn call_function(
+        &mut self,
+        fn_name: &str,
+        parameter_names: &[String],
+        args: &[Value],
+        body: &[Expr],
+    ) {
         // create a new scope
         // update the vars in the scope according to the args
 
@@ -457,25 +466,34 @@ impl VM {
 
         self.variables.push(scope);
 
-        for expr in body {
-            match expr.inner {
-                ExprKind::Return(ref val) => unsafe {
-                    let val = self.eval(*val.clone());
-                    self.stack
-                        .push(NonNull::new_unchecked(alloc_new_value(val)));
-                },
+        let instr_start;
+        let instr_end;
 
-                _ => {
-                    let instr_start = self.instructions.len();
-                    self.compile_expr(expr.clone(), None);
-                    let instr_end = self.instructions.len();
+        if let (_, Some((start, end))) = self.functions[fn_name] {
+            instr_start = start;
+            instr_end = end;
+        } else {
+            instr_start = self.instructions.len();
+            for expr in body {
+                match expr.inner {
+                    ExprKind::Return(ref val) => unsafe {
+                        let val = self.eval(*val.clone());
+                        self.stack
+                            .push(NonNull::new_unchecked(alloc_new_value(val)));
+                    },
 
-                    for i in instr_start..instr_end {
-                        let (instr, span) = self.instructions[i].clone();
-                        self.run_byte(instr, span);
-                    }
+                    _ => self.compile_expr(expr.clone(), None),
                 }
             }
+
+            instr_end = self.instructions.len();
+
+            self.functions.get_mut(fn_name).unwrap().1 = Some((instr_start, instr_end));
+        }
+
+        for i in instr_start..instr_end {
+            let (instr, span) = self.instructions[i].clone();
+            self.run_byte(instr, span);
         }
 
         // remove the function scope

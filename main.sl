@@ -1,8 +1,18 @@
-add a b = a + b
-sum = add(55, 14)
+f1 = {
+	print("fn 1")
+}
 
-print("55 + 14 = " + sum)
-print(10 == 10)
-print(10 < 1)
-print(10 > 1)
-print(10 != 0)
+f2 = {
+	print("fn 2")
+}
+
+f3 = {
+	print("fn 3")
+}
+
+f1()
+f2()
+f3()
+f1()
+f2()
+f3()
