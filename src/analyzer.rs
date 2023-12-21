@@ -51,13 +51,25 @@ impl Analyzer {
                 println!("{:?}", warning);
             }
 
-            if self.warnings.is_empty() {
-                println!("Analysis completed successfully");
-            } else {
-                println!("Analysis completed with {} warnings", self.warnings.len());
+            if !self.warnings.is_empty() {
+                println!(
+                    "{:?}",
+                    miette!(
+                        severity = Severity::Warning,
+                        "Analysis completed with {} warning(s)",
+                        self.warnings.len()
+                    )
+                );
             }
         } else {
-            println!("Analysis failed with {} errors", self.errors.len());
+            println!(
+                "{:?}",
+                miette!(
+                    severity = Severity::Error,
+                    "Analysis failed with {} error(s)",
+                    self.errors.len()
+                )
+            );
             std::process::exit(1);
         }
     }
