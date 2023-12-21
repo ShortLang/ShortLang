@@ -1,0 +1,2 @@
+# Prevent .sl files from being interpreted as Slash files
+*.sl linguist-vendored
