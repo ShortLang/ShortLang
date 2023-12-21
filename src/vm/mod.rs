@@ -58,7 +58,7 @@ impl VM {
     }
 
     pub fn run(&mut self) {
-        for instr in self.instructions.clone().iter() {
+        for (idx, instr) in self.instructions.clone().iter().enumerate() {
             if self.iteration == GC_TRIGGER {
                 self.gc_recollect();
             }
@@ -76,11 +76,8 @@ impl VM {
             self.compile_expr(expr.clone(), Some(idx));
         }
 
+        self.instructions.push((Instr(Bytecode::HALT, vec![]), 0..0));
         self.run();
-
-        // for instr in &self.instructions {
-        //     println!("instr: {:?}", instr.0);
-        // }
     }
 
     fn compile_expr(&mut self, expr: Expr, expr_idx: Option<usize>) {
@@ -434,10 +431,9 @@ impl VM {
 
         self.pc += 1;
         self.iteration += 1;
-        self.instructions.len() <= self.pc
+        false
     }
 
-    // this function needs to be optimization
     fn call_function(
         &mut self,
         fn_name: &str,
