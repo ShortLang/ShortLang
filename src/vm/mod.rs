@@ -2,6 +2,7 @@ mod bytecode;
 mod memory;
 mod value;
 
+use chumsky::container::Container;
 use miette::{miette, LabeledSpan};
 use std::ptr::NonNull;
 use std::{collections::HashMap, ops::Range};
@@ -58,7 +59,18 @@ impl VM {
     }
 
     pub fn run(&mut self) {
+        let mut inside_fn = false;
         for instr in self.instructions.clone().iter() {
+            inside_fn = match instr.0 .0 {
+                Bytecode::FN_START => true,
+                Bytecode::FN_END => false,
+                _ => inside_fn,
+            };
+
+            if inside_fn || matches!(instr.0 .0, Bytecode::FN_END) {
+                continue;
+            }
+
             if self.iteration == GC_TRIGGER {
                 self.gc_recollect();
             }
@@ -68,6 +80,7 @@ impl VM {
         }
         self.gc_recollect();
     }
+
     pub fn compile(&mut self) {
         let exprs = self.exprs.clone();
         for expr in exprs.iter() {
@@ -178,19 +191,30 @@ impl VM {
             }
             ExprKind::Call(name, args) => {
                 if args.is_some() {
-                    for arg in args.unwrap() {
+                    for arg in args.clone().unwrap() {
                         self.compile_expr(arg);
                     }
                 }
-                if name.as_str() == "print" {
-                    self.instructions
-                        .push((Instr(Bytecode::PRINT, vec![]), expr.span));
-                } else if name.as_str() == "halt" {
-                    self.instructions
-                        .push((Instr(Bytecode::HALT, vec![]), expr.span));
-                } else if name.as_str() == "typeof" {
-                    self.instructions
-                        .push((Instr(Bytecode::TYPEOF, vec![]), expr.span));
+
+                match name.as_str() {
+                    "print" => self
+                        .instructions
+                        .push((Instr(Bytecode::PRINT, vec![]), expr.span)),
+
+                    "typeof" => self
+                        .instructions
+                        .push((Instr(Bytecode::TYPEOF, vec![]), expr.span)),
+
+                    _ => {
+                        let mut fn_args: Vec<Value> = vec![name.into()];
+
+                        for arg in args.unwrap_or(vec![]) {
+                            fn_args.push(self.eval(arg));
+                        }
+
+                        self.instructions
+                            .push((Instr(Bytecode::FN_CALL, fn_args), expr.span));
+                    }
                 }
             }
 
@@ -214,9 +238,19 @@ impl VM {
                 }
             }
 
-            // ExprKind::InlineFunction(name, params, body) => {
-                // self.instructions.push((Instr(Bytecode::FUNCTION, params), expr.span))
-            // }
+            ExprKind::MultilineFunction(name, params, body) => {
+                self.functions.insert(name, self.instructions.len());
+                self.instructions.push((
+                    Instr(
+                        Bytecode::FN_START,
+                        params.into_iter().map(|i| i.into()).collect::<Vec<Value>>(),
+                    ),
+                    expr.span,
+                ));
+
+                self.instructions
+                    .push((Instr(Bytecode::FN_END, vec![]), 0..0));
+            }
 
             // ..implement other stuff later
             _ => todo!(),
@@ -261,6 +295,7 @@ impl VM {
         if self.iteration == GC_TRIGGER {
             self.gc_recollect();
         }
+
         match byte {
             HALT => {
                 self.gc_recollect();
@@ -308,6 +343,30 @@ impl VM {
                     None => self.runtime_error("Stack overflow", span),
                 }
             },
+
+            FN_CALL => {
+                let name = args[0].as_str();
+                let func_expr_ptr = self.functions[name];
+                let func_expr = self.exprs[func_expr_ptr].inner.clone();
+
+                match func_expr {
+                    ExprKind::MultilineFunction(_, parameter_names, body) => {
+                        let params_count = parameter_names.len();
+                        let passed_arguments =
+                            args.iter().skip(1).take(params_count).collect::<Vec<_>>();
+
+                        self.call_function(&parameter_names, &passed_arguments, &body);
+                    }
+
+                    ExprKind::InlineFunction(..) => {
+                        unimplemented!("inline functions are not implemented yet");
+                    }
+
+                    _ => panic!(),
+                }
+
+                // let params = args.iter().skip(1).take()
+            }
 
             ADD => unsafe {
                 let b = self.stack.pop().unwrap().as_ref();
@@ -403,12 +462,75 @@ impl VM {
                     }
                 }
             },
+
             _ => {}
         }
 
         self.pc += 1;
         self.iteration += 1;
         self.instructions.len() <= self.pc
+    }
+
+    // this function needs to be optimization
+    fn call_function(&mut self, parameter_names: &[String], args: &[&Value], body: &[Expr]) {
+        // create a new scope
+        // update the vars in the scope according to the args
+
+        // backup the var id
+        let old_var_id = std::mem::take(&mut self.variables_id);
+
+        let mut var_index = 0;
+        let mut scope = HashMap::new();
+
+        for (param_idx, param_name) in parameter_names.iter().enumerate() {
+            self.variables_id.insert(param_name.to_owned(), var_index);
+            scope.insert(
+                var_index,
+                NonNull::new(alloc_new_value(args[param_idx].clone())),
+            );
+
+            var_index += 1;
+        }
+
+        self.variables.push(scope);
+
+        for expr in body {
+            match expr.inner {
+                ExprKind::Return(..) => unimplemented!("return is not implemented yet"),
+
+                _ => {
+                    let instr_start = self.instructions.len();
+                    self.compile_expr(expr.clone());
+                    let instr_end = self.instructions.len();
+
+                    for i in instr_start..instr_end {
+                        let (instr, span) = self.instructions[i].clone();
+                        self.run_byte(instr, span);
+                    }
+
+                    for i in (instr_start..instr_end).rev() {
+                        self.instructions.remove(i);
+                    }
+                }
+            }
+        }
+
+        // remove the function scope
+        self.variables.pop();
+
+        // restore the var ids
+        self.variables_id = old_var_id;
+    }
+
+    fn eval(&mut self, expr: Expr) -> Value {
+        match expr.inner {
+            ExprKind::Int(i) => Value::Int(i),
+            ExprKind::Float(f) => Value::Float(f),
+            ExprKind::Bool(b) => Value::Bool(b),
+            ExprKind::String(s) => Value::String(s),
+
+            _ => todo!(),
+        }
     }
 
     pub fn gc_recollect(&mut self) {

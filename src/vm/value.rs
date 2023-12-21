@@ -30,6 +30,13 @@ impl Value {
         }
     }
 
+    pub fn as_str(&self) -> &str {
+        match self {
+            Self::String(i) => i,
+            _ => panic!(),
+        }
+    }
+
     pub fn binary_add(&self, rhs: &Value) -> Option<Value> {
         match (self, rhs) {
             (Value::Int(lhs), Value::Int(rhs)) => Some(Value::Int(lhs + rhs)),
@@ -116,6 +123,24 @@ impl From<Value> for f64 {
 impl From<Value> for bool {
     fn from(value: Value) -> Self {
         value.as_bool()
+    }
+}
+
+impl From<Value> for String {
+    fn from(value: Value) -> Self {
+        value.as_str().to_owned()
+    }
+}
+
+impl From<String> for Value {
+    fn from(value: String) -> Self {
+        Value::String(value)
+    }
+}
+
+impl<'a> From<&'a str> for Value {
+    fn from(value: &'a str) -> Self {
+        Value::String(value.to_owned())
     }
 }
 

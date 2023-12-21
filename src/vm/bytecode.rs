@@ -28,7 +28,9 @@ pub enum Bytecode {
     PRINT,
     TYPEOF,
 
-    FUNCTION,
+    FN_START,
+    FN_END,
+    FN_CALL,
 }
 
 #[derive(Clone, Debug)]

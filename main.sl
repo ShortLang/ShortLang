@@ -1,7 +1,5 @@
-a = 6
-print(typeof(a))
-a *= 6.0
-print(typeof(a))
+cool_function x = {
+ print(x + 1)
+}
 
-// an example function
-f x = &x + 1
+cool_function(1)

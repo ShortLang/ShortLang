@@ -40,6 +40,8 @@ fn main() {
         Ok(stuff) => {
             analyzer::Analyzer::new(&src, stuff.clone()).analyze();
             let mut vm = VM::new(&src, stuff);
+
+            println!("Running...");
             vm.compile();
         }
 

@@ -83,7 +83,6 @@ pub fn sweep() {
             to_remove.push(*ptr);
         }
     }
-    dbg!(to_remove.len());
 
     for ptr in to_remove {
         all_allocations.remove(&ptr);
