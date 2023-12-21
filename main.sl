@@ -1,5 +1,7 @@
 cool_function x = {
- print(x + 1)
+ print("the value is: " + x)
 }
 
-cool_function(1)
+cool_function("Hello " + "World")
+print("Testing")
+cool_function(10)

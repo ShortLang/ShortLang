@@ -59,21 +59,11 @@ impl VM {
     }
 
     pub fn run(&mut self) {
-        let mut inside_fn = false;
         for instr in self.instructions.clone().iter() {
-            inside_fn = match instr.0 .0 {
-                Bytecode::FN_START => true,
-                Bytecode::FN_END => false,
-                _ => inside_fn,
-            };
-
-            if inside_fn || matches!(instr.0 .0, Bytecode::FN_END) {
-                continue;
-            }
-
             if self.iteration == GC_TRIGGER {
                 self.gc_recollect();
             }
+
             if self.run_byte(instr.0.clone(), instr.1.clone()) {
                 break;
             }
@@ -86,8 +76,10 @@ impl VM {
         for expr in exprs.iter() {
             self.compile_expr(expr.clone());
         }
+
         self.run();
     }
+
     fn compile_expr(&mut self, expr: Expr) {
         match expr.inner {
             ExprKind::Int(integer) => {
@@ -172,7 +164,6 @@ impl VM {
                     ),
                     expr.span,
                 ));
-                println!("{:?}", self.instructions);
                 self.var_id_count += 1;
             }
             ExprKind::String(string) => {
@@ -238,18 +229,8 @@ impl VM {
                 }
             }
 
-            ExprKind::MultilineFunction(name, params, body) => {
+            ExprKind::MultilineFunction(name, ..) => {
                 self.functions.insert(name, self.instructions.len());
-                self.instructions.push((
-                    Instr(
-                        Bytecode::FN_START,
-                        params.into_iter().map(|i| i.into()).collect::<Vec<Value>>(),
-                    ),
-                    expr.span,
-                ));
-
-                self.instructions
-                    .push((Instr(Bytecode::FN_END, vec![]), 0..0));
             }
 
             // ..implement other stuff later
@@ -371,7 +352,17 @@ impl VM {
             ADD => unsafe {
                 let b = self.stack.pop().unwrap().as_ref();
                 let a = self.stack.pop().unwrap().as_ref();
-                let result = a.binary_add(b);
+                let mut result = a.binary_add(b);
+
+                if result.is_none() {
+                    match (a, b) {
+                        (Value::String(_), _) => {
+                            result = Some(Value::String(format!("{a}{b}")));
+                        }
+
+                        _ => {}
+                    }
+                }
 
                 match result {
                     Some(r) => self.stack.push(NonNull::new_unchecked(alloc_new_value(r))),
@@ -507,10 +498,6 @@ impl VM {
                         let (instr, span) = self.instructions[i].clone();
                         self.run_byte(instr, span);
                     }
-
-                    for i in (instr_start..instr_end).rev() {
-                        self.instructions.remove(i);
-                    }
                 }
             }
         }
@@ -523,13 +510,40 @@ impl VM {
     }
 
     fn eval(&mut self, expr: Expr) -> Value {
+        macro_rules! num_like {
+            {  } => {
+                Value::Int(_) | Value::Float(_)
+            };
+        }
+
         match expr.inner {
             ExprKind::Int(i) => Value::Int(i),
             ExprKind::Float(f) => Value::Float(f),
             ExprKind::Bool(b) => Value::Bool(b),
             ExprKind::String(s) => Value::String(s),
+            ExprKind::Binary(lhs, op, rhs) => {
+                let lhs = self.eval(*lhs);
+                let rhs = self.eval(*rhs);
 
-            _ => todo!(),
+                match (&lhs, &rhs) {
+                    (Value::String(_), _) if matches!(op, BinaryOp::Add) => {
+                        Value::String(format!("{lhs}{rhs}"))
+                    }
+
+                    (num_like!(), num_like!()) => match op {
+                        BinaryOp::Add => &lhs + &rhs,
+                        BinaryOp::Sub => &lhs - &rhs,
+                        BinaryOp::Mul => &lhs * &rhs,
+                        BinaryOp::Div => &lhs / &rhs,
+
+                        _ => unimplemented!(),
+                    },
+
+                    _ => unimplemented!(),
+                }
+            }
+
+            _ => panic!(),
         }
     }
 

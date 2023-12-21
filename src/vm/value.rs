@@ -1,4 +1,4 @@
-use std::ops::Div;
+use std::ops::*;
 
 #[derive(Clone, Debug)]
 pub enum Value {
@@ -50,6 +50,7 @@ impl Value {
             _ => None,
         }
     }
+
     pub fn get_type(&self) -> String {
         match self {
             Value::Int(_) => "int".to_string(),
@@ -58,6 +59,7 @@ impl Value {
             Value::Bool(_) => "bool".to_string(),
         }
     }
+
     pub fn is_zero(&self) -> bool {
         match self {
             Value::Int(i) => *i == 0,
@@ -65,6 +67,7 @@ impl Value {
             _ => false,
         }
     }
+
     pub fn to_string(&self) -> String {
         match self {
             Value::Int(i) => i.to_string(),
@@ -73,6 +76,7 @@ impl Value {
             Value::Bool(b) => b.to_string(),
         }
     }
+
     pub fn binary_sub(&self, rhs: &Value) -> Option<Value> {
         match (self, rhs) {
             (Value::Int(lhs), Value::Int(rhs)) => Some(Value::Int(lhs - rhs)),
@@ -82,6 +86,7 @@ impl Value {
             _ => None,
         }
     }
+
     pub fn binary_mul(&self, rhs: &Value) -> Option<Value> {
         match (self, rhs) {
             (Value::Int(lhs), Value::Int(rhs)) => Some(Value::Int(lhs * rhs)),
@@ -91,6 +96,7 @@ impl Value {
             _ => None,
         }
     }
+
     pub fn binary_div(&self, rhs: &Value) -> Option<Value> {
         match (self, rhs) {
             (Value::Int(lhs), Value::Int(rhs)) => Some(Value::Int(lhs.div(rhs))),
@@ -153,5 +159,48 @@ impl From<u32> for Value {
 impl From<&u32> for Value {
     fn from(value: &u32) -> Self {
         Self::Int(*value as _)
+    }
+}
+
+impl<'a> Add for &'a Value {
+    type Output = Value;
+    fn add(self, rhs: Self) -> Self::Output {
+        self.binary_add(rhs).unwrap()
+    }
+}
+
+impl<'a> Sub for &'a Value {
+    type Output = Value;
+    fn sub(self, rhs: Self) -> Self::Output {
+        self.binary_sub(rhs).unwrap()
+    }
+}
+
+impl<'a> Mul for &'a Value {
+    type Output = Value;
+    fn mul(self, rhs: Self) -> Self::Output {
+        self.binary_mul(rhs).unwrap()
+    }
+}
+
+impl<'a> Div for &'a Value {
+    type Output = Value;
+    fn div(self, rhs: Self) -> Self::Output {
+        self.binary_div(rhs).unwrap()
+    }
+}
+
+impl std::fmt::Display for Value {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{}",
+            match self {
+                Self::Int(i) => i.to_string(),
+                Self::Float(f) => f.to_string(),
+                Self::Bool(b) => b.to_string(),
+                Self::String(s) => s.to_string(),
+            }
+        )
     }
 }
