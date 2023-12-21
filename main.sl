@@ -1,29 +1,5 @@
-f1 = {
- print("this is first function")
-}
+power_of_two x = x * x
 
-f2 = {
- print("this is second function")
-}
+res = power_of_two(10)
+print("10^2 = " + res)
 
-say_hello name = {
- print("Hello, " + name + "!")
-}
-
-f1()
-f2()
-
-say_hello("Someone")
-
-fn_that_returns_something = {
- &69
-}
-
-val = fn_that_returns_something()
-print("return value is: " + val)
-
-f3 a b = {
- print(a + b)
-}
-
-f3(1, 2)

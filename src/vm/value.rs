@@ -1,4 +1,7 @@
 use std::ops::*;
+use std::ptr::NonNull;
+
+use crate::parser::Expr;
 
 #[derive(Clone, Debug)]
 pub enum Value {
@@ -6,6 +9,8 @@ pub enum Value {
     Float(f64),
     String(String),
     Bool(bool),
+
+    Expr(NonNull<Expr>),
 }
 
 impl Value {
@@ -57,6 +62,8 @@ impl Value {
             Value::Float(_) => "float".to_string(),
             Value::String(_) => "str".to_string(),
             Value::Bool(_) => "bool".to_string(),
+
+            _ => unreachable!(),
         }
     }
 
@@ -74,6 +81,8 @@ impl Value {
             Value::Float(f) => f.to_string(),
             Value::String(s) => s.clone(),
             Value::Bool(b) => b.to_string(),
+
+            _ => unreachable!(),
         }
     }
 
@@ -200,6 +209,8 @@ impl std::fmt::Display for Value {
                 Self::Float(f) => f.to_string(),
                 Self::Bool(b) => b.to_string(),
                 Self::String(s) => s.to_string(),
+
+                _ => unreachable!(),
             }
         )
     }

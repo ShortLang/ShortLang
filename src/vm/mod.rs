@@ -7,6 +7,7 @@ use miette::{miette, LabeledSpan};
 use std::ptr::NonNull;
 use std::{collections::HashMap, ops::Range};
 
+use crate::parser;
 use crate::{
     parser::{BinaryOp, Expr, ExprKind},
     vm::memory::alloc_new_value,
@@ -180,7 +181,7 @@ impl VM {
                     expr.span,
                 ));
             }
-            ExprKind::Call(name, args) => {
+            ExprKind::Call(ref name, ref args) => {
                 if args.is_some() {
                     for arg in args.clone().unwrap() {
                         self.compile_expr(arg, None);
@@ -196,16 +197,23 @@ impl VM {
                         .instructions
                         .push((Instr(Bytecode::TYPEOF, vec![]), expr.span)),
 
-                    _ => {
-                        let mut fn_args: Vec<Value> = vec![name.into()];
+                    _ => unsafe {
+                        // let mut fn_args: Vec<Value> = vec![name.into()];
 
-                        for arg in args.unwrap_or(vec![]) {
-                            fn_args.push(self.eval(arg));
-                        }
+                        // for arg in args.unwrap_or(vec![]) {
+                        // fn_args.push(self.eval(arg));
+                        // }
 
-                        self.instructions
-                            .push((Instr(Bytecode::FN_CALL, fn_args), expr.span));
-                    }
+                        self.instructions.push((
+                            Instr(
+                                Bytecode::FN_CALL,
+                                vec![Value::Expr(NonNull::new_unchecked(Box::leak(Box::new(
+                                    expr.clone(),
+                                ))))],
+                            ),
+                            expr.span,
+                        ));
+                    },
                 }
             }
 
@@ -229,10 +237,8 @@ impl VM {
                 }
             }
 
-            ExprKind::MultilineFunction(name, ..) => {
+            ExprKind::MultilineFunction(name, ..) | ExprKind::InlineFunction(name, ..) => {
                 self.functions.insert(name, expr_idx.unwrap());
-                // self.instructions
-                // .push((Instr(Bytecode::NOP, vec![]), expr.span));
             }
 
             ExprKind::Return(..) => {
@@ -332,21 +338,40 @@ impl VM {
             },
 
             FN_CALL => {
-                let name = args[0].as_str();
-                let func_expr_ptr = self.functions[name];
+                let mut call_expr_ptr = match args[0] {
+                    Value::Expr(e) => e,
+                    _ => unreachable!(),
+                };
+
+                let ExprKind::Call(name, params) =
+                    unsafe { Box::from_raw(call_expr_ptr.as_mut()) }.inner
+                else {
+                    unreachable!()
+                };
+
+                let params = params
+                    .map(|i| i.into_iter().map(|e| self.eval(e)).collect::<Vec<_>>())
+                    .unwrap_or(vec![]);
+
+                let func_expr_ptr = self.functions[&name];
                 let func_expr = self.exprs[func_expr_ptr].inner.clone();
 
                 match func_expr {
                     ExprKind::MultilineFunction(_, parameter_names, body) => {
                         let params_count = parameter_names.len();
-                        let passed_arguments =
-                            args.iter().skip(1).take(params_count).collect::<Vec<_>>();
-
-                        self.call_function(&parameter_names, &passed_arguments, &body);
+                        self.call_function(&parameter_names, &params, &body);
                     }
 
-                    ExprKind::InlineFunction(..) => {
-                        unimplemented!("inline functions are not implemented yet");
+                    ExprKind::InlineFunction(_, parameter_names, body) => {
+                        let params_count = parameter_names.len();
+                        self.call_function(
+                            &parameter_names,
+                            &params,
+                            &vec![Expr {
+                                span: 0..0,
+                                inner: ExprKind::Return(body),
+                            }],
+                        );
                     }
 
                     _ => panic!("expected function expression, found: {func_expr:?}"),
@@ -469,7 +494,7 @@ impl VM {
     }
 
     // this function needs to be optimization
-    fn call_function(&mut self, parameter_names: &[String], args: &[&Value], body: &[Expr]) {
+    fn call_function(&mut self, parameter_names: &[String], args: &[Value], body: &[Expr]) {
         // create a new scope
         // update the vars in the scope according to the args
 
@@ -531,6 +556,10 @@ impl VM {
             ExprKind::Float(f) => Value::Float(f),
             ExprKind::Bool(b) => Value::Bool(b),
             ExprKind::String(s) => Value::String(s),
+            ExprKind::Ident(ref name) => {
+                unsafe { &*self.get_var(self.variables_id[name]).unwrap().as_ref() }.clone()
+            }
+
             ExprKind::Binary(lhs, op, rhs) => {
                 let lhs = self.eval(*lhs);
                 let rhs = self.eval(*rhs);
@@ -555,7 +584,7 @@ impl VM {
                 }
             }
 
-            _ => panic!(),
+            e => panic!("invalid evaluation of: {e:?}"),
         }
     }
 
