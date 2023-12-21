@@ -22,3 +22,8 @@ fn_that_returns_something = {
 val = fn_that_returns_something()
 print("return value is: " + val)
 
+f3 a b = {
+ print(a + b)
+}
+
+f3(1, 2)

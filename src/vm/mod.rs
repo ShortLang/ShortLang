@@ -232,7 +232,7 @@ impl VM {
             ExprKind::MultilineFunction(name, ..) => {
                 self.functions.insert(name, expr_idx.unwrap());
                 // self.instructions
-                    // .push((Instr(Bytecode::NOP, vec![]), expr.span));
+                // .push((Instr(Bytecode::NOP, vec![]), expr.span));
             }
 
             ExprKind::Return(..) => {
@@ -362,7 +362,7 @@ impl VM {
 
                 if result.is_none() {
                     match (a, b) {
-                        (Value::String(_), _) => {
+                        (Value::String(_), _) | (_, Value::String(_)) => {
                             result = Some(Value::String(format!("{a}{b}")));
                         }
 
@@ -536,7 +536,9 @@ impl VM {
                 let rhs = self.eval(*rhs);
 
                 match (&lhs, &rhs) {
-                    (Value::String(_), _) if matches!(op, BinaryOp::Add) => {
+                    (Value::String(_), _) | (_, Value::String(_))
+                        if matches!(op, BinaryOp::Add) =>
+                    {
                         Value::String(format!("{lhs}{rhs}"))
                     }
 
