@@ -30,6 +30,7 @@ pub enum Bytecode {
 
     // FUNCTION,
     FN_CALL,
+    RET,
 }
 
 #[derive(Clone, Debug)]

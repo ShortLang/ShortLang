@@ -73,14 +73,14 @@ impl VM {
 
     pub fn compile(&mut self) {
         let exprs = self.exprs.clone();
-        for expr in exprs.iter() {
-            self.compile_expr(expr.clone());
+        for (idx, expr) in exprs.iter().enumerate() {
+            self.compile_expr(expr.clone(), Some(idx));
         }
 
         self.run();
     }
 
-    fn compile_expr(&mut self, expr: Expr) {
+    fn compile_expr(&mut self, expr: Expr, expr_idx: Option<usize>) {
         match expr.inner {
             ExprKind::Int(integer) => {
                 let index = self.add_constant(Value::Int(integer));
@@ -107,7 +107,7 @@ impl VM {
                 let id = id.unwrap();
                 self.instructions
                     .push((Instr(Bytecode::GET_VAR, vec![id.into()]), expr.span.clone()));
-                self.compile_expr(*val);
+                self.compile_expr(*val, None);
                 match op {
                     BinaryOp::AddEq => {
                         self.instructions
@@ -148,7 +148,7 @@ impl VM {
                     self.variables_id.insert(name, self.var_id_count as u32);
                     self.instructions
                         .push((Instr(Bytecode::MAKE_VAR, vec![]), expr.span.clone()));
-                    self.compile_expr(*value);
+                    self.compile_expr(*value, None);
                     self.instructions.push((
                         Instr(Bytecode::REPLACE, vec![(self.var_id_count as u32).into()]),
                         expr.span,
@@ -156,7 +156,7 @@ impl VM {
                     self.var_id_count += 1;
                     return;
                 }
-                self.compile_expr(*value);
+                self.compile_expr(*value, None);
                 self.instructions.push((
                     Instr(
                         Bytecode::REPLACE,
@@ -183,7 +183,7 @@ impl VM {
             ExprKind::Call(name, args) => {
                 if args.is_some() {
                     for arg in args.clone().unwrap() {
-                        self.compile_expr(arg);
+                        self.compile_expr(arg, None);
                     }
                 }
 
@@ -210,8 +210,8 @@ impl VM {
             }
 
             ExprKind::Binary(a, op, b) => {
-                self.compile_expr(*a);
-                self.compile_expr(*b);
+                self.compile_expr(*a, None);
+                self.compile_expr(*b, None);
                 match op {
                     BinaryOp::Add => self
                         .instructions
@@ -230,7 +230,13 @@ impl VM {
             }
 
             ExprKind::MultilineFunction(name, ..) => {
-                self.functions.insert(name, self.instructions.len());
+                self.functions.insert(name, expr_idx.unwrap());
+                // self.instructions
+                    // .push((Instr(Bytecode::NOP, vec![]), expr.span));
+            }
+
+            ExprKind::Return(..) => {
+                panic!("Return outside a function?");
             }
 
             // ..implement other stuff later
@@ -343,7 +349,7 @@ impl VM {
                         unimplemented!("inline functions are not implemented yet");
                     }
 
-                    _ => panic!(),
+                    _ => panic!("expected function expression, found: {func_expr:?}"),
                 }
 
                 // let params = args.iter().skip(1).take()
@@ -487,11 +493,15 @@ impl VM {
 
         for expr in body {
             match expr.inner {
-                ExprKind::Return(..) => unimplemented!("return is not implemented yet"),
+                ExprKind::Return(ref val) => unsafe {
+                    let val = self.eval(*val.clone());
+                    self.stack
+                        .push(NonNull::new_unchecked(alloc_new_value(val)));
+                },
 
                 _ => {
                     let instr_start = self.instructions.len();
-                    self.compile_expr(expr.clone());
+                    self.compile_expr(expr.clone(), None);
                     let instr_end = self.instructions.len();
 
                     for i in instr_start..instr_end {
