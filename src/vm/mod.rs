@@ -2,12 +2,10 @@ mod bytecode;
 mod memory;
 mod value;
 
-use chumsky::container::Container;
 use miette::{miette, LabeledSpan};
 use std::ptr::NonNull;
 use std::{collections::HashMap, ops::Range};
 
-use crate::parser;
 use crate::{
     parser::{BinaryOp, Expr, ExprKind},
     vm::memory::alloc_new_value,
@@ -233,6 +231,25 @@ impl VM {
                     BinaryOp::Sub => self
                         .instructions
                         .push((Instr(Bytecode::SUB, vec![]), expr.span)),
+                    BinaryOp::Less => self
+                        .instructions
+                        .push((Instr(Bytecode::LT, vec![]), expr.span)),
+                    BinaryOp::Greater => self
+                        .instructions
+                        .push((Instr(Bytecode::GT, vec![]), expr.span)),
+                    BinaryOp::LessEq => self
+                        .instructions
+                        .push((Instr(Bytecode::LE, vec![]), expr.span)),
+                    BinaryOp::GreaterEq => self
+                        .instructions
+                        .push((Instr(Bytecode::GE, vec![]), expr.span)),
+                    BinaryOp::NotEq => self
+                        .instructions
+                        .push((Instr(Bytecode::NEQ, vec![]), expr.span)),
+                    BinaryOp::Eq => self
+                        .instructions
+                        .push((Instr(Bytecode::EQ, vec![]), expr.span)),
+
                     _ => todo!(),
                 }
             }
@@ -285,6 +302,7 @@ impl VM {
         use bytecode::Bytecode::*;
         let args = instr.1.clone();
         let byte = instr.0;
+
         if self.iteration == GC_TRIGGER {
             self.gc_recollect();
         }
@@ -358,12 +376,10 @@ impl VM {
 
                 match func_expr {
                     ExprKind::MultilineFunction(_, parameter_names, body) => {
-                        let params_count = parameter_names.len();
                         self.call_function(&parameter_names, &params, &body);
                     }
 
                     ExprKind::InlineFunction(_, parameter_names, body) => {
-                        let params_count = parameter_names.len();
                         self.call_function(
                             &parameter_names,
                             &params,
@@ -376,114 +392,39 @@ impl VM {
 
                     _ => panic!("expected function expression, found: {func_expr:?}"),
                 }
-
-                // let params = args.iter().skip(1).take()
             }
 
-            ADD => unsafe {
-                let b = self.stack.pop().unwrap().as_ref();
-                let a = self.stack.pop().unwrap().as_ref();
-                let mut result = a.binary_add(b);
+            MUL => self.perform_bin_op(byte, span, |_, a, b| a.binary_mul(b)),
+            SUB => self.perform_bin_op(byte, span, |_, a, b| a.binary_sub(b)),
+            ADD => self.perform_bin_op(byte, span, |_, a, b| {
+                if let Some(result) = a.binary_add(b) {
+                    Some(result)
+                } else if let (Value::String(_), _) | (_, Value::String(_)) = (a, b) {
+                    Some(Value::String(format!("{a}{b}")))
+                } else {
+                    None
+                }
+            }),
 
-                if result.is_none() {
-                    match (a, b) {
-                        (Value::String(_), _) | (_, Value::String(_)) => {
-                            result = Some(Value::String(format!("{a}{b}")));
-                        }
-
-                        _ => {}
-                    }
+            DIV => self.perform_bin_op(byte, span.clone(), |s, a, b| {
+                if b.is_zero() {
+                    s.runtime_error("Cannot divide by zero", span);
+                    return None;
                 }
 
-                match result {
-                    Some(r) => self.stack.push(NonNull::new_unchecked(alloc_new_value(r))),
-                    None => self.runtime_error(
-                        format!(
-                            "Cannot add values of type {:?} and {:?}",
-                            a.get_type(),
-                            b.get_type()
-                        )
-                        .as_str(),
-                        span,
-                    ),
-                }
-            },
+                a.binary_div(b)
+            }),
 
-            SUB => unsafe {
-                let b = self.stack.pop().unwrap().as_ref();
-                let a = self.stack.pop().unwrap().as_ref();
-                let result = a.binary_sub(b);
-
-                match result {
-                    Some(r) => self.stack.push(NonNull::new_unchecked(alloc_new_value(r))),
-                    None => {
-                        // give an error message
-                        self.runtime_error(
-                            format!(
-                                "Cannot subtract values of type {:?} and {:?}",
-                                a.get_type(),
-                                b.get_type()
-                            )
-                            .as_str(),
-                            span,
-                        )
-                    }
-                }
-            },
-
-            MUL => unsafe {
-                let b = self.stack.pop().unwrap().as_ref();
-                let a = self.stack.pop().unwrap().as_ref();
-                let result = a.binary_mul(b);
-
-                match result {
-                    Some(r) => self.stack.push(NonNull::new_unchecked(alloc_new_value(r))),
-                    None => {
-                        // give an error message
-                        self.runtime_error(
-                            format!(
-                                "Cannot multiply values of type {:?} and {:?}",
-                                a.get_type(),
-                                b.get_type()
-                            )
-                            .as_str(),
-                            span,
-                        )
-                    }
-                }
-            },
+            LT => self.compare_values(span, |a, b| a.less_than(b)),
+            GT => self.compare_values(span, |a, b| a.greater_than(b)),
+            LE => self.compare_values(span, |a, b| a.less_than_or_equal(b)),
+            GE => self.compare_values(span, |a, b| a.greater_than_or_equal(b)),
+            EQ => self.compare_values(span, |a, b| a.equal_to(b)),
+            NEQ => self.compare_values(span, |a, b| a.not_equal_to(b)),
 
             PRINT => unsafe {
-                let val = self.stack.pop().unwrap().as_ref();
-                println!("{}", val.to_string());
-            },
-
-            DIV => unsafe {
-                let b = self.stack.pop().unwrap().as_ref();
-                let a = self.stack.pop().unwrap().as_ref();
-
-                if b.is_zero() {
-                    self.runtime_error("Cannot divide by zero", span);
-                    return true;
-                }
-
-                let result = a.binary_div(b);
-                match result {
-                    Some(r) => self.stack.push(NonNull::new_unchecked(alloc_new_value(r))),
-                    None => {
-                        // give an error message
-                        self.runtime_error(
-                            format!(
-                                "Cannot divide values of type {:?} and {:?}",
-                                a.get_type(),
-                                b.get_type()
-                            )
-                            .as_str(),
-                            span,
-                        )
-                    }
-                }
-            },
+                println!("{}", self.stack.pop().unwrap().as_ref().to_string())
+            }
 
             _ => {}
         }
@@ -603,5 +544,53 @@ impl VM {
         }
         // Delete the useless memory
         sweep();
+    }
+
+    fn compare_values<F>(&mut self, span: Range<usize>, compare_fn: F)
+    where
+        F: FnOnce(&Value, &Value) -> Option<Value>,
+    {
+        unsafe {
+            let b = self.stack.pop().unwrap().as_ref();
+            let a = self.stack.pop().unwrap().as_ref();
+
+            let result = compare_fn(a, b);
+            match result {
+                Some(r) => self.stack.push(NonNull::new_unchecked(alloc_new_value(r))),
+                None => self.runtime_error(
+                    format!(
+                        "Cannot compare values of type {:?} and {:?}",
+                        a.get_type(),
+                        b.get_type()
+                    )
+                    .as_str(),
+                    span,
+                ),
+            }
+        }
+    }
+
+    fn perform_bin_op<F>(&mut self, op: Bytecode, span: Range<usize>, binary_op: F)
+    where
+        F: FnOnce(&Self, &Value, &Value) -> Option<Value>,
+    {
+        unsafe {
+            let b = self.stack.pop().unwrap().as_ref();
+            let a = self.stack.pop().unwrap().as_ref();
+
+            let result = binary_op(self, a, b);
+            match result {
+                Some(r) => self.stack.push(NonNull::new_unchecked(alloc_new_value(r))),
+                None => self.runtime_error(
+                    format!(
+                        "Cannot perform {op} operation on values of type {:?} and {:?}",
+                        a.get_type(),
+                        b.get_type()
+                    )
+                    .as_str(),
+                    span,
+                ),
+            }
+        }
     }
 }

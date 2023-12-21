@@ -1,5 +1,8 @@
-power_of_two x = x * x
+add a b = a + b
+sum = add(55, 14)
 
-res = power_of_two(10)
-print("10^2 = " + res)
-
+print("55 + 14 = " + sum)
+print(10 == 10)
+print(10 < 1)
+print(10 > 1)
+print(10 != 0)

@@ -116,6 +116,72 @@ impl Value {
         }
     }
 
+    pub fn less_than(&self, other: &Value) -> Option<Value> {
+        match (self, other) {
+            (Value::Int(lhs), Value::Int(rhs)) => Some(Value::Bool(lhs < rhs)),
+            (Value::Float(lhs), Value::Float(rhs)) => Some(Value::Bool(lhs < rhs)),
+            (Value::Int(lhs), Value::Float(rhs)) => Some(Value::Bool((*lhs as f64) < *rhs)),
+            (Value::Float(lhs), Value::Int(rhs)) => Some(Value::Bool(*lhs < *rhs as f64)),
+
+            _ => None,
+        }
+    }
+
+    pub fn greater_than(&self, other: &Value) -> Option<Value> {
+        match (self, other) {
+            (Value::Int(lhs), Value::Int(rhs)) => Some(Value::Bool(lhs > rhs)),
+            (Value::Float(lhs), Value::Float(rhs)) => Some(Value::Bool(lhs > rhs)),
+            (Value::Int(lhs), Value::Float(rhs)) => Some(Value::Bool((*lhs as f64) > *rhs)),
+            (Value::Float(lhs), Value::Int(rhs)) => Some(Value::Bool(*lhs > *rhs as f64)),
+
+            _ => None,
+        }
+    }
+
+    pub fn less_than_or_equal(&self, other: &Value) -> Option<Value> {
+        match (self, other) {
+            (Value::Int(lhs), Value::Int(rhs)) => Some(Value::Bool(lhs <= rhs)),
+            (Value::Float(lhs), Value::Float(rhs)) => Some(Value::Bool(lhs <= rhs)),
+            (Value::Int(lhs), Value::Float(rhs)) => Some(Value::Bool((*lhs as f64) <= *rhs)),
+            (Value::Float(lhs), Value::Int(rhs)) => Some(Value::Bool(*lhs <= *rhs as f64)),
+
+            _ => None,
+        }
+    }
+
+    pub fn greater_than_or_equal(&self, other: &Value) -> Option<Value> {
+        match (self, other) {
+            (Value::Int(lhs), Value::Int(rhs)) => Some(Value::Bool(lhs >= rhs)),
+            (Value::Float(lhs), Value::Float(rhs)) => Some(Value::Bool(lhs >= rhs)),
+            (Value::Int(lhs), Value::Float(rhs)) => Some(Value::Bool((*lhs as f64) >= *rhs)),
+            (Value::Float(lhs), Value::Int(rhs)) => Some(Value::Bool(*lhs >= *rhs as f64)),
+
+            _ => None,
+        }
+    }
+
+    pub fn equal_to(&self, other: &Value) -> Option<Value> {
+        match (self, other) {
+            (Value::Int(lhs), Value::Int(rhs)) => Some(Value::Bool(lhs == rhs)),
+            (Value::Float(lhs), Value::Float(rhs)) => Some(Value::Bool(lhs == rhs)),
+            (Value::Int(lhs), Value::Float(rhs)) => Some(Value::Bool((*lhs as f64) == *rhs)),
+            (Value::Float(lhs), Value::Int(rhs)) => Some(Value::Bool(*lhs == *rhs as f64)),
+
+            _ => None,
+        }
+    }
+
+    pub fn not_equal_to(&self, other: &Value) -> Option<Value> {
+        match (self, other) {
+            (Value::Int(lhs), Value::Int(rhs)) => Some(Value::Bool(lhs != rhs)),
+            (Value::Float(lhs), Value::Float(rhs)) => Some(Value::Bool(lhs != rhs)),
+            (Value::Int(lhs), Value::Float(rhs)) => Some(Value::Bool((*lhs as f64) != *rhs)),
+            (Value::Float(lhs), Value::Int(rhs)) => Some(Value::Bool(*lhs != *rhs as f64)),
+
+            _ => None,
+        }
+    }
+
     pub fn referenced_children(&self) -> Option<Vec<*mut Value>> {
         match self {
             _ => None,

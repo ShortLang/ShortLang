@@ -35,3 +35,9 @@ pub enum Bytecode {
 
 #[derive(Clone, Debug)]
 pub struct Instr(pub Bytecode, pub Vec<super::value::Value>);
+
+impl std::fmt::Display for Bytecode {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", format!("{self:?}").to_lowercase())
+    }
+}
