@@ -28,8 +28,7 @@ pub enum Bytecode {
     PRINT,
     TYPEOF,
 
-    FN_START,
-    FN_END,
+    // FUNCTION,
     FN_CALL,
 }
 
