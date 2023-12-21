@@ -1,4 +1,5 @@
-#![allow(non_snake_case)]
+#![allow(non_snake_case, dead_code)]
+
 use std::ops::Range;
 use std::{env, fs};
 
@@ -38,7 +39,7 @@ fn main() {
 
     match parser().parse(token_stream).into_result() {
         Ok(stuff) => {
-            analyzer::Analyzer::new(&src, stuff.clone()).analyze();
+            // analyzer::Analyzer::new(&src, stuff.clone()).analyze();
             let mut vm = VM::new(&src, stuff);
 
             println!("Running...");
