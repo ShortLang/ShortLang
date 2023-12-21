@@ -25,7 +25,7 @@ fn main() {
     .unwrap_or_else(|_| {
         println!("Error: Input file could not be read");
         std::process::exit(1);
-    }) + "\n";
+    });
 
     let token_iter = LogosToken::lexer(&src)
         .spanned()
@@ -38,11 +38,9 @@ fn main() {
         .spanned::<LogosToken, SimpleSpan>((src.len()..src.len()).into());
 
     match parser().parse(token_stream).into_result() {
-        Ok(stuff) => {
+        Ok(parsed_exprs) => {
             // analyzer::Analyzer::new(&src, stuff.clone()).analyze();
-            let mut vm = VM::new(&src, stuff);
-
-            println!("Running...");
+            let mut vm = VM::new(&src, parsed_exprs);
             vm.compile();
         }
 
