@@ -2,37 +2,36 @@
 #[derive(Clone, Copy, Debug)]
 pub enum Bytecode {
     // Completely shutdowns the program.
-    HALT,
+    Halt,
 
     // Constant related operations
-    LOAD_CONST,
+    LoadConst,
 
     // Variables
-    REPLACE,
-    GET_VAR,
-    MAKE_VAR,
+    Replace,
+    GetVar,
+    MakeVar,
 
     // Operations
-    EVAL,
-    ADD,
-    SUB,
-    MUL,
-    DIV,
-    EQ,
-    NEQ,
-    GT,
-    LT,
-    GE,
-    LE,
+    Add,
+    Sub,
+    Mul,
+    Div,
+    Eq,
+    Neq,
+    Gt,
+    Lt,
+    Ge,
+    Le,
 
     // Some built in functions
-    PRINT,
-    TYPEOF,
+    Print,
+    TypeOf,
 
     // FUNCTION,
-    FUNCTION,
-    FN_CALL,
-    RET,
+    Function,
+    FnCall,
+    Ret,
 }
 
 #[derive(Clone, Debug)]

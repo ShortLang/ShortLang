@@ -16,11 +16,10 @@ mod vm;
 
 fn main() {
     let src = fs::read_to_string(
-        &env::args()
+        env::args()
             .collect::<Vec<_>>()
             .get(1)
-            .unwrap_or(&String::from("main.sl"))
-            .to_string(),
+            .unwrap_or(&String::from("main.sl")),
     )
     .unwrap_or_else(|_| {
         println!("Error: Input file could not be read");

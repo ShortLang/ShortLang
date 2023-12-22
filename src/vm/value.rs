@@ -186,9 +186,7 @@ impl Value {
     }
 
     pub fn referenced_children(&self) -> Option<Vec<*mut Value>> {
-        match self {
-            _ => None,
-        }
+        None
     }
 }
 

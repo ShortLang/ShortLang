@@ -265,9 +265,9 @@ where
                 let span: Span = f.span();
                 if let ExprKind::Ident(ref x) = a {
                     let mut string = x.to_string();
-                    if string.starts_with("_") {
+                    if string.starts_with('_') {
                         string.remove(0);
-                        return Expr::new(span.into(), ExprKind::String(string.replace("_", " ")));
+                        return Expr::new(span.into(), ExprKind::String(string.replace('_', " ")));
                     }
                 }
                 Expr::new(span.into(), a)
@@ -347,7 +347,7 @@ where
                 let span: Span = f.span();
                 Expr::new(span.into(), ExprKind::Set(name.to_string(), Box::new(expr)))
             });
-        let args = ident.clone().repeated().collect::<Vec<_>>();
+        let args = ident.repeated().collect::<Vec<_>>();
         let inline_function = ident
             .then(args)
             .then_ignore(just(LogosToken::Eq))
