@@ -8,7 +8,6 @@ name = "ShortLang"
 path = "src/main.rs"
 
 [dependencies]
-chumsky = { git = "https://github.com/zesterer/chumsky"}
 lazy_static = "1.4.0"
 logos = "0.13.0"
 miette = {version = "5.10.0", features = ["fancy"]}

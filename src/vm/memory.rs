@@ -38,7 +38,6 @@ pub fn alloc_new_value(val: Value) -> *mut Value {
     }
     ptr
 }
-
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
 pub fn mark(node: *mut Value) {
     let mut all_allocations = ALL_ALLOCATIONS.lock().unwrap();

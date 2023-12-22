@@ -3,10 +3,10 @@
 use std::ops::Range;
 use std::{env, fs};
 
-use chumsky::{input::Stream, prelude::*};
+use analyzer::Analyzer;
 use logos::Logos;
 use miette::{miette, LabeledSpan};
-use parser::{parser, LogosToken};
+use parser::{LogosToken, PParser};
 
 use crate::vm::VM;
 
@@ -27,36 +27,17 @@ fn main() {
         std::process::exit(1);
     });
 
-    let token_iter = LogosToken::lexer(&src)
+    let tokens = LogosToken::lexer(&src)
         .spanned()
         .map(|(tok, span)| match tok {
             Ok(tok) => (tok, span.into()),
             Err(()) => (LogosToken::Error, span.into()),
-        });
+        })
+        .collect::<Vec<_>>();
 
-    let token_stream = Stream::from_iter(token_iter)
-        .spanned::<LogosToken, SimpleSpan>((src.len()..src.len()).into());
-
-    match parser().parse(token_stream).into_result() {
-        Ok(parsed_exprs) => {
-            // analyzer::Analyzer::new(&src, stuff.clone()).analyze();
-            let mut vm = VM::new(&src, parsed_exprs);
-            vm.compile();
-        }
-
-        Err(errs) => {
-            for err in errs {
-                let span: Range<usize> = (*err.span()).into();
-                let reason = err.reason().to_string();
-                println!(
-                    "{:?}",
-                    miette!(
-                        labels = vec![LabeledSpan::at(span, reason)],
-                        "Parsing error"
-                    )
-                    .with_source_code(src.clone())
-                );
-            }
-        }
-    };
+    let mut parser = PParser::new(&src, tokens);
+    let ast = parser.parse();
+    Analyzer::new(&src, ast.clone()).analyze();
+    let mut vm = VM::new(&src, ast);
+    vm.run();
 }

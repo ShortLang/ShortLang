@@ -76,7 +76,8 @@ impl VM {
             self.compile_expr(expr.clone(), Some(idx));
         }
 
-        self.instructions.push((Instr(Bytecode::HALT, vec![]), 0..0));
+        self.instructions
+            .push((Instr(Bytecode::HALT, vec![]), 0..0));
         self.run();
     }
 

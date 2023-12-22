@@ -1,9 +1,9 @@
+use miette::{miette, LabeledSpan};
 use std::{fmt, ops::Range};
 
-use chumsky::{input::ValueInput, prelude::*};
-use logos::Logos;
+use logos::{Logos, SpannedIter};
+use miette::Diagnostic;
 
-pub type Span = SimpleSpan<usize>;
 #[derive(Logos, Debug, Clone, PartialEq)]
 #[logos(skip r"[ \r\n\f\t]+")]
 // skip comments
@@ -42,7 +42,7 @@ pub enum LogosToken<'a> {
     #[token("!")]
     Bang,
     #[token("&")]
-    AndOne,
+    Return,
     #[token("&&")]
     And,
     #[token("||")]
@@ -71,6 +71,10 @@ pub enum LogosToken<'a> {
     LSquare,
     #[token("]")]
     RSquare,
+    #[token("$")]
+    Dollar,
+    #[token("$$")]
+    DollarDollar,
     #[token("{")]
     LBrace,
     #[token("+=")]
@@ -79,6 +83,8 @@ pub enum LogosToken<'a> {
     SubEq,
     #[token("*=")]
     MulEq,
+    #[token("?")]
+    Question,
     #[token("/=")]
     DivEq,
     #[token("}")]
@@ -90,10 +96,8 @@ pub enum LogosToken<'a> {
     String(&'a str),
     // #[regex(r#"//[^\n]*\n"#)]
     // LineComment,
-    #[regex(r#"[A-Za-z_]([A-Za-z]|_|\d)*"#)]
+    #[regex(r#"[\p{L}a-zA-Z_][\p{L}\p{N}a-zA-Z0-9_!]*"#)]
     Ident(&'a str),
-    #[token("fn")]
-    KwFn,
     Error,
 }
 impl<'a> fmt::Display for LogosToken<'a> {
@@ -110,10 +114,10 @@ impl<'a> fmt::Display for LogosToken<'a> {
             LogosToken::Ident(_) => write!(f, "identifier"),
             LogosToken::Int(_) => write!(f, "integer"),
             LogosToken::Float(_) => write!(f, "float"),
+            LogosToken::Question => write!(f, "?"),
             LogosToken::Eq => write!(f, "="),
             LogosToken::Eqq => write!(f, "=="),
             LogosToken::Arrow => write!(f, "->"),
-            LogosToken::KwFn => write!(f, "fn"),
             LogosToken::ThreeDots => write!(f, "..."),
             LogosToken::Semi => write!(f, ";"),
             LogosToken::LAngle => write!(f, "<"),
@@ -136,11 +140,33 @@ impl<'a> fmt::Display for LogosToken<'a> {
             LogosToken::RSquare => write!(f, "]"),
             LogosToken::LBrace => write!(f, "{{"),
             LogosToken::RBrace => write!(f, "}}"),
-            LogosToken::AndOne => write!(f, "&"),
+            LogosToken::Return => write!(f, "&"),
             LogosToken::AddEq => write!(f, "+="),
             LogosToken::SubEq => write!(f, "-="),
             LogosToken::MulEq => write!(f, "*="),
             LogosToken::DivEq => write!(f, "/="),
+            LogosToken::Dollar => write!(f, "$"),
+            LogosToken::DollarDollar => write!(f, "$$"),
+        }
+    }
+}
+
+impl<'a> LogosToken<'a> {
+    pub fn to_binary_op(&self) -> BinaryOp {
+        match self {
+            Self::Times => BinaryOp::Mul,
+            Self::Slash => BinaryOp::Div,
+            Self::Plus => BinaryOp::Add,
+            Self::Minus => BinaryOp::Sub,
+            Self::LAngle => BinaryOp::Less,
+            Self::RAngle => BinaryOp::Greater,
+            Self::Leq => BinaryOp::LessEq,
+            Self::Geq => BinaryOp::GreaterEq,
+            Self::Neq => BinaryOp::NotEq,
+            Self::Eqq => BinaryOp::Eq,
+            Self::Or => BinaryOp::Or,
+            Self::And => BinaryOp::And,
+            _ => unreachable!(),
         }
     }
 }
@@ -203,212 +229,313 @@ pub enum ExprKind {
     MultilineFunction(String, Vec<String>, Vec<Expr>),
     EqStmt(String, BinaryOp, Box<Expr>),
     Call(String, Option<Vec<Expr>>),
+    // Ternary(Box<Expr>, Vec<Expr>, Option<Vec<Expr>>),
     String(String),
     Ident(String),
     Binary(Box<Expr>, BinaryOp, Box<Expr>),
     Set(String, Box<Expr>),
+    Nil,
+    Error,
 }
 
-pub fn parser<'a, I>() -> impl Parser<'a, I, Vec<Expr>, extra::Err<Rich<'a, LogosToken<'a>>>>
-where
-    I: ValueInput<'a, Token = LogosToken<'a>, Span = SimpleSpan>,
-{
-    let ident = select! {
-        LogosToken::Ident(s) => s,
-    };
-    recursive(|expr| {
-        let inline = recursive(|e| {
-            let val = select! {
-                LogosToken::Int(i) => ExprKind::Int(i.parse().unwrap()),
-                LogosToken::Float(f) => ExprKind::Float(f.parse().unwrap()),
-                LogosToken::String(s) => {
-                  let mut result = String::new();
-                  let mut chars = s.chars().peekable();
+pub struct PParser<'a> {
+    source: &'a str,
+    position: usize,
+    errored: bool,
+    current: (LogosToken<'a>, Range<usize>),
+    tokens: Vec<(LogosToken<'a>, Range<usize>)>,
+}
 
-                  while let Some(ch) = chars.next() {
-                    if ch == '\\' {
-                      match chars.next() {
-                        Some('n') => result.push('\n'),
-                        Some('t') => result.push('\t'),
-                        Some('r') => result.push('\r'),
-                        Some('x') => {
-                            let mut hex = String::new();
+impl<'a> PParser<'a> {
+    pub fn new(source: &'a str, tokens: Vec<(LogosToken<'a>, Range<usize>)>) -> Self {
+        let mut x = Self {
+            tokens,
+            source,
+            position: 0,
+            errored: false,
+            current: (LogosToken::Error, 0..0),
+        };
+        x.proceed();
+        x
+    }
 
-                            for digit in chars.by_ref() {
-                              if digit.is_ascii_hexdigit() {
-                                hex.push(digit);
-                              } else {
-                                break;
-                              }
-                            }
+    fn proceed(&mut self) -> Option<(LogosToken<'a>, Range<usize>)> {
+        let token = self.tokens.get(self.position).cloned();
+        // Try to get the last token's span if no last token then just 0..0
+        let span = if let Some((_, span)) = self.tokens.last() {
+            span.clone()
+        } else {
+            0..0
+        };
 
-                            if let Ok(value) = u32::from_str_radix(&hex, 16) {
-                              result.push(char::from_u32(value).unwrap());
-                            }
-                        },
-                        // Add more cases later
-                        _ => result.push(ch), // Invalid escape, just keep char
-                      }
-                    } else {
-                      result.push(ch);
-                    }
-                  };
-                    result.remove(0);
-                    result.remove(result.len() - 1);
-                    ExprKind::String(result)
-                },
-                LogosToken::Ident(s) => ExprKind::Ident(s.to_string()),
-                LogosToken::True => ExprKind::Bool(true),
-                LogosToken::False => ExprKind::Bool(false),
-            }
-            .map_with(|a, f| {
-                let span: Span = f.span();
-                if let ExprKind::Ident(ref x) = a {
-                    let mut string = x.to_string();
-                    if string.starts_with("_") {
-                        string.remove(0);
-                        return Expr::new(span.into(), ExprKind::String(string.replace("_", " ")));
-                    }
+        self.current = (LogosToken::Error, span);
+        if token.is_some() {
+            self.current = token.clone().unwrap();
+        }
+        self.position += 1;
+        token
+    }
+    fn check_fun(&self) -> bool {
+        if let Some(LogosToken::Ident(_)) = self.peek(0) {
+            return true;
+        } else if let Some(LogosToken::Colon) = self.peek(0) {
+            return true;
+        }
+        return false;
+    }
+    pub fn block(&mut self) -> (Vec<Expr>, bool) {
+        // Returns the vector of exprs and if it's a one line block
+        let mut exprs: Vec<Expr> = Vec::new();
+        if self.current() == &LogosToken::LBrace {
+            self.proceed();
+            loop {
+                if self.current() == &LogosToken::RBrace {
+                    self.proceed();
+                    break;
                 }
-                Expr::new(span.into(), a)
-            })
-            .or(e
-                .clone()
-                .delimited_by(just(LogosToken::LParen), just(LogosToken::RParen)));
+                let current = self.current.0.to_owned();
+                let expr = self.declaration(current);
+                exprs.push(expr);
+            }
+        } else {
+            let expr = self.expr(0);
+            exprs.push(expr);
+        }
+        (exprs.clone(), exprs.len() == 1)
+    }
+    pub fn parse(&mut self) -> Vec<Expr> {
+        let mut exprs: Vec<Expr> = Vec::new();
+        loop {
+            if self.position >= self.tokens.len() + 1 {
+                break;
+            }
 
-            let op = just(LogosToken::Times)
-                .to(BinaryOp::Mul)
-                .or(just(LogosToken::Slash).to(BinaryOp::Div));
-            let product = val.clone().foldl(
-                op.then(val).map_with(|a, f| (a, f.span())).repeated(),
-                |lhs, ((op, rhs), span): ((BinaryOp, Expr), Span)| {
+            let (token, _) = self.current.clone();
+            exprs.push(self.declaration(token))
+        }
+        if self.errored {
+            std::process::exit(0);
+        }
+        exprs
+    }
+    fn declaration(&mut self, token: LogosToken<'a>) -> Expr {
+        match token {
+            LogosToken::Return => {
+                let start = self.current.1.start;
+                self.proceed();
+                let expr = self.expr(0);
+                return Expr::new(start..self.current.1.end, ExprKind::Return(Box::new(expr)));
+            }
+            LogosToken::Ident(x) => {
+                let span = self.current.1.clone();
+                if self.peek(0) == Some(LogosToken::Eq) {
+                    self.proceed();
+                    self.proceed();
+                    let current = self.current.0.to_owned();
+                    let expr = self.expr(40);
                     Expr::new(
-                        span.into(),
-                        ExprKind::Binary(Box::new(lhs), op, Box::new(rhs)),
+                        span.start..self.current.1.end,
+                        ExprKind::Set(x.to_string(), Box::new(expr)),
                     )
-                },
+                } else if self.check_fun() {
+                    let mut params: Vec<String> = Vec::new();
+                    let name = if let LogosToken::Ident(x) = self.current() {
+                        x.to_string()
+                    } else {
+                        unreachable!()
+                    };
+                    self.proceed();
+                    loop {
+                        if &LogosToken::Colon == self.current() {
+                            self.proceed();
+                            break;
+                        }
+                        let ident = self.expect_ident();
+                        params.push(ident.clone());
+                        self.proceed();
+                    }
+                    let (exprs, is_inline) = self.block();
+                    if is_inline {
+                        let inline_expr = Expr::new(
+                            span.start..exprs.last().unwrap().span.end,
+                            ExprKind::InlineFunction(name, params, Box::new(exprs[0].clone())),
+                        );
+                        inline_expr
+                    } else {
+                        let multiline_expr = Expr::new(
+                            span.start..exprs.last().unwrap().span.end,
+                            ExprKind::MultilineFunction(name, params, exprs),
+                        );
+                        multiline_expr
+                    }
+                } else {
+                    self.expr(0)
+                }
+            }
+            _ => self.expr(0),
+        }
+    }
+    fn lbp(&self, op: &LogosToken) -> i32 {
+        match op {
+            LogosToken::Plus | LogosToken::Minus => 10,
+            LogosToken::Times | LogosToken::Slash => 15,
+
+            LogosToken::RAngle | LogosToken::Leq | LogosToken::Geq | LogosToken::LAngle => 5,
+            LogosToken::Neq | LogosToken::Eqq => 3,
+            LogosToken::And => 2,
+            LogosToken::Or => 1,
+            _ => -1, // In another words stop the expr parsing
+        }
+    }
+    fn current(&self) -> &LogosToken {
+        &self.current.0
+    }
+    fn expr(&mut self, rbp: i32) -> Expr {
+        let curr = self.current.clone();
+        let mut expr = self.term(curr);
+        let start = expr.span.start.clone();
+        while rbp < self.lbp(&self.current.0) {
+            let (token, _) = self.current.clone();
+            self.proceed();
+            let right = Box::new(self.expr(self.lbp(&token)));
+            expr = Expr::new(
+                start..right.span.end,
+                ExprKind::Binary(Box::new(expr), token.to_binary_op(), right),
             );
-            let op = just(LogosToken::Plus)
-                .to(BinaryOp::Add)
-                .or(just(LogosToken::Minus).to(BinaryOp::Sub));
-            let sum = product
-                .clone()
-                .foldl(op.then(product).repeated(), |lhs, (op, rhs)| {
-                    Expr::new(
-                        lhs.span.start..rhs.span.end,
-                        ExprKind::Binary(Box::new(lhs), op, Box::new(rhs)),
-                    )
-                });
-            let op = choice((
-                just(LogosToken::Eqq).to(BinaryOp::Eq),
-                just(LogosToken::Neq).to(BinaryOp::NotEq),
-                just(LogosToken::LAngle).to(BinaryOp::Less),
-                just(LogosToken::RAngle).to(BinaryOp::Greater),
-                just(LogosToken::Geq).to(BinaryOp::GreaterEq),
-                just(LogosToken::Leq).to(BinaryOp::LessEq),
-            ));
-            let comp = sum
-                .clone()
-                .foldl(op.then(sum).repeated(), |lhs, (op, rhs)| {
-                    Expr::new(
-                        lhs.span.start..rhs.span.end,
-                        ExprKind::Binary(Box::new(lhs), op, Box::new(rhs)),
-                    )
-                });
-            let op = choice((
-                just(LogosToken::Or).to(BinaryOp::Or),
-                just(LogosToken::And).to(BinaryOp::And),
-            ));
-            let expr_ = comp
-                .clone()
-                .foldl(op.then(comp).repeated(), |lhs, (op, rhs)| {
-                    Expr::new(
-                        lhs.span.start..rhs.span.end,
-                        ExprKind::Binary(Box::new(lhs), op, Box::new(rhs)),
-                    )
-                });
-            let args = e
-                .separated_by(just(LogosToken::Comma))
-                .collect::<Vec<_>>()
-                .or_not();
-            let call = ident
-                .then(args.delimited_by(just(LogosToken::LParen), just(LogosToken::RParen)))
-                .map_with(|(name, args), f| {
-                    let span: Span = f.span();
-                    Expr::new(span.into(), ExprKind::Call(name.to_string(), args))
-                });
+        }
+        // if self.current() == &LogosToken::Question {
+        //     self.proceed();
+        //     let true_expr = self.block().0;
+        //     let mut false_expr: Option<Vec<Expr>> = None;
+        //     // the ':' part is optional
+        //     if self.current() == &LogosToken::Colon {
+        //         self.proceed();
+        //         false_expr = Some(self.block().0);
+        //     }
 
-            call.or(expr_)
-        });
-        let var = ident
-            .then_ignore(just(LogosToken::Eq))
-            .then(inline.clone())
-            .map_with(|(name, expr), f| {
-                let span: Span = f.span();
-                Expr::new(span.into(), ExprKind::Set(name.to_string(), Box::new(expr)))
-            });
-        let args = ident.clone().repeated().collect::<Vec<_>>();
-        let inline_function = ident
-            .then(args)
-            .then_ignore(just(LogosToken::Eq))
-            .then(inline.clone())
-            .map_with(|((name, args), expr), f| {
-                let span: Span = f.span();
-                Expr::new(
-                    span.into(),
-                    ExprKind::InlineFunction(
-                        name.to_string(),
-                        args.iter().map(|x| x.to_string()).collect::<Vec<_>>(),
-                        Box::new(expr),
-                    ),
-                )
-            });
-        let block = expr.clone().repeated().collect::<Vec<_>>();
+        //     return Expr::new(
+        //         start..self.current.1.end,
+        //         ExprKind::Ternary(Box::new(expr), true_expr, false_expr),
+        //     )
 
-        let multiline_function = ident
-            .then(args)
-            .then_ignore(just(LogosToken::Eq))
-            .then(block.delimited_by(just(LogosToken::LBrace), just(LogosToken::RBrace)))
-            .map_with(|((name, args), exprs), f| {
-                let span: Span = f.span();
-                Expr::new(
-                    span.into(),
-                    ExprKind::MultilineFunction(
-                        name.to_string(),
-                        args.iter().map(|x| x.to_string()).collect::<Vec<_>>(),
-                        exprs,
-                    ),
-                )
-            });
-        let return_stmt = just(LogosToken::AndOne)
-            .ignore_then(inline.clone())
-            .map_with(|expr, f| {
-                let span: Span = f.span();
-                Expr::new(span.into(), ExprKind::Return(Box::new(expr)))
-            });
-        let eq_stmt = ident
-            .then(choice((
-                just(LogosToken::AddEq).to(BinaryOp::AddEq),
-                just(LogosToken::SubEq).to(BinaryOp::SubEq),
-                just(LogosToken::MulEq).to(BinaryOp::MulEq),
-                just(LogosToken::DivEq).to(BinaryOp::DivEq),
-            )))
-            .then(inline.clone())
-            .map_with(|((name, bin_eq), expr), f| {
-                let span: Span = f.span();
-                Expr::new(
-                    span.into(),
-                    ExprKind::EqStmt(name.to_string(), bin_eq, Box::new(expr)),
-                )
-            });
+        // }
 
-        eq_stmt
-            .or(var)
-            .or(multiline_function)
-            .or(inline_function)
-            .or(return_stmt)
-            .or(inline)
-    })
-    .repeated()
-    .collect::<Vec<Expr>>()
+        expr
+    }
+    fn peek(&self, x: usize) -> Option<LogosToken> {
+        let token = self.tokens.get(self.position + x).cloned();
+        token.map(|(token, _)| token)
+    }
+    fn expect_ident(&mut self) -> String {
+        let (token, span) = &self.current;
+        if let LogosToken::Ident(ident) = self.current.0 {
+            return ident.to_string();
+        }
+        let report = miette!(
+            labels = vec![LabeledSpan::at(
+                span.clone(),
+                format!("expected identifier")
+            )],
+            "Expected identifier found {token}"
+        )
+        .with_source_code(self.source.to_string());
+        self.errored = true;
+        println!("{:?}", report);
+        "".to_string()
+    }
+    fn expect(&mut self, token: LogosToken) {
+        let (tok, span) = &self.current;
+        if tok != &token {
+            let report = miette!(
+                labels = vec![LabeledSpan::at(span.clone(), format!("expected {}", token))],
+                help = format!("Replace it with {token}"),
+                "Expected {token} found {tok}"
+            )
+            .with_source_code(self.source.to_string());
+            self.errored = true;
+            println!("{:?}", report);
+        }
+    }
+    fn term(&mut self, token: (LogosToken, Range<usize>)) -> Expr {
+        let (token, span) = token;
+        let kind = match token {
+            LogosToken::Int(value) => ExprKind::Int(value.parse().unwrap()),
+            LogosToken::Float(value) => ExprKind::Float(value.parse().unwrap()),
+            LogosToken::True => ExprKind::Bool(true),
+            LogosToken::False => ExprKind::Bool(false),
+            LogosToken::String(value) => ExprKind::String(value.to_string()),
+            v @ LogosToken::Dollar | v @ LogosToken::DollarDollar => {
+                self.proceed();
+                let expr = self.expr(40);
+                return Expr::new(
+                    span.start..self.current.1.end,
+                    ExprKind::Call(v.to_string(), Some(vec![expr])),
+                );
+            }
+            LogosToken::Ident(value) => {
+                let ident = ExprKind::Ident(value.to_string());
+                if value == "nil" {
+                    self.proceed();
+                    let current = &self.current;
+                    return Expr::new(span.start..current.1.end, ExprKind::Nil);
+                }
+                self.proceed();
+                if LogosToken::LParen == self.current.0 {
+                    self.proceed();
+                    let mut args: Vec<Expr> = Vec::new();
+                    loop {
+                        if self.current.0 == LogosToken::RParen {
+                            break;
+                        }
+                        let expr = self.expr(0);
+                        args.push(expr);
+                        if self.current.0 != LogosToken::Comma {
+                            break;
+                        }
+                        self.proceed();
+                    }
+                    self.proceed();
+                    let span = span.start..self.current.1.start;
+                    let kind = ExprKind::Call(value.to_string(), Some(args));
+                    return Expr::new(span, kind);
+                }
+                let kind = {
+                    if value.starts_with("_") {
+                        // Delete the _ and replace every next _ with a space
+                        let mut new_value = value.to_string();
+                        new_value.remove(0);
+                        new_value = new_value.replace("_", " ");
+                        ExprKind::String(new_value)
+                    } else {
+                        ident
+                    }
+                };
+                let current = &self.current;
+                return Expr::new(span.start..current.1.end, kind);
+            }
+            LogosToken::LParen => {
+                self.proceed();
+                let expr = self.expr(0);
+                self.expect(LogosToken::RParen);
+                expr.inner
+            }
+
+            _ => {
+                println!("{:?}", self.current());
+                let report = miette!(
+                    labels = vec![LabeledSpan::at(span.clone(), "this is not a value")],
+                    help = "Expected a value like integers, strings, etc.",
+                    "Expected expression"
+                )
+                .with_source_code(self.source.to_string());
+                println!("{:?}", report);
+                self.errored = true;
+                ExprKind::Error
+            }
+        };
+        let current = self.current.clone();
+        self.proceed();
+
+        Expr::new(span.start..current.1.end, kind)
+    }
 }
