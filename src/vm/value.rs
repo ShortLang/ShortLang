@@ -1,7 +1,4 @@
 use std::ops::*;
-use std::ptr::NonNull;
-
-use crate::parser::Expr;
 
 #[derive(Clone, Debug, Default)]
 pub enum Value {
@@ -9,8 +6,6 @@ pub enum Value {
     Float(f64),
     String(String),
     Bool(bool),
-
-    Expr(NonNull<Expr>),
 
     #[default]
     Null,
@@ -276,8 +271,7 @@ impl std::fmt::Display for Value {
                 Self::Float(f) => f.to_string(),
                 Self::Bool(b) => b.to_string(),
                 Self::String(s) => s.to_string(),
-
-                _ => unreachable!(),
+                Self::Null => String::from("null"),
             }
         )
     }

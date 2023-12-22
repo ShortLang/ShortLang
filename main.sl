@@ -1,19 +1,15 @@
-get_magic_number = {
-	&((55 + 14) * 1000 + 410)
-}
+f x = print("Number is: " + x)
+f(10)
 
-fn_that_returns x = {
-	num = get_magic_number()
-	&(num + x)
-}
-
-res = fn_that_returns(10)
-print("value is: " + res)
-
-add a b = a + b
-
-a = 55
-b = 14
-sum = add(a, b)
-
-print(a + " + " + b + " = " + sum)
+// known bug:
+// ```
+// f x = print("num is " + x)
+// g x = print(x + " is num")
+//
+// r1 = f(10)
+// r2 = g(20)
+// print("r1: " + r1 + ", " + "r2: " + r2)
+// ```
+//
+// The above code should print "r1: null, r2: null"
+// but instead it prints "r1: 10, r2: 20"

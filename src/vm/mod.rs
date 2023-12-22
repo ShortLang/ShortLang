@@ -305,12 +305,10 @@ impl VM {
                 self.instructions
                     .push((Instr(Bytecode::Function, vec![]), expr.span.clone()));
 
-                self.compile_expr(
-                    Expr {
-                        span: expr.span,
-                        inner: ExprKind::Return(body),
-                    },
-                );
+                self.compile_expr(Expr {
+                    span: expr.span,
+                    inner: ExprKind::Return(body),
+                });
 
                 let body_end = self.instructions.len();
 
@@ -422,18 +420,15 @@ impl VM {
             }
             Replace => {
                 let id = args[0];
-                let value = self.stack.pop().unwrap();
+                let value = self.stack.pop().unwrap_or(allocate(Value::Null));
 
-                self.variables
-                    .last_mut()
-                    .unwrap()
-                    .insert(id, Some(value));
+                self.variables.last_mut().unwrap().insert(id, Some(value));
             }
             GetVar => {
                 let id = args[0];
                 let v = self.get_var(id as _);
                 if self.get_var(id).is_some() {
-                    self.stack.push(v.unwrap())
+                    self.stack.push(v.unwrap_or(allocate(Value::Null)))
                 } else {
                     self.runtime_error("Variable not found", span)
                 }
@@ -456,7 +451,12 @@ impl VM {
                 //     println!("stack: {}", i.as_ref());
                 // }
 
-                let fn_name = self.stack.pop().unwrap().as_ref().as_str();
+                let fn_name = self
+                    .stack
+                    .pop()
+                    .unwrap_or(allocate(Value::Null))
+                    .as_ref()
+                    .as_str();
                 let fn_obj = &self.functions[fn_name];
 
                 if fn_obj.instruction_range.contains(&self.pc) {
@@ -465,7 +465,12 @@ impl VM {
             },
 
             FnCall => unsafe {
-                let fn_name = self.stack.pop().unwrap().as_ref().as_str();
+                let fn_name = self
+                    .stack
+                    .pop()
+                    .unwrap_or(allocate(Value::Null))
+                    .as_ref()
+                    .as_str();
                 let fn_obj @ FunctionData {
                     parameters,
                     scope_idx,
@@ -473,7 +478,7 @@ impl VM {
                 } = &self.functions[fn_name];
 
                 let fn_args = (0..parameters.len())
-                    .map(|_| self.stack.pop().unwrap())
+                    .map(|_| self.stack.pop().unwrap_or(allocate(Value::Null)))
                     .rev()
                     .collect::<Vec<_>>();
 
@@ -514,7 +519,16 @@ impl VM {
             Eq => self.compare_values(span, |a, b| a.equal_to(b)),
             Neq => self.compare_values(span, |a, b| a.not_equal_to(b)),
 
-            Print => unsafe { println!("{}", self.stack.pop().unwrap().as_ref().to_string()) },
+            Print => unsafe {
+                println!(
+                    "{}",
+                    self.stack
+                        .pop()
+                        .unwrap_or(allocate(Value::Null))
+                        .as_ref()
+                        .to_string()
+                )
+            },
 
             _ => {}
         }
@@ -554,10 +568,8 @@ impl VM {
 
     fn push_data(&mut self, data: Value, span: Range<usize>) {
         let const_idx = self.add_constant(data);
-        self.instructions.push((
-            Instr(Bytecode::LoadConst, vec![const_idx as u32 - 1]),
-            span,
-        ));
+        self.instructions
+            .push((Instr(Bytecode::LoadConst, vec![const_idx as u32 - 1]), span));
     }
 
     fn compare_values<F>(&mut self, span: Range<usize>, compare_fn: F)
@@ -632,4 +644,8 @@ impl FunctionData {
             .map(|(_, id)| *id)
             .collect::<Vec<_>>()
     }
+}
+
+fn allocate(val: Value) -> NonNull<Value> {
+    NonNull::new(alloc_new_value(val)).expect("failed to allocate")
 }
