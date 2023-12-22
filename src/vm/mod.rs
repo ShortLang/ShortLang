@@ -344,7 +344,7 @@ impl VM {
                         .push((Instr(Bytecode::Print, vec![]), expr.span));
                 }
 
-                "typeof" => {
+                "type" => {
                     if args.is_some() {
                         for arg in args.clone().unwrap() {
                             self.compile_expr(arg);

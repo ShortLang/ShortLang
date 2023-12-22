@@ -60,7 +60,7 @@ impl Value {
             Value::Float(_) => "float".to_string(),
             Value::String(_) => "str".to_string(),
             Value::Bool(_) => "bool".to_string(),
-            Value::Nil => "null".to_string(),
+            Value::Nil => "nil".to_string(),
         }
     }
 

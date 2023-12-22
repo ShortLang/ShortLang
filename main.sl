@@ -1,3 +1,3 @@
 f x = print("Number is: " + x)
 x = f(10)
-print(x) // prints null
+print(type(x)) // prints null
