@@ -330,33 +330,43 @@ impl VM {
                 self.compile_expr(*val);
             }
 
-            ExprKind::Call(ref name, ref args) => {
-                if args.is_some() {
-                    for arg in args.clone().unwrap() {
-                        self.compile_expr(arg);
-                    }
-                }
-
-                match name.as_str() {
-                    "print" => self
-                        .instructions
-                        .push((Instr(Bytecode::Print, vec![]), expr.span)),
-
-                    "typeof" => self
-                        .instructions
-                        .push((Instr(Bytecode::TypeOf, vec![]), expr.span)),
-
-                    _ => {
-                        for arg in args.as_ref().unwrap_or(&vec![]) {
-                            self.compile_expr(arg.clone());
+            ExprKind::Call(ref name, ref args) => match name.as_str() {
+                "print" => {
+                    if args.is_some() {
+                        for arg in args.clone().unwrap() {
+                            self.compile_expr(arg);
                         }
-
-                        self.push_data(name.as_str().into(), expr.span.clone());
-                        self.instructions
-                            .push((Instr(Bytecode::FnCall, vec![]), expr.span));
+                    } else {
+                        self.stack.push(allocate(Value::Null));
                     }
+
+                    self.instructions
+                        .push((Instr(Bytecode::Print, vec![]), expr.span));
                 }
-            }
+
+                "typeof" => {
+                    if args.is_some() {
+                        for arg in args.clone().unwrap() {
+                            self.compile_expr(arg);
+                        }
+                    } else {
+                        self.stack.push(allocate(Value::Null));
+                    }
+
+                    self.instructions
+                        .push((Instr(Bytecode::TypeOf, vec![]), expr.span));
+                }
+
+                _ => {
+                    for arg in args.as_ref().unwrap_or(&vec![]) {
+                        self.compile_expr(arg.clone());
+                    }
+
+                    self.push_data(name.as_str().into(), expr.span.clone());
+                    self.instructions
+                        .push((Instr(Bytecode::FnCall, vec![]), expr.span));
+                }
+            },
         }
     }
 
@@ -520,13 +530,12 @@ impl VM {
             Neq => self.compare_values(span, |a, b| a.not_equal_to(b)),
 
             Print => unsafe {
-                println!(
+                print!(
                     "{}",
-                    self.stack
-                        .pop()
-                        .unwrap_or(allocate(Value::Null))
-                        .as_ref()
-                        .to_string()
+                    match self.stack.pop().unwrap_or(allocate(Value::Null)).as_ref() {
+                        Value::Null => "\n".to_string(),
+                        v => format!("{v}\n"),
+                    }
                 )
             },
 
