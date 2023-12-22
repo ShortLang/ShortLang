@@ -13,6 +13,7 @@ pub enum Bytecode {
     MAKE_VAR,
 
     // Operations
+    EVAL,
     ADD,
     SUB,
     MUL,
@@ -29,12 +30,13 @@ pub enum Bytecode {
     TYPEOF,
 
     // FUNCTION,
+    FUNCTION,
     FN_CALL,
     RET,
 }
 
 #[derive(Clone, Debug)]
-pub struct Instr(pub Bytecode, pub Vec<super::value::Value>);
+pub struct Instr(pub Bytecode, pub Vec<u32>);
 
 impl std::fmt::Display for Bytecode {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

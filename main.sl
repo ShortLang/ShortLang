@@ -1,17 +1,19 @@
-f1 = {
-	print("f1")
-}
-f2 = {
-	print("f2")
-}
-f3 = {
-	print("f3")
+get_magic_number = {
+	&((55 + 14) * 1000 + 410)
 }
 
-f1()
-f2()
-f3()
+fn_that_returns x = {
+	num = get_magic_number()
+	&(num + x)
+}
 
-f1()
-f2()
-f3()
+res = fn_that_returns(10)
+print("value is: " + res)
+
+add a b = a + b
+
+a = 55
+b = 14
+sum = add(a, b)
+
+print(a + " + " + b + " = " + sum)

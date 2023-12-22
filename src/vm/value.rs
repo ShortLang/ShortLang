@@ -3,7 +3,7 @@ use std::ptr::NonNull;
 
 use crate::parser::Expr;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub enum Value {
     Int(i64),
     Float(f64),
@@ -11,34 +11,37 @@ pub enum Value {
     Bool(bool),
 
     Expr(NonNull<Expr>),
+
+    #[default]
+    Null,
 }
 
 impl Value {
     pub fn as_int(&self) -> i64 {
         match self {
             &Self::Int(i) => i,
-            _ => panic!(),
+            _ => panic!("Expected an int value, found: {}", self.get_type()),
         }
     }
 
     pub fn as_float(&self) -> f64 {
         match self {
             &Self::Float(f) => f,
-            _ => panic!(),
+            _ => panic!("Expected an float value, found: {}", self.get_type()),
         }
     }
 
     pub fn as_bool(&self) -> bool {
         match self {
             &Self::Bool(i) => i,
-            _ => panic!(),
+            _ => panic!("Expected an bool value, found: {}", self.get_type()),
         }
     }
 
     pub fn as_str(&self) -> &str {
         match self {
             Self::String(i) => i,
-            _ => panic!(),
+            _ => panic!("Expected an string value, found: {}", self.get_type()),
         }
     }
 
