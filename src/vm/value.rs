@@ -8,7 +8,7 @@ pub enum Value {
     Bool(bool),
 
     #[default]
-    Null,
+    Nil,
 }
 
 impl Value {
@@ -60,7 +60,7 @@ impl Value {
             Value::Float(_) => "float".to_string(),
             Value::String(_) => "str".to_string(),
             Value::Bool(_) => "bool".to_string(),
-            Value::Null => "null".to_string(),
+            Value::Nil => "null".to_string(),
         }
     }
 
@@ -270,7 +270,7 @@ impl std::fmt::Display for Value {
                 Self::Float(f) => f.to_string(),
                 Self::Bool(b) => b.to_string(),
                 Self::String(s) => s.to_string(),
-                Self::Null => String::from("null"),
+                Self::Nil => "nil".to_string(),
             }
         )
     }

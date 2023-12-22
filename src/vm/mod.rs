@@ -337,7 +337,7 @@ impl VM {
                             self.compile_expr(arg);
                         }
                     } else {
-                        self.stack.push(allocate(Value::Null));
+                        self.stack.push(allocate(Value::Nil));
                     }
 
                     self.instructions
@@ -350,7 +350,7 @@ impl VM {
                             self.compile_expr(arg);
                         }
                     } else {
-                        self.stack.push(allocate(Value::Null));
+                        self.stack.push(allocate(Value::Nil));
                     }
 
                     self.instructions
@@ -430,7 +430,7 @@ impl VM {
             }
             Replace => {
                 let id = args[0];
-                let value = self.stack.pop().unwrap_or(allocate(Value::Null));
+                let value = self.stack.pop().unwrap_or(allocate(Value::Nil));
 
                 self.variables.last_mut().unwrap().insert(id, Some(value));
             }
@@ -438,7 +438,7 @@ impl VM {
                 let id = args[0];
                 let v = self.get_var(id as _);
                 if self.get_var(id).is_some() {
-                    self.stack.push(v.unwrap_or(allocate(Value::Null)))
+                    self.stack.push(v.unwrap_or(allocate(Value::Nil)))
                 } else {
                     self.runtime_error("Variable not found", span)
                 }
@@ -464,7 +464,7 @@ impl VM {
                 let fn_name = self
                     .stack
                     .pop()
-                    .unwrap_or(allocate(Value::Null))
+                    .unwrap_or(allocate(Value::Nil))
                     .as_ref()
                     .as_str();
                 let fn_obj = &self.functions[fn_name];
@@ -478,7 +478,7 @@ impl VM {
                 let fn_name = self
                     .stack
                     .pop()
-                    .unwrap_or(allocate(Value::Null))
+                    .unwrap_or(allocate(Value::Nil))
                     .as_ref()
                     .as_str();
                 let fn_obj @ FunctionData {
@@ -488,7 +488,7 @@ impl VM {
                 } = &self.functions[fn_name];
 
                 let fn_args = (0..parameters.len())
-                    .map(|_| self.stack.pop().unwrap_or(allocate(Value::Null)))
+                    .map(|_| self.stack.pop().unwrap_or(allocate(Value::Nil)))
                     .rev()
                     .collect::<Vec<_>>();
 
@@ -532,8 +532,7 @@ impl VM {
             Print => unsafe {
                 print!(
                     "{}",
-                    match self.stack.pop().unwrap_or(allocate(Value::Null)).as_ref() {
-                        Value::Null => "\n".to_string(),
+                    match self.stack.pop().unwrap_or(allocate(Value::Nil)).as_ref() {
                         v => format!("{v}\n"),
                     }
                 )
