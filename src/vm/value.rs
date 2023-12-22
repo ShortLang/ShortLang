@@ -1,44 +1,42 @@
 use std::ops::*;
-use std::ptr::NonNull;
 
-use crate::parser::Expr;
-
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub enum Value {
     Int(i64),
     Float(f64),
     String(String),
     Bool(bool),
 
-    Expr(NonNull<Expr>),
+    #[default]
+    Nil,
 }
 
 impl Value {
     pub fn as_int(&self) -> i64 {
         match self {
             &Self::Int(i) => i,
-            _ => panic!(),
+            _ => panic!("Expected an int value, found: {}", self.get_type()),
         }
     }
 
     pub fn as_float(&self) -> f64 {
         match self {
             &Self::Float(f) => f,
-            _ => panic!(),
+            _ => panic!("Expected an float value, found: {}", self.get_type()),
         }
     }
 
     pub fn as_bool(&self) -> bool {
         match self {
             &Self::Bool(i) => i,
-            _ => panic!(),
+            _ => panic!("Expected an bool value, found: {}", self.get_type()),
         }
     }
 
     pub fn as_str(&self) -> &str {
         match self {
             Self::String(i) => i,
-            _ => panic!(),
+            _ => panic!("Expected an string value, found: {}", self.get_type()),
         }
     }
 
@@ -62,8 +60,7 @@ impl Value {
             Value::Float(_) => "float".to_string(),
             Value::String(_) => "str".to_string(),
             Value::Bool(_) => "bool".to_string(),
-
-            _ => unreachable!(),
+            Value::Nil => "nil".to_string(),
         }
     }
 
@@ -183,9 +180,7 @@ impl Value {
     }
 
     pub fn referenced_children(&self) -> Option<Vec<*mut Value>> {
-        match self {
-            _ => None,
-        }
+        None
     }
 }
 
@@ -275,8 +270,7 @@ impl std::fmt::Display for Value {
                 Self::Float(f) => f.to_string(),
                 Self::Bool(b) => b.to_string(),
                 Self::String(s) => s.to_string(),
-
-                _ => unreachable!(),
+                Self::Nil => "nil".to_string(),
             }
         )
     }

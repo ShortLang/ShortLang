@@ -463,7 +463,13 @@ impl<'a> PParser<'a> {
             LogosToken::Float(value) => ExprKind::Float(value.parse().unwrap()),
             LogosToken::True => ExprKind::Bool(true),
             LogosToken::False => ExprKind::Bool(false),
-            LogosToken::String(value) => ExprKind::String(value.to_string()),
+            LogosToken::String(value) => {
+                // remove the first quote and last quote
+                let mut new_str = value.to_owned();
+                new_str.remove(0);
+                new_str.remove(value.len() - 2);
+                ExprKind::String(new_str)
+            }
             v @ LogosToken::Dollar | v @ LogosToken::DollarDollar => {
                 self.proceed();
                 let expr = self.expr(40);

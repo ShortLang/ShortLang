@@ -1,1 +1,3 @@
-print("Hi")
+i = input()
+
+$("You typed " + i + " Interesting..")

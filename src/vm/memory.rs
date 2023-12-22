@@ -50,8 +50,7 @@ pub fn mark(node: *mut Value) {
         }
     }
 
-    while !grey_objects.is_empty() {
-        let g = grey_objects.pop().unwrap();
+    while let Some(g) = grey_objects.pop() {
         if let Some(item) = all_allocations.get_mut(&(g as usize)) {
             if *item == GCItemState::Grey {
                 *item = GCItemState::Black;

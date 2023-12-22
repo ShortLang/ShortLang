@@ -18,6 +18,8 @@ use self::{
 
 const GC_TRIGGER: usize = 1000;
 
+type VarId = u32;
+
 use value::Value;
 pub struct VM {
     src: String,
@@ -27,7 +29,7 @@ pub struct VM {
     // TODO: Make this limited sized using some kind of library
     stack: Vec<NonNull<Value>>,
 
-    variables_id: HashMap<String, u32>,
+    variables_id: HashMap<String, VarId>,
     variables: Vec<HashMap<u32, Option<NonNull<Value>>>>,
 
     constants: Vec<Value>,
@@ -37,7 +39,7 @@ pub struct VM {
     iteration: usize,
 
     /// ptr to corresponding function bytecode
-    functions: HashMap<String, (usize, Option<(usize, usize)>)>,
+    functions: HashMap<String, FunctionData>,
 }
 
 impl VM {
@@ -58,35 +60,36 @@ impl VM {
     }
 
     pub fn run(&mut self) {
-        for (idx, instr) in self.instructions.clone().iter().enumerate() {
+        while self.pc < self.instructions.len() {
             if self.iteration == GC_TRIGGER {
                 self.gc_recollect();
             }
 
+            let instr = &self.instructions[self.pc];
             if self.run_byte(instr.0.clone(), instr.1.clone()) {
                 break;
             }
         }
+
         self.gc_recollect();
     }
 
     pub fn compile(&mut self) {
         let exprs = self.exprs.clone();
-        for (idx, expr) in exprs.iter().enumerate() {
-            self.compile_expr(expr.clone(), Some(idx));
+        for expr in exprs.iter() {
+            self.compile_expr(expr.clone());
         }
-
         self.instructions
-            .push((Instr(Bytecode::HALT, vec![]), 0..0));
+            .push((Instr(Bytecode::Halt, vec![]), 0..0));
         self.run();
     }
 
-    fn compile_expr(&mut self, expr: Expr, expr_idx: Option<usize>) {
+    fn compile_expr(&mut self, expr: Expr) {
         match expr.inner {
             ExprKind::Int(integer) => {
                 let index = self.add_constant(Value::Int(integer));
                 self.instructions.push((
-                    Instr(Bytecode::LOAD_CONST, vec![(index as u32 - 1).into()]),
+                    Instr(Bytecode::LoadConst, vec![index as u32 - 1]),
                     expr.span,
                 ));
             }
@@ -94,7 +97,7 @@ impl VM {
             ExprKind::Float(float) => {
                 let index = self.add_constant(Value::Float(float));
                 self.instructions.push((
-                    Instr(Bytecode::LOAD_CONST, vec![(index as u32 - 1).into()]),
+                    Instr(Bytecode::LoadConst, vec![index as u32 - 1]),
                     expr.span,
                 ));
             }
@@ -107,31 +110,33 @@ impl VM {
                 }
                 let id = id.unwrap();
                 self.instructions
-                    .push((Instr(Bytecode::GET_VAR, vec![id.into()]), expr.span.clone()));
-                self.compile_expr(*val, None);
+                    .push((Instr(Bytecode::GetVar, vec![*id]), expr.span.clone()));
+                self.compile_expr(*val);
                 match op {
                     BinaryOp::AddEq => {
                         self.instructions
-                            .push((Instr(Bytecode::ADD, vec![]), expr.span.clone()));
+                            .push((Instr(Bytecode::Add, vec![]), expr.span.clone()));
                     }
                     BinaryOp::SubEq => {
                         self.instructions
-                            .push((Instr(Bytecode::SUB, vec![]), expr.span.clone()));
+                            .push((Instr(Bytecode::Sub, vec![]), expr.span.clone()));
                     }
                     BinaryOp::MulEq => {
                         self.instructions
-                            .push((Instr(Bytecode::MUL, vec![]), expr.span.clone()));
+                            .push((Instr(Bytecode::Mul, vec![]), expr.span.clone()));
                     }
                     BinaryOp::DivEq => {
                         self.instructions
-                            .push((Instr(Bytecode::DIV, vec![]), expr.span.clone()));
+                            .push((Instr(Bytecode::Div, vec![]), expr.span.clone()));
                     }
 
                     _ => unreachable!(),
                 }
+
                 self.instructions
-                    .push((Instr(Bytecode::REPLACE, vec![id.into()]), expr.span));
+                    .push((Instr(Bytecode::Replace, vec![*id]), expr.span));
             }
+
             ExprKind::Ident(x) => {
                 let id = self.variables_id.get(&x);
                 if id.is_none() {
@@ -140,132 +145,239 @@ impl VM {
                 }
                 let id = id.unwrap();
                 self.instructions
-                    .push((Instr(Bytecode::GET_VAR, vec![id.into()]), expr.span));
+                    .push((Instr(Bytecode::GetVar, vec![*id]), expr.span));
             }
+
             ExprKind::Set(name, value) => {
                 // Check if the variable exists
                 // If not create a new one
                 if self.variables_id.get(&name).is_none() {
                     self.variables_id.insert(name, self.var_id_count as u32);
                     self.instructions
-                        .push((Instr(Bytecode::MAKE_VAR, vec![]), expr.span.clone()));
-                    self.compile_expr(*value, None);
+                        .push((Instr(Bytecode::MakeVar, vec![]), expr.span.clone()));
+                    self.compile_expr(*value);
                     self.instructions.push((
-                        Instr(Bytecode::REPLACE, vec![(self.var_id_count as u32).into()]),
+                        Instr(Bytecode::Replace, vec![self.var_id_count as u32]),
                         expr.span,
                     ));
                     self.var_id_count += 1;
                     return;
                 }
-                self.compile_expr(*value, None);
+                self.compile_expr(*value);
                 self.instructions.push((
                     Instr(
-                        Bytecode::REPLACE,
-                        vec![self.variables_id.get(&name).unwrap().clone().into()],
+                        Bytecode::Replace,
+                        vec![*self.variables_id.get(&name).unwrap()],
                     ),
                     expr.span,
                 ));
                 self.var_id_count += 1;
             }
+
             ExprKind::String(string) => {
                 let index = self.add_constant(Value::String(string));
                 self.instructions.push((
-                    Instr(Bytecode::LOAD_CONST, vec![(index as u32 - 1).into()]),
+                    Instr(Bytecode::LoadConst, vec![index as u32 - 1]),
                     expr.span,
                 ));
             }
             ExprKind::Bool(boolean) => {
                 let index = self.add_constant(Value::Bool(boolean));
                 self.instructions.push((
-                    Instr(Bytecode::LOAD_CONST, vec![(index as u32 - 1).into()]),
+                    Instr(Bytecode::LoadConst, vec![index as u32 - 1]),
                     expr.span,
                 ));
             }
-            ExprKind::Call(ref name, ref args) => {
-                if args.is_some() {
-                    for arg in args.clone().unwrap() {
-                        self.compile_expr(arg, None);
-                    }
-                }
-
-                match name.as_str() {
-                    "print" => self
-                        .instructions
-                        .push((Instr(Bytecode::PRINT, vec![]), expr.span)),
-
-                    "typeof" => self
-                        .instructions
-                        .push((Instr(Bytecode::TYPEOF, vec![]), expr.span)),
-
-                    _ => unsafe {
-                        // let mut fn_args: Vec<Value> = vec![name.into()];
-
-                        // for arg in args.unwrap_or(vec![]) {
-                        // fn_args.push(self.eval(arg));
-                        // }
-
-                        self.instructions.push((
-                            Instr(
-                                Bytecode::FN_CALL,
-                                vec![Value::Expr(NonNull::new_unchecked(Box::leak(Box::new(
-                                    expr.clone(),
-                                ))))],
-                            ),
-                            expr.span,
-                        ));
-                    },
-                }
-            }
 
             ExprKind::Binary(a, op, b) => {
-                self.compile_expr(*a, None);
-                self.compile_expr(*b, None);
+                self.compile_expr(*a);
+                self.compile_expr(*b);
                 match op {
                     BinaryOp::Add => self
                         .instructions
-                        .push((Instr(Bytecode::ADD, vec![]), expr.span)),
+                        .push((Instr(Bytecode::Add, vec![]), expr.span)),
                     BinaryOp::Mul => self
                         .instructions
-                        .push((Instr(Bytecode::MUL, vec![]), expr.span)),
+                        .push((Instr(Bytecode::Mul, vec![]), expr.span)),
                     BinaryOp::Div => self
                         .instructions
-                        .push((Instr(Bytecode::DIV, vec![]), expr.span)),
+                        .push((Instr(Bytecode::Div, vec![]), expr.span)),
                     BinaryOp::Sub => self
                         .instructions
-                        .push((Instr(Bytecode::SUB, vec![]), expr.span)),
+                        .push((Instr(Bytecode::Sub, vec![]), expr.span)),
                     BinaryOp::Less => self
                         .instructions
-                        .push((Instr(Bytecode::LT, vec![]), expr.span)),
+                        .push((Instr(Bytecode::Lt, vec![]), expr.span)),
                     BinaryOp::Greater => self
                         .instructions
-                        .push((Instr(Bytecode::GT, vec![]), expr.span)),
+                        .push((Instr(Bytecode::Gt, vec![]), expr.span)),
                     BinaryOp::LessEq => self
                         .instructions
-                        .push((Instr(Bytecode::LE, vec![]), expr.span)),
+                        .push((Instr(Bytecode::Le, vec![]), expr.span)),
                     BinaryOp::GreaterEq => self
                         .instructions
-                        .push((Instr(Bytecode::GE, vec![]), expr.span)),
+                        .push((Instr(Bytecode::Ge, vec![]), expr.span)),
                     BinaryOp::NotEq => self
                         .instructions
-                        .push((Instr(Bytecode::NEQ, vec![]), expr.span)),
+                        .push((Instr(Bytecode::Neq, vec![]), expr.span)),
                     BinaryOp::Eq => self
                         .instructions
-                        .push((Instr(Bytecode::EQ, vec![]), expr.span)),
+                        .push((Instr(Bytecode::Eq, vec![]), expr.span)),
 
                     _ => todo!(),
                 }
             }
 
-            ExprKind::MultilineFunction(name, ..) | ExprKind::InlineFunction(name, ..) => {
-                self.functions.insert(name, (expr_idx.unwrap(), None));
+            ExprKind::MultilineFunction(name, param_names, body) => {
+                let old_var_id = std::mem::take(&mut self.variables_id);
+                let mut scope = HashMap::new();
+
+                let mut fn_params = vec![];
+
+                for param_name in param_names.into_iter() {
+                    fn_params.push((param_name.clone(), self.var_id_count as _));
+                    self.variables_id.insert(param_name, self.var_id_count as _);
+                    scope.insert(self.var_id_count as _, None);
+                    self.var_id_count += 1;
+                }
+
+                let scope_idx = self.variables.len();
+                self.variables.push(scope);
+
+                let body_start = self.instructions.len();
+
+                self.push_data(name.as_str().into(), expr.span.clone());
+                self.instructions
+                    .push((Instr(Bytecode::Function, vec![]), expr.span));
+
+                let mut returns = false;
+                for expr in body {
+                    if matches![expr.inner, ExprKind::Return(..)] {
+                        returns = true;
+                    }
+
+                    self.compile_expr(expr);
+                }
+
+                let body_end = self.instructions.len();
+
+                self.functions.insert(
+                    name.clone(),
+                    FunctionData {
+                        name: name.clone(),
+                        parameters: fn_params,
+                        instruction_range: body_start..body_end,
+                        returns,
+                        scope_idx,
+                    },
+                );
+
+                self.variables_id = old_var_id;
+                self.stack
+                    .push(NonNull::new(alloc_new_value(Value::String(name.clone()))).unwrap());
             }
 
-            ExprKind::Return(..) => {
-                panic!("Return outside a function?");
+            ExprKind::InlineFunction(name, param_names, body) => {
+                let old_var_id = std::mem::take(&mut self.variables_id);
+                let mut scope = HashMap::new();
+
+                let mut fn_params = vec![];
+
+                for param_name in param_names.into_iter() {
+                    fn_params.push((param_name.clone(), self.var_id_count as _));
+                    self.variables_id.insert(param_name, self.var_id_count as _);
+                    scope.insert(self.var_id_count as _, None);
+                    self.var_id_count += 1;
+                }
+
+                let scope_idx = self.variables.len();
+                self.variables.push(scope);
+
+                let body_start = self.instructions.len();
+
+                self.push_data(name.as_str().into(), expr.span.clone());
+                self.instructions
+                    .push((Instr(Bytecode::Function, vec![]), expr.span.clone()));
+
+                self.compile_expr(Expr {
+                    span: expr.span,
+                    inner: ExprKind::Return(body),
+                });
+
+                let body_end = self.instructions.len();
+
+                self.functions.insert(
+                    name.clone(),
+                    FunctionData {
+                        name: name.clone(),
+                        parameters: fn_params,
+                        instruction_range: body_start..body_end,
+                        returns: true,
+                        scope_idx,
+                    },
+                );
+
+                self.variables_id = old_var_id;
             }
 
-            // ..implement other stuff later
-            _ => todo!(),
+            ExprKind::Return(val) => {
+                self.compile_expr(*val);
+            }
+
+            ExprKind::Call(ref name, ref args) => match name.as_str() {
+                "$" => {
+                    if args.is_some() {
+                        for arg in args.clone().unwrap() {
+                            self.compile_expr(arg);
+                        }
+                    } else {
+                        self.stack.push(allocate(Value::Nil));
+                    }
+
+                    self.instructions
+                        .push((Instr(Bytecode::Println, vec![]), expr.span));
+                }
+                "input" => {
+                    self.instructions
+                        .push((Instr(Bytecode::Input, vec![]), expr.span));
+                }
+                "$$" => {
+                    if args.is_some() {
+                        for arg in args.clone().unwrap() {
+                            self.compile_expr(arg);
+                        }
+                    } else {
+                        self.stack.push(allocate(Value::Nil));
+                    }
+
+                    self.instructions
+                        .push((Instr(Bytecode::Print, vec![]), expr.span));
+                }
+
+                "type" => {
+                    if args.is_some() {
+                        for arg in args.clone().unwrap() {
+                            self.compile_expr(arg);
+                        }
+                    } else {
+                        self.stack.push(allocate(Value::Nil));
+                    }
+
+                    self.instructions
+                        .push((Instr(Bytecode::TypeOf, vec![]), expr.span));
+                }
+
+                _ => {
+                    for arg in args.as_ref().unwrap_or(&vec![]) {
+                        self.compile_expr(arg.clone());
+                    }
+
+                    self.push_data(name.as_str().into(), expr.span.clone());
+                    self.instructions
+                        .push((Instr(Bytecode::FnCall, vec![]), expr.span));
+                }
+            },
+            _ => {}
         }
     }
 
@@ -297,7 +409,8 @@ impl VM {
             }
             scope_index -= 1;
         }
-        return None;
+
+        None
     }
 
     fn run_byte(&mut self, instr: Instr, span: Range<usize>) -> bool {
@@ -310,43 +423,40 @@ impl VM {
         }
 
         match byte {
-            HALT => {
+            Halt => {
                 self.gc_recollect();
                 return true;
             }
-            TYPEOF => unsafe {
+            TypeOf => unsafe {
                 let value = self.stack.pop().unwrap();
                 let ty = value.as_ref().get_type();
                 self.stack
                     .push(NonNull::new_unchecked(alloc_new_value(Value::String(ty))));
             },
-            MAKE_VAR => {
+            MakeVar => {
                 self.variables
                     .last_mut()
                     .unwrap()
                     .insert(self.var_id_count as u32, None);
             }
-            REPLACE => {
-                let id = args[0].as_int() as u32;
-                let value = self.stack.pop().unwrap();
+            Replace => {
+                let id = args[0];
+                let value = self.stack.pop().unwrap_or(allocate(Value::Nil));
 
-                self.variables
-                    .last_mut()
-                    .unwrap()
-                    .insert(id as u32, Some(value));
+                self.variables.last_mut().unwrap().insert(id, Some(value));
             }
-            GET_VAR => {
-                let id = args[0].as_int() as u32;
+            GetVar => {
+                let id = args[0];
                 let v = self.get_var(id as _);
                 if self.get_var(id).is_some() {
-                    self.stack.push(v.unwrap())
+                    self.stack.push(v.unwrap_or(allocate(Value::Nil)))
                 } else {
                     self.runtime_error("Variable not found", span)
                 }
             }
 
-            LOAD_CONST => unsafe {
-                let constant_index = args[0].as_int() as usize;
+            LoadConst => unsafe {
+                let constant_index = args[0] as usize;
                 let constant = self.constants.get(constant_index);
 
                 match constant {
@@ -357,49 +467,59 @@ impl VM {
                 }
             },
 
-            FN_CALL => {
-                let mut call_expr_ptr = match args[0] {
-                    Value::Expr(e) => e,
-                    _ => unreachable!(),
-                };
+            Function => unsafe {
+                // for i in &self.stack {
+                //     println!("stack: {}", i.as_ref());
+                // }
 
-                let ExprKind::Call(name, params) =
-                    unsafe { Box::from_raw(call_expr_ptr.as_mut()) }.inner
-                else {
-                    unreachable!()
-                };
+                let fn_name = self
+                    .stack
+                    .pop()
+                    .unwrap_or(allocate(Value::Nil))
+                    .as_ref()
+                    .as_str();
+                let fn_obj = &self.functions[fn_name];
 
-                let params = params
-                    .map(|i| i.into_iter().map(|e| self.eval(e)).collect::<Vec<_>>())
-                    .unwrap_or(vec![]);
-
-                let func_expr_ptr = self.functions[&name].0;
-                let func_expr = self.exprs[func_expr_ptr].inner.clone();
-
-                match func_expr {
-                    ExprKind::MultilineFunction(_, parameter_names, body) => {
-                        self.call_function(&name, &parameter_names, &params, &body);
-                    }
-
-                    ExprKind::InlineFunction(_, parameter_names, body) => {
-                        self.call_function(
-                            &name,
-                            &parameter_names,
-                            &params,
-                            &vec![Expr {
-                                span: 0..0,
-                                inner: ExprKind::Return(body),
-                            }],
-                        );
-                    }
-
-                    _ => panic!("expected function expression, found: {func_expr:?}"),
+                if fn_obj.instruction_range.contains(&self.pc) {
+                    self.pc = fn_obj.instruction_range.end - 1;
                 }
-            }
+            },
 
-            MUL => self.perform_bin_op(byte, span, |_, a, b| a.binary_mul(b)),
-            SUB => self.perform_bin_op(byte, span, |_, a, b| a.binary_sub(b)),
-            ADD => self.perform_bin_op(byte, span, |_, a, b| {
+            FnCall => unsafe {
+                let fn_name = self
+                    .stack
+                    .pop()
+                    .unwrap_or(allocate(Value::Nil))
+                    .as_ref()
+                    .as_str();
+                let fn_obj_option = self.functions.get(fn_name);
+                if fn_obj_option.is_none() {
+                    self.runtime_error(format!("Function `{}` not found", fn_name).as_str(), span);
+                    return false;
+                }
+                let fn_obj @ FunctionData {
+                    parameters,
+                    scope_idx,
+                    ..
+                } = fn_obj_option.unwrap();
+
+                let fn_args = (0..parameters.len())
+                    .map(|_| self.stack.pop().unwrap_or(allocate(Value::Nil)))
+                    .rev()
+                    .collect::<Vec<_>>();
+
+                // setup the variables
+                for (idx, param_var_idx) in fn_obj.get_var_ids().into_iter().enumerate() {
+                    *self.variables[*scope_idx].get_mut(&param_var_idx).unwrap() =
+                        Some(fn_args[idx]);
+                }
+
+                self.call_function(fn_name);
+            },
+
+            Mul => self.perform_bin_op(byte, span, |_, a, b| a.binary_mul(b)),
+            Sub => self.perform_bin_op(byte, span, |_, a, b| a.binary_sub(b)),
+            Add => self.perform_bin_op(byte, span, |_, a, b| {
                 if let Some(result) = a.binary_add(b) {
                     Some(result)
                 } else if let (Value::String(_), _) | (_, Value::String(_)) = (a, b) {
@@ -409,7 +529,7 @@ impl VM {
                 }
             }),
 
-            DIV => self.perform_bin_op(byte, span.clone(), |s, a, b| {
+            Div => self.perform_bin_op(byte, span.clone(), |s, a, b| {
                 if b.is_zero() {
                     s.runtime_error("Cannot divide by zero", span);
                     return None;
@@ -418,14 +538,47 @@ impl VM {
                 a.binary_div(b)
             }),
 
-            LT => self.compare_values(span, |a, b| a.less_than(b)),
-            GT => self.compare_values(span, |a, b| a.greater_than(b)),
-            LE => self.compare_values(span, |a, b| a.less_than_or_equal(b)),
-            GE => self.compare_values(span, |a, b| a.greater_than_or_equal(b)),
-            EQ => self.compare_values(span, |a, b| a.equal_to(b)),
-            NEQ => self.compare_values(span, |a, b| a.not_equal_to(b)),
+            Lt => self.compare_values(span, |a, b| a.less_than(b)),
+            Gt => self.compare_values(span, |a, b| a.greater_than(b)),
+            Le => self.compare_values(span, |a, b| a.less_than_or_equal(b)),
+            Ge => self.compare_values(span, |a, b| a.greater_than_or_equal(b)),
+            Eq => self.compare_values(span, |a, b| a.equal_to(b)),
+            Neq => self.compare_values(span, |a, b| a.not_equal_to(b)),
 
-            PRINT => unsafe { println!("{}", self.stack.pop().unwrap().as_ref().to_string()) },
+            Print => unsafe {
+                print!(
+                    "{}",
+                    match self.stack.pop().unwrap_or(allocate(Value::Nil)).as_ref() {
+                        v => format!("{v}"),
+                    }
+                )
+            },
+            Println => unsafe {
+                print!(
+                    "{}",
+                    match self.stack.pop().unwrap_or(allocate(Value::Nil)).as_ref() {
+                        v => format!("{v}\n"),
+                    }
+                )
+            },
+            Input => {
+                // Get user input
+                use std::io::stdin;
+                let mut s = String::new();
+                match stdin().read_line(&mut s) {
+                    Err(x) => {
+                        self.runtime_error(x.to_string().as_str(), span);
+                    }
+                    Ok(_) => {}
+                };
+                if let Some('\n') = s.chars().next_back() {
+                    s.pop();
+                }
+                if let Some('\r') = s.chars().next_back() {
+                    s.pop();
+                }
+                self.stack.push(allocate(Value::String(s)));
+            }
 
             _ => {}
         }
@@ -435,113 +588,15 @@ impl VM {
         false
     }
 
-    fn call_function(
-        &mut self,
-        fn_name: &str,
-        parameter_names: &[String],
-        args: &[Value],
-        body: &[Expr],
-    ) {
-        // create a new scope
-        // update the vars in the scope according to the args
-
-        // backup the var id
-        let old_var_id = std::mem::take(&mut self.variables_id);
-
-        let mut var_index = 0;
-        let mut scope = HashMap::new();
-
-        for (param_idx, param_name) in parameter_names.iter().enumerate() {
-            self.variables_id.insert(param_name.to_owned(), var_index);
-            scope.insert(
-                var_index,
-                NonNull::new(alloc_new_value(args[param_idx].clone())),
-            );
-
-            var_index += 1;
-        }
-
-        self.variables.push(scope);
-
-        let instr_start;
-        let instr_end;
-
-        if let (_, Some((start, end))) = self.functions[fn_name] {
-            instr_start = start;
-            instr_end = end;
-        } else {
-            instr_start = self.instructions.len();
-            for expr in body {
-                match expr.inner {
-                    ExprKind::Return(ref val) => unsafe {
-                        let val = self.eval(*val.clone());
-                        self.stack
-                            .push(NonNull::new_unchecked(alloc_new_value(val)));
-                    },
-
-                    _ => self.compile_expr(expr.clone(), None),
-                }
-            }
-
-            instr_end = self.instructions.len();
-
-            self.functions.get_mut(fn_name).unwrap().1 = Some((instr_start, instr_end));
-        }
-
-        for i in instr_start..instr_end {
+    fn call_function(&mut self, name: &str) {
+        let pc = self.pc;
+        let fn_obj = &self.functions[name];
+        for i in fn_obj.instruction_range.clone() {
             let (instr, span) = self.instructions[i].clone();
             self.run_byte(instr, span);
         }
 
-        // remove the function scope
-        self.variables.pop();
-
-        // restore the var ids
-        self.variables_id = old_var_id;
-    }
-
-    fn eval(&mut self, expr: Expr) -> Value {
-        macro_rules! num_like {
-            {  } => {
-                Value::Int(_) | Value::Float(_)
-            };
-        }
-
-        match expr.inner {
-            ExprKind::Int(i) => Value::Int(i),
-            ExprKind::Float(f) => Value::Float(f),
-            ExprKind::Bool(b) => Value::Bool(b),
-            ExprKind::String(s) => Value::String(s),
-            ExprKind::Ident(ref name) => {
-                unsafe { &*self.get_var(self.variables_id[name]).unwrap().as_ref() }.clone()
-            }
-
-            ExprKind::Binary(lhs, op, rhs) => {
-                let lhs = self.eval(*lhs);
-                let rhs = self.eval(*rhs);
-
-                match (&lhs, &rhs) {
-                    (Value::String(_), _) | (_, Value::String(_))
-                        if matches!(op, BinaryOp::Add) =>
-                    {
-                        Value::String(format!("{lhs}{rhs}"))
-                    }
-
-                    (num_like!(), num_like!()) => match op {
-                        BinaryOp::Add => &lhs + &rhs,
-                        BinaryOp::Sub => &lhs - &rhs,
-                        BinaryOp::Mul => &lhs * &rhs,
-                        BinaryOp::Div => &lhs / &rhs,
-
-                        _ => unimplemented!(),
-                    },
-
-                    _ => unimplemented!(),
-                }
-            }
-
-            e => panic!("invalid evaluation of: {e:?}"),
-        }
+        self.pc = pc;
     }
 
     pub fn gc_recollect(&mut self) {
@@ -559,6 +614,12 @@ impl VM {
         }
         // Delete the useless memory
         sweep();
+    }
+
+    fn push_data(&mut self, data: Value, span: Range<usize>) {
+        let const_idx = self.add_constant(data);
+        self.instructions
+            .push((Instr(Bytecode::LoadConst, vec![const_idx as u32 - 1]), span));
     }
 
     fn compare_values<F>(&mut self, span: Range<usize>, compare_fn: F)
@@ -608,4 +669,33 @@ impl VM {
             }
         }
     }
+}
+
+#[derive(Debug, Clone)]
+struct FunctionData {
+    name: String,
+    parameters: Vec<(String, VarId)>,
+    instruction_range: Range<usize>,
+    returns: bool,
+    scope_idx: usize,
+}
+
+impl FunctionData {
+    fn get_var_names(&self) -> Vec<&str> {
+        self.parameters
+            .iter()
+            .map(|(name, _)| name.as_str())
+            .collect::<Vec<_>>()
+    }
+
+    fn get_var_ids(&self) -> Vec<VarId> {
+        self.parameters
+            .iter()
+            .map(|(_, id)| *id)
+            .collect::<Vec<_>>()
+    }
+}
+
+fn allocate(val: Value) -> NonNull<Value> {
+    NonNull::new(alloc_new_value(val)).expect("failed to allocate")
 }

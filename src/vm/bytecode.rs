@@ -2,39 +2,42 @@
 #[derive(Clone, Copy, Debug)]
 pub enum Bytecode {
     // Completely shutdowns the program.
-    HALT,
+    Halt,
 
     // Constant related operations
-    LOAD_CONST,
+    LoadConst,
 
     // Variables
-    REPLACE,
-    GET_VAR,
-    MAKE_VAR,
+    Replace,
+    GetVar,
+    MakeVar,
 
     // Operations
-    ADD,
-    SUB,
-    MUL,
-    DIV,
-    EQ,
-    NEQ,
-    GT,
-    LT,
-    GE,
-    LE,
+    Add,
+    Sub,
+    Mul,
+    Div,
+    Eq,
+    Neq,
+    Gt,
+    Lt,
+    Ge,
+    Le,
 
     // Some built in functions
-    PRINT,
-    TYPEOF,
+    Print,
+    Println,
+    Input,
+    TypeOf,
 
     // FUNCTION,
-    FN_CALL,
-    RET,
+    Function,
+    FnCall,
+    Ret,
 }
 
 #[derive(Clone, Debug)]
-pub struct Instr(pub Bytecode, pub Vec<super::value::Value>);
+pub struct Instr(pub Bytecode, pub Vec<u32>);
 
 impl std::fmt::Display for Bytecode {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
