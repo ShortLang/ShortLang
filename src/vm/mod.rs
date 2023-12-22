@@ -481,11 +481,16 @@ impl VM {
                     .unwrap_or(allocate(Value::Nil))
                     .as_ref()
                     .as_str();
+                let fn_obj_option = self.functions.get(fn_name);
+                if fn_obj_option.is_none() {
+                    self.runtime_error(format!("Function `{}` not found", fn_name).as_str(), span);
+                    return false;
+                }
                 let fn_obj @ FunctionData {
                     parameters,
                     scope_idx,
                     ..
-                } = &self.functions[fn_name];
+                } = fn_obj_option.unwrap();
 
                 let fn_args = (0..parameters.len())
                     .map(|_| self.stack.pop().unwrap_or(allocate(Value::Nil)))

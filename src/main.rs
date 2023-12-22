@@ -15,16 +15,19 @@ mod parser;
 mod vm;
 
 fn main() {
-    let src = fs::read_to_string(
-        env::args()
-            .collect::<Vec<_>>()
-            .get(1)
-            .unwrap_or(&String::from("main.sl")),
-    )
-    .unwrap_or_else(|_| {
-        println!("Error: Input file could not be read");
-        std::process::exit(1);
-    });
+    let std_sl = std::str::from_utf8(include_bytes!("std.sl")).expect("Failed to read std.sl file");
+    let src = std_sl.to_owned()
+        + "\n"
+        + &*fs::read_to_string(
+            env::args()
+                .collect::<Vec<_>>()
+                .get(1)
+                .unwrap_or(&String::from("main.sl")),
+        )
+        .unwrap_or_else(|_| {
+            println!("Error: Input file could not be read");
+            std::process::exit(1);
+        });
 
     let token_iter = LogosToken::lexer(&src)
         .spanned()
