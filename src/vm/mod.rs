@@ -544,7 +544,6 @@ impl VM {
 
                 let mut fn_args = (0..parameters.len())
                     .map(|_| self.stack.pop().unwrap_or(allocate(Value::Nil)))
-                    .rev()
                     .collect::<Vec<_>>();
 
                 fn_args.reverse();

@@ -21,11 +21,11 @@ struct Args {
     #[clap(name = "FILE", default_value = "main.sl")]
     file: String,
 
-    /// Silence the analyzer warnings
+    /// Silences the analyzer warnings
     #[clap(short, long)]
     silent: bool,
 
-    /// Format the input file
+    /// Formats the input file to be as short as possible
     #[clap(short, long)]
     format: bool,
 }
