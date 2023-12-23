@@ -542,10 +542,12 @@ impl VM {
                     ..
                 } = fn_obj_option.unwrap();
 
-                let fn_args = (0..parameters.len())
+                let mut fn_args = (0..parameters.len())
                     .map(|_| self.stack.pop().unwrap_or(allocate(Value::Nil)))
                     .rev()
                     .collect::<Vec<_>>();
+
+                fn_args.reverse();
 
                 // setup the variables
                 for (idx, param_var_idx) in fn_obj.get_var_ids().into_iter().enumerate() {

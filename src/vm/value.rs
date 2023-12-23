@@ -119,6 +119,7 @@ impl Value {
             (Value::Float(lhs), Value::Float(rhs)) => Some(Value::Bool(lhs < rhs)),
             (Value::Int(lhs), Value::Float(rhs)) => Some(Value::Bool((*lhs as f64) < *rhs)),
             (Value::Float(lhs), Value::Int(rhs)) => Some(Value::Bool(*lhs < *rhs as f64)),
+            (Value::String(lhs), Value::String(rhs)) => Some(Value::Bool(lhs < rhs)),
 
             _ => None,
         }
@@ -130,6 +131,7 @@ impl Value {
             (Value::Float(lhs), Value::Float(rhs)) => Some(Value::Bool(lhs > rhs)),
             (Value::Int(lhs), Value::Float(rhs)) => Some(Value::Bool((*lhs as f64) > *rhs)),
             (Value::Float(lhs), Value::Int(rhs)) => Some(Value::Bool(*lhs > *rhs as f64)),
+            (Value::String(lhs), Value::String(rhs)) => Some(Value::Bool(lhs > rhs)),
 
             _ => None,
         }
@@ -141,6 +143,7 @@ impl Value {
             (Value::Float(lhs), Value::Float(rhs)) => Some(Value::Bool(lhs <= rhs)),
             (Value::Int(lhs), Value::Float(rhs)) => Some(Value::Bool((*lhs as f64) <= *rhs)),
             (Value::Float(lhs), Value::Int(rhs)) => Some(Value::Bool(*lhs <= *rhs as f64)),
+            (Value::String(lhs), Value::String(rhs)) => Some(Value::Bool(lhs <= rhs)),
 
             _ => None,
         }
@@ -152,6 +155,7 @@ impl Value {
             (Value::Float(lhs), Value::Float(rhs)) => Some(Value::Bool(lhs >= rhs)),
             (Value::Int(lhs), Value::Float(rhs)) => Some(Value::Bool((*lhs as f64) >= *rhs)),
             (Value::Float(lhs), Value::Int(rhs)) => Some(Value::Bool(*lhs >= *rhs as f64)),
+            (Value::String(lhs), Value::String(rhs)) => Some(Value::Bool(lhs >= rhs)),
 
             _ => None,
         }
@@ -163,6 +167,8 @@ impl Value {
             (Value::Float(lhs), Value::Float(rhs)) => Some(Value::Bool(lhs == rhs)),
             (Value::Int(lhs), Value::Float(rhs)) => Some(Value::Bool((*lhs as f64) == *rhs)),
             (Value::Float(lhs), Value::Int(rhs)) => Some(Value::Bool(*lhs == *rhs as f64)),
+            (Value::Bool(lhs), Value::Bool(rhs)) => Some(Value::Bool(lhs == rhs)),
+            (Value::String(lhs), Value::String(rhs)) => Some(Value::Bool(lhs == rhs)),
 
             _ => None,
         }
@@ -174,6 +180,8 @@ impl Value {
             (Value::Float(lhs), Value::Float(rhs)) => Some(Value::Bool(lhs != rhs)),
             (Value::Int(lhs), Value::Float(rhs)) => Some(Value::Bool((*lhs as f64) != *rhs)),
             (Value::Float(lhs), Value::Int(rhs)) => Some(Value::Bool(*lhs != *rhs as f64)),
+            (Value::Bool(lhs), Value::Bool(rhs)) => Some(Value::Bool(lhs != rhs)),
+            (Value::String(lhs), Value::String(rhs)) => Some(Value::Bool(lhs != rhs)),
 
             _ => None,
         }

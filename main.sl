@@ -1,3 +1,1 @@
-$$"Enter something: "
-$("You typed '" + input() + "' Interesting..")
-
+$istype(123, _int)
