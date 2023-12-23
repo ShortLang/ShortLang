@@ -29,6 +29,8 @@ pub enum Bytecode {
     Println,
     Input,
     TypeOf,
+    ToInt,
+    ToFloat,
 
     // FUNCTION,
     Function,

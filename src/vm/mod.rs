@@ -106,8 +106,8 @@ impl VM {
                 let id = id.get(&name);
                 if self.variables_id.get(&name).is_none() {
                     self.runtime_error("Variable not found", expr.span.clone());
-                    return;
                 }
+
                 let id = id.unwrap();
                 self.instructions
                     .push((Instr(Bytecode::GetVar, vec![*id]), expr.span.clone()));
@@ -141,8 +141,8 @@ impl VM {
                 let id = self.variables_id.get(&x);
                 if id.is_none() {
                     self.runtime_error("Variable not found", expr.span);
-                    return;
                 }
+
                 let id = id.unwrap();
                 self.instructions
                     .push((Instr(Bytecode::GetVar, vec![*id]), expr.span));
@@ -324,59 +324,97 @@ impl VM {
                 self.compile_expr(*val);
             }
 
-            ExprKind::Call(ref name, ref args) => match name.as_str() {
-                "$" => {
-                    if args.is_some() {
-                        for arg in args.clone().unwrap() {
-                            self.compile_expr(arg);
-                        }
-                    } else {
-                        self.stack.push(allocate(Value::Nil));
+            ExprKind::Call(ref name, ref args) => {
+                // i'm obsessed with macros
+                macro_rules! for_each_arg {
+                    { $arg:ident, $n:expr, Some($e:ident) => { $($some:tt)* }, None => { $($none:tt)* } } => {
+                        $arg.as_ref()
+                            .unwrap_or(&vec![])
+                            .into_iter()
+                            .cloned()
+                            .map(|i| Some(i))
+                            .chain([None; $n])
+                            .take($n)
+                            .for_each(|i| match i {
+                                Some($e) => $($some)*,
+                                None => $($none)*,
+                            }
+                        )
+                    };
+
+                    { $arg:ident, $e:ident => { $($b:tt)* }} => {
+                        $arg.as_ref()
+                            .unwrap_or(&vec![])
+                            .into_iter()
+                            .cloned()
+                            .for_each(|$e| $($b)*)
+                    };
+                }
+
+                match name.as_str() {
+                    "$" => {
+                        for_each_arg!(args, 1,
+                            Some(e) => { self.compile_expr(e) },
+                            None => { self.stack.push(allocate(Value::Nil)) }
+                        );
+
+                        self.instructions
+                            .push((Instr(Bytecode::Println, vec![]), expr.span));
                     }
 
-                    self.instructions
-                        .push((Instr(Bytecode::Println, vec![]), expr.span));
-                }
-                "input" => {
-                    self.instructions
-                        .push((Instr(Bytecode::Input, vec![]), expr.span));
-                }
-                "$$" => {
-                    if args.is_some() {
-                        for arg in args.clone().unwrap() {
-                            self.compile_expr(arg);
-                        }
-                    } else {
-                        self.stack.push(allocate(Value::Nil));
+                    "to_i" => {
+                        for_each_arg!(args, 1,
+                            Some(e) => { self.compile_expr(e) },
+                            None => { self.stack.push(allocate(Value::Nil)) }
+                        );
+
+                        self.instructions
+                            .push((Instr(Bytecode::ToInt, vec![]), expr.span));
                     }
 
-                    self.instructions
-                        .push((Instr(Bytecode::Print, vec![]), expr.span));
-                }
+                    "to_f" => {
+                        for_each_arg!(args, 1,
+                            Some(e) => { self.compile_expr(e) },
+                            None => { self.stack.push(allocate(Value::Nil)) }
+                        );
 
-                "type" => {
-                    if args.is_some() {
-                        for arg in args.clone().unwrap() {
-                            self.compile_expr(arg);
-                        }
-                    } else {
-                        self.stack.push(allocate(Value::Nil));
+                        self.instructions
+                            .push((Instr(Bytecode::ToFloat, vec![]), expr.span));
+                    }
+                    "input" => {
+                        self.instructions
+                            .push((Instr(Bytecode::Input, vec![]), expr.span));
                     }
 
-                    self.instructions
-                        .push((Instr(Bytecode::TypeOf, vec![]), expr.span));
-                }
+                    "$$" => {
+                        for_each_arg!(args, 1,
+                            Some(e) => { self.compile_expr(e) },
+                            None => { self.stack.push(allocate(Value::Nil)) }
+                        );
 
-                _ => {
-                    for arg in args.as_ref().unwrap_or(&vec![]) {
-                        self.compile_expr(arg.clone());
+                        self.instructions
+                            .push((Instr(Bytecode::Print, vec![]), expr.span));
                     }
 
-                    self.push_data(name.as_str().into(), expr.span.clone());
-                    self.instructions
-                        .push((Instr(Bytecode::FnCall, vec![]), expr.span));
+                    "type" => {
+                        for_each_arg!(args, 1,
+                            Some(e) => { self.compile_expr(e) },
+                            None => { self.stack.push(allocate(Value::Nil)) }
+                        );
+
+                        self.instructions
+                            .push((Instr(Bytecode::TypeOf, vec![]), expr.span));
+                    }
+
+                    _ => {
+                        for_each_arg!(args, arg => { self.compile_expr(arg) });
+
+                        self.push_data(name.as_str().into(), expr.span.clone());
+                        self.instructions
+                            .push((Instr(Bytecode::FnCall, vec![]), expr.span));
+                    }
                 }
-            },
+            }
             _ => {}
         }
     }
@@ -386,7 +424,7 @@ impl VM {
         self.constants.len()
     }
 
-    fn runtime_error(&self, message: &str, span: Range<usize>) {
+    fn runtime_error(&self, message: &str, span: Range<usize>) -> ! {
         let reason = message.to_string();
         println!(
             "{:?}",
@@ -396,6 +434,7 @@ impl VM {
             )
             .with_source_code(self.src.clone())
         );
+
         std::process::exit(1);
     }
 
@@ -495,8 +534,8 @@ impl VM {
                 let fn_obj_option = self.functions.get(fn_name);
                 if fn_obj_option.is_none() {
                     self.runtime_error(format!("Function `{}` not found", fn_name).as_str(), span);
-                    return false;
                 }
+
                 let fn_obj @ FunctionData {
                     parameters,
                     scope_idx,
@@ -531,8 +570,7 @@ impl VM {
 
             Div => self.perform_bin_op(byte, span.clone(), |s, a, b| {
                 if b.is_zero() {
-                    s.runtime_error("Cannot divide by zero", span);
-                    return None;
+                    s.runtime_error(&format!("Cannot divide by zero, {a} / {b} = undefined"), span);
                 }
 
                 a.binary_div(b)
@@ -551,8 +589,14 @@ impl VM {
                     match self.stack.pop().unwrap_or(allocate(Value::Nil)).as_ref() {
                         v => format!("{v}"),
                     }
-                )
+                );
+
+                use std::io::Write;
+                if let Err(e) = std::io::stdout().flush() {
+                    self.runtime_error(&format!("Failed to flush stdout, {e:?}"), span);
+                }
             },
+
             Println => unsafe {
                 print!(
                     "{}",
@@ -561,6 +605,7 @@ impl VM {
                     }
                 )
             },
+
             Input => {
                 // Get user input
                 use std::io::stdin;
@@ -579,6 +624,44 @@ impl VM {
                 }
                 self.stack.push(allocate(Value::String(s)));
             }
+
+            ToInt => unsafe {
+                let val = self.stack.pop().unwrap().as_ref();
+                self.stack.push(allocate(Value::Int(match val {
+                    Value::Int(i) => *i,
+                    Value::Float(f) => *f as _,
+                    Value::Bool(b) => *b as _,
+
+                    Value::String(s) => match s.parse::<i64>() {
+                        Ok(i) => i,
+                        Err(e) => self.runtime_error(
+                            &format!("cannot parse the string to int value, {e:?}"),
+                            span,
+                        ),
+                    },
+
+                    Value::Nil => 0,
+                })));
+            },
+
+            ToFloat => unsafe {
+                let val = self.stack.pop().unwrap().as_ref();
+                self.stack.push(allocate(Value::Float(match val {
+                    Value::Int(i) => *i as _,
+                    Value::Float(f) => *f,
+                    Value::Bool(b) => *b as i64 as f64,
+
+                    Value::String(s) => match s.parse::<f64>() {
+                        Ok(f) => f,
+                        Err(e) => self.runtime_error(
+                            &format!("cannot parse the string to int value, {e:?}"),
+                            span,
+                        ),
+                    },
+
+                    Value::Nil => 0.0,
+                })));
+            },
 
             _ => {}
         }

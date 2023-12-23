@@ -1,3 +1,3 @@
-i = input()
+$$"Enter something: "
+$("You typed '" + input() + "' Interesting..")
 
-$("You typed " + i + " Interesting..")

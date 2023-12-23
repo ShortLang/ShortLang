@@ -232,6 +232,29 @@ impl From<&u32> for Value {
     }
 }
 
+impl From<&f64> for Value {
+    fn from(value: &f64) -> Self {
+        Value::Float(*value)
+    }
+}
+
+impl From<f64> for Value {
+    fn from(value: f64) -> Self {
+        Value::Float(value)
+    }
+}
+
+impl From<bool> for Value {
+    fn from(value: bool) -> Self {
+        Value::Bool(value)
+    }
+}
+impl From<&bool> for Value {
+    fn from(value: &bool) -> Self {
+        Value::Bool(*value)
+    }
+}
+
 impl<'a> Add for &'a Value {
     type Output = Value;
     fn add(self, rhs: Self) -> Self::Output {
