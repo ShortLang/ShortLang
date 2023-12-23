@@ -1,11 +1,10 @@
 #![allow(non_snake_case, dead_code)]
 
-use std::ops::Range;
-use std::{env, fs};
+use clap::Parser;
+use std::fs;
 
 use analyzer::Analyzer;
 use logos::Logos;
-use miette::{miette, LabeledSpan};
 use parser::{LogosToken, PParser};
 
 use crate::vm::VM;
@@ -14,17 +13,29 @@ mod analyzer;
 mod parser;
 mod vm;
 
+/// The arguments for the ShortLang compiler
+#[derive(Parser, Debug)]
+#[command(author, version, about, long_about = None)]
+struct Args {
+    /// The input file to use
+    #[clap(name = "FILE", default_value = "main.sl")]
+    file: String,
+
+    /// Silence the analyzer warnings
+    #[clap(short, long)]
+    silent: bool,
+
+    /// Format the input file
+    #[clap(short, long)]
+    format: bool,
+}
+
 fn main() {
+    let args = Args::parse();
     let std_sl = std::str::from_utf8(include_bytes!("std.sl")).expect("Failed to read std.sl file");
     let src = std_sl.to_owned()
         + "\n"
-        + &*fs::read_to_string(
-            env::args()
-                .collect::<Vec<_>>()
-                .get(1)
-                .unwrap_or(&String::from("main.sl")),
-        )
-        .unwrap_or_else(|_| {
+        + &fs::read_to_string(&args.file).unwrap_or_else(|_| {
             println!("Error: Input file could not be read");
             std::process::exit(1);
         });
@@ -39,7 +50,7 @@ fn main() {
 
     let mut parser = PParser::new(&src, tokens);
     let ast = parser.parse();
-    Analyzer::new(&src, ast.clone()).analyze();
+    Analyzer::new(&src, args, ast.clone()).analyze();
     let mut vm = VM::new(&src, ast);
     vm.compile();
     vm.run();

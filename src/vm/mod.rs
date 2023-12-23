@@ -570,7 +570,10 @@ impl VM {
 
             Div => self.perform_bin_op(byte, span.clone(), |s, a, b| {
                 if b.is_zero() {
-                    s.runtime_error(&format!("Cannot divide by zero, {a} / {b} = undefined"), span);
+                    s.runtime_error(
+                        &format!("Cannot divide by zero, {a} / {b} = undefined"),
+                        span,
+                    );
                 }
 
                 a.binary_div(b)

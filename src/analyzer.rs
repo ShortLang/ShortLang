@@ -1,3 +1,4 @@
+use super::Args;
 use crate::parser::Expr;
 use crate::parser::ExprKind::{Binary, Ident, InlineFunction, MultilineFunction, Return, Set};
 use miette::{miette, Diagnostic, LabeledSpan, Severity};
@@ -6,6 +7,7 @@ use std::collections::HashMap;
 
 pub struct Analyzer {
     src: String,
+    args: Args,
     parsed_exprs: Vec<Expr>,
     scopes: Vec<HashMap<String, VariableInfo>>,
     errors: Vec<Box<dyn Diagnostic>>,
@@ -13,9 +15,10 @@ pub struct Analyzer {
 }
 
 impl Analyzer {
-    pub fn new(src: &str, parsed_exprs: Vec<Expr>) -> Self {
+    pub fn new(src: &str, args: Args, parsed_exprs: Vec<Expr>) -> Self {
         Self {
             src: src.to_owned(),
+            args,
             parsed_exprs,
 
             scopes: Vec::new(),
@@ -47,6 +50,10 @@ impl Analyzer {
         }
 
         if self.errors.is_empty() {
+            if self.args.silent {
+                return;
+            }
+
             for warning in &self.warnings {
                 println!("{:?}", warning);
             }
