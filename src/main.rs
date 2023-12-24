@@ -16,7 +16,7 @@ mod vm;
 /// The arguments for the ShortLang compiler
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
-struct Args {
+pub struct Args {
     /// The input file to use
     #[clap(name = "FILE", default_value = "main.sl")]
     file: String,

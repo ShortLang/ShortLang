@@ -382,6 +382,11 @@ impl VM {
                             .push((Instr(Bytecode::ToFloat, vec![]), expr.span));
                     }
                     "input" => {
+                        for_each_arg!(args, 1,
+                            Some(e) => { self.compile_expr(e) },
+                            None => { self.stack.push(allocate(Value::Nil)) }
+                        );
+
                         self.instructions
                             .push((Instr(Bytecode::Input, vec![]), expr.span));
                     }
@@ -610,9 +615,20 @@ impl VM {
                 )
             },
 
-            Input => {
+            Input => unsafe {
                 // Get user input
-                use std::io::stdin;
+                use std::io::*;
+
+                let prompt = self.stack.pop().unwrap().as_ref();
+
+                match prompt {
+                    Value::Nil => { },
+                    _ => {
+                        print!("{}", prompt.to_string());
+                        stdout().flush().unwrap();
+                    }
+                }
+                
                 let mut s = String::new();
                 match stdin().read_line(&mut s) {
                     Err(x) => {

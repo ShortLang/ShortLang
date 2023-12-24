@@ -1,1 +1,2 @@
-$istype(123, _int)
+msg = input("Enter a message: ")
+$("Your message is '" + msg + "', cool!")
