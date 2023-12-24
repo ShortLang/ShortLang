@@ -120,6 +120,16 @@ impl Value {
         }
     }
 
+    pub fn binary_pow(&self, rhs: &Value) -> Option<Value> {
+        match (self, rhs) {
+            (Value::Int(lhs), Value::Int(rhs)) => Some(Value::Int(lhs.pow(*rhs as u32))),
+            (Value::Float(lhs), Value::Float(rhs)) => Some(Value::Float(lhs.powf(*rhs))),
+            (Value::Int(lhs), Value::Float(rhs)) => Some(Value::Float((*lhs as f64).powf(*rhs))),
+            (Value::Float(lhs), Value::Int(rhs)) => Some(Value::Float((*lhs).powf(*rhs as f64))),
+            _ => None,
+        }
+    }
+
     pub fn binary_div(&self, rhs: &Value) -> Option<Value> {
         match (self, rhs) {
             (Value::Int(lhs), Value::Int(rhs)) => Some(Value::Int(lhs.div(rhs))),
