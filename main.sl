@@ -1,2 +1,4 @@
-msg = input("Enter a message: ")
-$("Your message is '" + msg + "', cool!")
+$("" || "hello") 
+$("" || 0) 
+$("hello" && 123) 
+$(23 && true) 

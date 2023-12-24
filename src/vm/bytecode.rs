@@ -23,6 +23,8 @@ pub enum Bytecode {
     Lt,
     Ge,
     Le,
+    And,
+    Or,
 
     // Some built in functions
     Print,

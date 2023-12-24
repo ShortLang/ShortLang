@@ -1,6 +1,6 @@
 use std::ops::*;
 
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub enum Value {
     Int(i64),
     Float(f64),
@@ -114,77 +114,95 @@ impl Value {
     }
 
     pub fn less_than(&self, other: &Value) -> Option<Value> {
-        match (self, other) {
-            (Value::Int(lhs), Value::Int(rhs)) => Some(Value::Bool(lhs < rhs)),
-            (Value::Float(lhs), Value::Float(rhs)) => Some(Value::Bool(lhs < rhs)),
-            (Value::Int(lhs), Value::Float(rhs)) => Some(Value::Bool((*lhs as f64) < *rhs)),
-            (Value::Float(lhs), Value::Int(rhs)) => Some(Value::Bool(*lhs < *rhs as f64)),
-            (Value::String(lhs), Value::String(rhs)) => Some(Value::Bool(lhs < rhs)),
+        Some(Value::Bool(match (self, other) {
+            (Value::Int(lhs), Value::Int(rhs)) => lhs < rhs,
+            (Value::Float(lhs), Value::Float(rhs)) => lhs < rhs,
+            (Value::Int(lhs), Value::Float(rhs)) => (*lhs as f64) < *rhs,
+            (Value::Float(lhs), Value::Int(rhs)) => *lhs < *rhs as f64,
+            (Value::String(lhs), Value::String(rhs)) => lhs < rhs,
 
-            _ => None,
-        }
+            _ => return None,
+        }))
     }
 
     pub fn greater_than(&self, other: &Value) -> Option<Value> {
-        match (self, other) {
-            (Value::Int(lhs), Value::Int(rhs)) => Some(Value::Bool(lhs > rhs)),
-            (Value::Float(lhs), Value::Float(rhs)) => Some(Value::Bool(lhs > rhs)),
-            (Value::Int(lhs), Value::Float(rhs)) => Some(Value::Bool((*lhs as f64) > *rhs)),
-            (Value::Float(lhs), Value::Int(rhs)) => Some(Value::Bool(*lhs > *rhs as f64)),
-            (Value::String(lhs), Value::String(rhs)) => Some(Value::Bool(lhs > rhs)),
+        Some(Value::Bool(match (self, other) {
+            (Value::Int(lhs), Value::Int(rhs)) => lhs > rhs,
+            (Value::Float(lhs), Value::Float(rhs)) => lhs > rhs,
+            (Value::Int(lhs), Value::Float(rhs)) => (*lhs as f64) > *rhs,
+            (Value::Float(lhs), Value::Int(rhs)) => *lhs > *rhs as f64,
+            (Value::String(lhs), Value::String(rhs)) => lhs > rhs,
 
-            _ => None,
-        }
+            _ => return None,
+        }))
     }
 
     pub fn less_than_or_equal(&self, other: &Value) -> Option<Value> {
-        match (self, other) {
-            (Value::Int(lhs), Value::Int(rhs)) => Some(Value::Bool(lhs <= rhs)),
-            (Value::Float(lhs), Value::Float(rhs)) => Some(Value::Bool(lhs <= rhs)),
-            (Value::Int(lhs), Value::Float(rhs)) => Some(Value::Bool((*lhs as f64) <= *rhs)),
-            (Value::Float(lhs), Value::Int(rhs)) => Some(Value::Bool(*lhs <= *rhs as f64)),
-            (Value::String(lhs), Value::String(rhs)) => Some(Value::Bool(lhs <= rhs)),
+        Some(Value::Bool(match (self, other) {
+            (Value::Int(lhs), Value::Int(rhs)) => lhs <= rhs,
+            (Value::Float(lhs), Value::Float(rhs)) => lhs <= rhs,
+            (Value::Int(lhs), Value::Float(rhs)) => (*lhs as f64) <= *rhs,
+            (Value::Float(lhs), Value::Int(rhs)) => *lhs <= *rhs as f64,
+            (Value::String(lhs), Value::String(rhs)) => lhs <= rhs,
 
-            _ => None,
-        }
+            _ => return None,
+        }))
     }
 
     pub fn greater_than_or_equal(&self, other: &Value) -> Option<Value> {
-        match (self, other) {
-            (Value::Int(lhs), Value::Int(rhs)) => Some(Value::Bool(lhs >= rhs)),
-            (Value::Float(lhs), Value::Float(rhs)) => Some(Value::Bool(lhs >= rhs)),
-            (Value::Int(lhs), Value::Float(rhs)) => Some(Value::Bool((*lhs as f64) >= *rhs)),
-            (Value::Float(lhs), Value::Int(rhs)) => Some(Value::Bool(*lhs >= *rhs as f64)),
-            (Value::String(lhs), Value::String(rhs)) => Some(Value::Bool(lhs >= rhs)),
+        Some(Value::Bool(match (self, other) {
+            (Value::Int(lhs), Value::Int(rhs)) => lhs >= rhs,
+            (Value::Float(lhs), Value::Float(rhs)) => lhs >= rhs,
+            (Value::Int(lhs), Value::Float(rhs)) => (*lhs as f64) >= *rhs,
+            (Value::Float(lhs), Value::Int(rhs)) => *lhs >= *rhs as f64,
+            (Value::String(lhs), Value::String(rhs)) => lhs >= rhs,
 
-            _ => None,
-        }
+            _ => return None,
+        }))
     }
 
     pub fn equal_to(&self, other: &Value) -> Option<Value> {
-        match (self, other) {
-            (Value::Int(lhs), Value::Int(rhs)) => Some(Value::Bool(lhs == rhs)),
-            (Value::Float(lhs), Value::Float(rhs)) => Some(Value::Bool(lhs == rhs)),
-            (Value::Int(lhs), Value::Float(rhs)) => Some(Value::Bool((*lhs as f64) == *rhs)),
-            (Value::Float(lhs), Value::Int(rhs)) => Some(Value::Bool(*lhs == *rhs as f64)),
-            (Value::Bool(lhs), Value::Bool(rhs)) => Some(Value::Bool(lhs == rhs)),
-            (Value::String(lhs), Value::String(rhs)) => Some(Value::Bool(lhs == rhs)),
+        Some(Value::Bool(match (self, other) {
+            (Value::Int(lhs), Value::Int(rhs)) => lhs == rhs,
+            (Value::Float(lhs), Value::Float(rhs)) => lhs == rhs,
+            (Value::Int(lhs), Value::Float(rhs)) => (*lhs as f64) == *rhs,
+            (Value::Float(lhs), Value::Int(rhs)) => *lhs == *rhs as f64,
+            (Value::Bool(lhs), Value::Bool(rhs)) => lhs == rhs,
+            (Value::String(lhs), Value::String(rhs)) => lhs == rhs,
 
-            _ => None,
-        }
+            _ => return None,
+        }))
     }
 
     pub fn not_equal_to(&self, other: &Value) -> Option<Value> {
-        match (self, other) {
-            (Value::Int(lhs), Value::Int(rhs)) => Some(Value::Bool(lhs != rhs)),
-            (Value::Float(lhs), Value::Float(rhs)) => Some(Value::Bool(lhs != rhs)),
-            (Value::Int(lhs), Value::Float(rhs)) => Some(Value::Bool((*lhs as f64) != *rhs)),
-            (Value::Float(lhs), Value::Int(rhs)) => Some(Value::Bool(*lhs != *rhs as f64)),
-            (Value::Bool(lhs), Value::Bool(rhs)) => Some(Value::Bool(lhs != rhs)),
-            (Value::String(lhs), Value::String(rhs)) => Some(Value::Bool(lhs != rhs)),
+        let Some(Value::Bool(b)) = self.equal_to(other) else {
+            return None;
+        };
 
-            _ => None,
+        Some(Value::Bool(!b))
+    }
+
+    pub fn bool_eval(&self) -> bool {
+        match self {
+            Value::Int(0) | Value::Bool(false) | Value::Nil => false,
+
+            Value::Float(f) if *f == 0.0 => false,
+            Value::String(s) if s.is_empty() => false,
+
+            _ => true,
         }
+    }
+
+    pub fn and(&self, other: &Value) -> Option<Value> {
+        Some(Value::Bool(match (self, other) {
+            (a, b) => a.bool_eval() == b.bool_eval(),
+        }))
+    }
+
+    pub fn or(&self, other: &Value) -> Option<Value> {
+        Some(Value::Bool(match (self, other) {
+            (a, b) => a.bool_eval() || b.bool_eval(),
+        }))
     }
 
     pub fn referenced_children(&self) -> Option<Vec<*mut Value>> {

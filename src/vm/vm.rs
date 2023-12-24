@@ -30,7 +30,6 @@ pub struct VM {
     variables: Vec<HashMap<u32, Option<NonNull<Value>>>>,
 
     // memory: Memory,
-
     constants: Vec<Value>,
     var_id_count: usize,
     instructions: Vec<(Instr, Range<usize>)>,
@@ -232,6 +231,12 @@ impl VM {
                     BinaryOp::Eq => self
                         .instructions
                         .push((Instr(Bytecode::Eq, vec![]), expr.span)),
+                    BinaryOp::And => self
+                        .instructions
+                        .push((Instr(Bytecode::And, vec![]), expr.span)),
+                    BinaryOp::Or => self
+                        .instructions
+                        .push((Instr(Bytecode::Or, vec![]), expr.span)),
 
                     _ => todo!(),
                 }
@@ -600,6 +605,8 @@ impl VM {
             Ge => self.compare_values(span, |a, b| a.greater_than_or_equal(b)),
             Eq => self.compare_values(span, |a, b| a.equal_to(b)),
             Neq => self.compare_values(span, |a, b| a.not_equal_to(b)),
+            And => self.compare_values(span, |a, b| a.and(b)),
+            Or => self.compare_values(span, |a, b| a.or(b)),
 
             Print => unsafe {
                 print!(
@@ -782,106 +789,3 @@ impl VM {
         }
     }
 }
-
-// pub struct Memory {
-//     main_scope: Scope,
-// }
-
-// impl Memory {
-//     pub fn new() -> Self {
-//         Self {
-//             main_scope: Scope::new(),
-//         }
-//     }
-
-//     pub fn new_scope(&mut self, parent: Option<NonNull<Scope>>) -> NonNull<Scope> {
-//         unsafe {
-//             let scope = NonNull::new_unchecked(Box::leak(Box::new(Scope::with_parent(
-//                 parent.unwrap_or(NonNull::new_unchecked(&mut self.main_scope as *mut Scope)),
-//             ))));
-
-//             self.main_scope.children.push(scope);
-
-//             scope
-//         }
-//     }
-
-//     pub fn get_var(&self, name: &str, scope: Option<NonNull<Scope>>) -> VarPtr {
-//         if let Some(scope) = scope {
-//             unsafe { scope.as_ref() }.get_var(name)
-//         } else {
-//             unsafe {
-//                 self.get_last_scope(NonNull::new_unchecked(
-//                     &self.main_scope as *const Scope as *mut Scope,
-//                 ))
-//                 .as_ref()
-//             }
-//             .get_var(name)
-//         }
-//     }
-
-//     unsafe fn get_last_scope(&self, current_scope: NonNull<Scope>) -> NonNull<Scope> {
-//         if let Some(last_child) = current_scope.as_ref().children.last() {
-//             self.get_last_scope(*last_child)
-//         } else {
-//             current_scope
-//         }
-//     }
-// }
-
-// impl Drop for Memory {
-//     fn drop(&mut self) {
-//         todo!()
-//     }
-// }
-
-// pub struct Scope {
-//     variables: HashMap<String, VarPtr>,
-
-//     parent: Option<NonNull<Scope>>,
-//     children: Vec<NonNull<Scope>>,
-// }
-
-// impl Scope {
-//     pub(crate) fn new() -> Self {
-//         Self {
-//             variables: HashMap::new(),
-//             children: Vec::new(),
-//             parent: None,
-//         }
-//     }
-
-//     pub(crate) fn with_parent(parent: NonNull<Scope>) -> Self {
-//         Self {
-//             variables: HashMap::new(),
-//             children: Vec::new(),
-//             parent: Some(parent),
-//         }
-//     }
-
-//     pub fn get_var(&self, name: &str) -> VarPtr {
-//         unsafe {
-//             self.get_var_internal(
-//                 name,
-//                 // SAFETY: we won't be mutating the value inside this function
-//                 // but the it could be mutated with the returned pointer
-//                 NonNull::new_unchecked(self as *const Self as *mut Self),
-//             )
-//         }
-//     }
-
-//     unsafe fn get_var_internal(&self, name: &str, scope: NonNull<Scope>) -> VarPtr {
-//         // return if variable exists in current scope
-//         if let Some(var) = scope.as_ref().variables.get(name) {
-//             return *var;
-//         } else {
-//             // check parent scope
-//             if let Some(parent) = scope.as_ref().parent {
-//                 self.get_var_internal(name, parent)
-//             } else {
-//                 None
-//             }
-//         }
-//     }
-// }
-
