@@ -1,4 +1,4 @@
-$("" || "hello") 
-$("" || 0) 
-$("hello" && 123) 
-$(23 && true) 
+f a: println("The value is: " + a)
+
+some_var = f
+some_var(55)

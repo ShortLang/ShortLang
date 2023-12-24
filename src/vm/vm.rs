@@ -100,6 +100,7 @@ impl VM {
                     expr.span,
                 ));
             }
+
             ExprKind::EqStmt(name, op, val) => {
                 let id = self.variables_id.clone();
                 let id = id.get(&name);
@@ -137,15 +138,6 @@ impl VM {
             }
 
             ExprKind::Ident(x) => {
-                // let var = self.memory.get_var(&x, None);
-
-                // if let Some(var) = var {
-                //     self.instructions
-                //         .push((Instr(Bytecode::GetVar, vec![var]), expr.span));
-                // } else {
-                //     self.runtime_error("Variable not found", expr.span);
-                // }
-
                 let id = self.variables_id.get(&x);
                 if id.is_none() {
                     self.runtime_error("Variable not found", expr.span);
@@ -157,6 +149,19 @@ impl VM {
             }
 
             ExprKind::Set(name, value) => {
+                // special case for functions
+                match value.inner {
+                    ExprKind::Ident(x) => {
+                        if let Some(func) = self.functions.get(&x) {
+                            self.functions.insert(name, func.clone());
+                        }
+
+                        return;
+                    }
+
+                    _ => { }
+                }
+
                 // Check if the variable exists
                 // If not create a new one
                 if self.variables_id.get(&name).is_none() {
