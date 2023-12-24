@@ -212,6 +212,9 @@ impl VM {
                     BinaryOp::Mul => self
                         .instructions
                         .push((Instr(Bytecode::Mul, vec![]), expr.span)),
+                    BinaryOp::Mod => self
+                        .instructions
+                        .push((Instr(Bytecode::Mod, vec![]), expr.span)),
                     BinaryOp::Div => self
                         .instructions
                         .push((Instr(Bytecode::Div, vec![]), expr.span)),
@@ -582,6 +585,7 @@ impl VM {
             },
 
             Mul => self.perform_bin_op(byte, span, |_, a, b| a.binary_mul(b)),
+            Mod => self.perform_bin_op(byte, span, |_, a, b| a.binary_mod(b)),
             Sub => self.perform_bin_op(byte, span, |_, a, b| a.binary_sub(b)),
             Add => self.perform_bin_op(byte, span, |_, a, b| {
                 if let Some(result) = a.binary_add(b) {

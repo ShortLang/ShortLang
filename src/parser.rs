@@ -174,6 +174,7 @@ impl<'a> LogosToken<'a> {
     pub fn to_binary_op(&self) -> BinaryOp {
         match self {
             Self::Times => BinaryOp::Mul,
+            Self::Percent => BinaryOp::Mod,
             Self::Slash => BinaryOp::Div,
             Self::Plus => BinaryOp::Add,
             Self::Minus => BinaryOp::Sub,
@@ -228,6 +229,7 @@ pub enum BinaryOp {
     MulEq,
     DivEq,
     Attr,
+    Mod,
 }
 
 impl BinaryOp {
@@ -439,6 +441,7 @@ impl<'a> PParser<'a> {
             Plus | Minus => (6, 7),
             Eqq | Neq | Leq | Geq | RAngle | LAngle | Or | And => (5, 6),
             Times | Slash => (8, 9),
+            Percent => (10, 11),
             Question => (4, 3),
             // For attributes and methods
             Dot => (1, 2),

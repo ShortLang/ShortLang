@@ -103,6 +103,16 @@ impl Value {
         }
     }
 
+    pub fn binary_mod(&self, rhs: &Value) -> Option<Value> {
+        match (self, rhs) {
+            (Value::Int(lhs), Value::Int(rhs)) => Some(Value::Int(lhs % rhs)),
+            (Value::Float(lhs), Value::Float(rhs)) => Some(Value::Float(lhs % rhs)),
+            (Value::Int(lhs), Value::Float(rhs)) => Some(Value::Float(*lhs as f64 % *rhs)),
+            (Value::Float(lhs), Value::Int(rhs)) => Some(Value::Float(*lhs % *rhs as f64)),
+            _ => None,
+        }
+    }
+
     pub fn binary_div(&self, rhs: &Value) -> Option<Value> {
         match (self, rhs) {
             (Value::Int(lhs), Value::Int(rhs)) => Some(Value::Int(lhs.div(rhs))),
