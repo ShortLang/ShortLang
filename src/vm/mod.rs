@@ -1,7 +1,7 @@
 mod bytecode;
 mod memory;
+mod utils;
 mod value;
 mod vm;
-mod utils;
 
 pub use vm::VM;

@@ -159,7 +159,7 @@ impl VM {
                         return;
                     }
 
-                    _ => { }
+                    _ => {}
                 }
 
                 // Check if the variable exists

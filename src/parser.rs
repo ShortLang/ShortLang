@@ -1,8 +1,7 @@
 use miette::{miette, LabeledSpan};
 use std::{fmt, ops::Range};
 
-use logos::{Logos, SpannedIter};
-use miette::Diagnostic;
+use logos::Logos;
 
 #[derive(Logos, Debug, Clone, PartialEq)]
 #[logos(skip r"[ \r\n\f\t]+")]
@@ -13,6 +12,8 @@ pub enum LogosToken<'a> {
     Int(&'a str),
     #[regex(r#"((\d+(\.\d+)?)|((\.\d+))|(\.\d+))([Ee](\+|-)?\d+)?"#)]
     Float(&'a str),
+    #[token(".")]
+    Dot,
     #[token("true")]
     True,
     #[token("false")]
@@ -83,6 +84,10 @@ pub enum LogosToken<'a> {
     SubEq,
     #[token("*=")]
     MulEq,
+    #[token("++")]
+    PAdd,
+    #[token("--")]
+    PSub,
     #[token("?")]
     Question,
     #[token("/=")]
@@ -96,8 +101,10 @@ pub enum LogosToken<'a> {
     String(&'a str),
     // #[regex(r#"//[^\n]*\n"#)]
     // LineComment,
-    #[regex(r#"[\p{L}a-zA-Z_][\p{L}\p{N}a-zA-Z0-9_!]*"#)]
+    #[regex(r#"[\p{L}a-zA-Z_][\p{L}\p{N}a-zA-Z0-9_]*"#)]
     Ident(&'a str),
+    #[token(">.")]
+    While,
     Error,
 }
 impl<'a> fmt::Display for LogosToken<'a> {
@@ -124,6 +131,7 @@ impl<'a> fmt::Display for LogosToken<'a> {
             LogosToken::RAngle => write!(f, ">"),
             LogosToken::LParen => write!(f, "("),
             LogosToken::Comma => write!(f, ","),
+            LogosToken::Dot => write!(f, "."),
             LogosToken::RParen => write!(f, ")"),
             LogosToken::Error => write!(f, "unknown character"),
             LogosToken::Plus => write!(f, "+"),
@@ -147,11 +155,22 @@ impl<'a> fmt::Display for LogosToken<'a> {
             LogosToken::DivEq => write!(f, "/="),
             LogosToken::Dollar => write!(f, "$"),
             LogosToken::DollarDollar => write!(f, "$$"),
+            LogosToken::While => write!(f, ">."),
+            LogosToken::PAdd => write!(f, "++"),
+            LogosToken::PSub => write!(f, "--"),
         }
     }
 }
 
 impl<'a> LogosToken<'a> {
+    pub fn to_postfix_op(&self) -> PostfixOp {
+        match self {
+            Self::PAdd => PostfixOp::Increase,
+            Self::PSub => PostfixOp::Decrease,
+            Self::Bang => PostfixOp::Factorial,
+            _ => unreachable!(),
+        }
+    }
     pub fn to_binary_op(&self) -> BinaryOp {
         match self {
             Self::Times => BinaryOp::Mul,
@@ -166,6 +185,8 @@ impl<'a> LogosToken<'a> {
             Self::Eqq => BinaryOp::Eq,
             Self::Or => BinaryOp::Or,
             Self::And => BinaryOp::And,
+            Self::Dot => BinaryOp::Attr,
+
             _ => unreachable!(),
         }
     }
@@ -182,7 +203,12 @@ impl Expr {
         Expr { inner, span }
     }
 }
-
+#[derive(Debug, Clone)]
+pub enum PostfixOp {
+    Increase,
+    Decrease,
+    Factorial,
+}
 #[derive(Debug, Clone)]
 pub enum BinaryOp {
     Mul,
@@ -201,6 +227,7 @@ pub enum BinaryOp {
     SubEq,
     MulEq,
     DivEq,
+    Attr,
 }
 
 impl BinaryOp {
@@ -229,11 +256,15 @@ pub enum ExprKind {
     MultilineFunction(String, Vec<String>, Vec<Expr>),
     EqStmt(String, BinaryOp, Box<Expr>),
     Call(String, Option<Vec<Expr>>),
-    // Ternary(Box<Expr>, Vec<Expr>, Option<Vec<Expr>>),
+    Ternary(Box<Expr>, Vec<Expr>, Option<Vec<Expr>>),
     String(String),
     Ident(String),
     Binary(Box<Expr>, BinaryOp, Box<Expr>),
     Set(String, Box<Expr>),
+    Postfix(Box<Expr>, PostfixOp),
+    Array(Vec<Expr>),
+    While(Box<Expr>, Vec<Expr>),
+    Index(Box<Expr>, Box<Expr>),
     Nil,
     Error,
 }
@@ -320,6 +351,16 @@ impl<'a> PParser<'a> {
     }
     fn declaration(&mut self, token: LogosToken<'a>) -> Expr {
         match token {
+            LogosToken::While => {
+                let start = self.current.1.start;
+                self.proceed();
+                let condition = self.expr(0);
+                let (block, _) = self.block();
+                return Expr::new(
+                    start..self.current.1.end,
+                    ExprKind::While(Box::new(condition), block),
+                );
+            }
             LogosToken::Return => {
                 let start = self.current.1.start;
                 self.proceed();
@@ -331,8 +372,7 @@ impl<'a> PParser<'a> {
                 if self.peek(0) == Some(LogosToken::Eq) {
                     self.proceed();
                     self.proceed();
-                    let current = self.current.0.to_owned();
-                    let expr = self.expr(40);
+                    let expr = self.expr(0);
                     Expr::new(
                         span.start..self.current.1.end,
                         ExprKind::Set(x.to_string(), Box::new(expr)),
@@ -375,52 +415,111 @@ impl<'a> PParser<'a> {
             _ => self.expr(0),
         }
     }
-    fn lbp(&self, op: &LogosToken) -> i32 {
-        match op {
-            LogosToken::Plus | LogosToken::Minus => 10,
-            LogosToken::Times | LogosToken::Slash => 15,
+    // fn lbp(&self, op: &LogosToken) -> i32 {
+    //     match op {
+    //         LogosToken::Plus | LogosToken::Minus => 10,
+    //         LogosToken::Times | LogosToken::Slash => 15,
 
-            LogosToken::RAngle | LogosToken::Leq | LogosToken::Geq | LogosToken::LAngle => 5,
-            LogosToken::Neq | LogosToken::Eqq => 3,
-            LogosToken::And => 2,
-            LogosToken::Or => 1,
-            _ => -1, // In another words stop the expr parsing
+    //         LogosToken::RAngle | LogosToken::Leq | LogosToken::Geq | LogosToken::LAngle => 5,
+    //         LogosToken::Neq | LogosToken::Eqq => 3,
+    //         LogosToken::And => 2,
+    //         LogosToken::Or => 1,
+    //         _ => -1, // In another words stop the expr parsing
+    //     }
+    // }
+    fn check_eof(&self, token: &LogosToken) -> bool {
+        match token {
+            LogosToken::Error => true,
+            _ => false,
         }
+    }
+    fn infix_binding_power(&mut self, op: &LogosToken) -> Option<(u8, u8)> {
+        use LogosToken::*;
+        Some(match op {
+            Plus | Minus => (6, 7),
+            Eqq | Neq | Leq | Geq | RAngle | LAngle | Or | And => (5, 6),
+            Times | Slash => (8, 9),
+            Question => (4, 3),
+            // For attributes and methods
+            Dot => (1, 2),
+            _ => return None,
+        })
+    }
+    fn postfix_binding_power(&mut self, op: &LogosToken) -> Option<(u8, ())> {
+        use LogosToken::*;
+        Some(match op {
+            PAdd | PSub => (6, ()),
+            Bang | LSquare => (7, ()),
+            _ => return None,
+        })
     }
     fn current(&self) -> &LogosToken {
         &self.current.0
     }
-    fn expr(&mut self, rbp: i32) -> Expr {
-        let curr = self.current.clone();
-        let mut expr = self.term(curr);
-        let start = expr.span.start.clone();
-        while rbp < self.lbp(&self.current.0) {
-            let (token, _) = self.current.clone();
-            self.proceed();
-            let right = Box::new(self.expr(self.lbp(&token)));
-            expr = Expr::new(
-                start..right.span.end,
-                ExprKind::Binary(Box::new(expr), token.to_binary_op(), right),
-            );
+    fn expr(&mut self, min_bp: u8) -> Expr {
+        let c = self.current.to_owned();
+        let mut lhs = self.term(c);
+        let start = lhs.span.clone().start;
+        loop {
+            let op = self.current.0.to_owned();
+            if self.check_eof(&op) {
+                break;
+            }
+            if let Some((l_bp, ())) = self.postfix_binding_power(&op) {
+                if l_bp < min_bp {
+                    break;
+                }
+                self.proceed();
+                if op == LogosToken::LSquare {
+                    let index = self.expr(0);
+                    lhs = Expr::new(
+                        start..self.current.1.end,
+                        ExprKind::Index(Box::new(lhs), Box::new(index)),
+                    );
+                    self.expect(LogosToken::RSquare);
+                    self.proceed();
+                    continue;
+                }
+                lhs = Expr::new(
+                    start..self.current.1.end,
+                    ExprKind::Postfix(Box::new(lhs), op.to_postfix_op()),
+                );
+                continue;
+            }
+            if let Some((l_bp, r_bp)) = self.infix_binding_power(&op) {
+                if l_bp < min_bp {
+                    break;
+                }
+                self.proceed();
+
+                if op == LogosToken::Question {
+                    let mhs = self.block();
+                    if self.current() == &LogosToken::Colon {
+                        self.proceed();
+                        let rhs = self.block();
+                        lhs = Expr::new(
+                            start..rhs.0.last().unwrap().span.end,
+                            ExprKind::Ternary(Box::new(lhs), mhs.0, Some(rhs.0)),
+                        )
+                    } else {
+                        lhs = Expr::new(
+                            start..mhs.0.last().unwrap().span.end,
+                            ExprKind::Ternary(Box::new(lhs), mhs.0, None),
+                        )
+                    }
+                    continue;
+                }
+                let rhs = self.expr(r_bp);
+                lhs = Expr::new(
+                    start..rhs.span.end,
+                    ExprKind::Binary(Box::new(lhs), op.to_binary_op(), Box::new(rhs)),
+                );
+
+                continue;
+            }
+            break;
         }
-        // if self.current() == &LogosToken::Question {
-        //     self.proceed();
-        //     let true_expr = self.block().0;
-        //     let mut false_expr: Option<Vec<Expr>> = None;
-        //     // the ':' part is optional
-        //     if self.current() == &LogosToken::Colon {
-        //         self.proceed();
-        //         false_expr = Some(self.block().0);
-        //     }
-
-        //     return Expr::new(
-        //         start..self.current.1.end,
-        //         ExprKind::Ternary(Box::new(expr), true_expr, false_expr),
-        //     )
-
-        // }
-
-        expr
+        lhs
     }
     fn peek(&self, x: usize) -> Option<LogosToken> {
         let token = self.tokens.get(self.position + x).cloned();
@@ -453,12 +552,26 @@ impl<'a> PParser<'a> {
             )
             .with_source_code(self.source.to_string());
             self.errored = true;
+            self.proceed();
             println!("{:?}", report);
         }
     }
     fn term(&mut self, token: (LogosToken, Range<usize>)) -> Expr {
         let (token, span) = token;
         let kind = match token {
+            LogosToken::LSquare => {
+                self.proceed();
+                let mut values = Vec::new();
+                while self.current() != &LogosToken::RSquare {
+                    let expr = self.expr(0);
+                    values.push(expr);
+                    if self.current() != &LogosToken::Comma {
+                        break;
+                    }
+                    self.proceed();
+                }
+                ExprKind::Array(values)
+            }
             LogosToken::Int(value) => ExprKind::Int(value.parse().unwrap()),
             LogosToken::Float(value) => ExprKind::Float(value.parse().unwrap()),
             LogosToken::True => ExprKind::Bool(true),
@@ -472,7 +585,7 @@ impl<'a> PParser<'a> {
             }
             v @ LogosToken::Dollar | v @ LogosToken::DollarDollar => {
                 self.proceed();
-                let expr = self.expr(40);
+                let expr = self.expr(0);
                 return Expr::new(
                     span.start..self.current.1.end,
                     ExprKind::Call(v.to_string(), Some(vec![expr])),
@@ -506,7 +619,7 @@ impl<'a> PParser<'a> {
                     return Expr::new(span, kind);
                 }
                 let kind = {
-                    if value.starts_with("_") {
+                    if value.starts_with("_") && value.len() > 1 {
                         // Delete the _ and replace every next _ with a space
                         let mut new_value = value.to_string();
                         new_value.remove(0);

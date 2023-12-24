@@ -21,6 +21,10 @@ pub struct Args {
     #[clap(name = "FILE", default_value = "main.sl")]
     file: String,
 
+    /// Prints the AST of the input file
+    #[clap(short, long)]
+    ast: bool,
+
     /// Silences the analyzer warnings
     #[clap(short, long)]
     silent: bool,
@@ -50,6 +54,9 @@ fn main() {
 
     let mut parser = PParser::new(&src, tokens);
     let ast = parser.parse();
+    if args.ast {
+        println!("{:?}", &ast);
+    }
     // Analyzer::new(&src, args, ast.clone()).analyze();
     let mut vm = VM::new(&src, ast);
     vm.compile();
