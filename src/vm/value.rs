@@ -113,6 +113,13 @@ impl Value {
         }
     }
 
+    pub fn binary_bitwise_xor(&self, rhs: &Value) -> Option<Value> {
+        match (self, rhs) {
+            (Value::Int(lhs), Value::Int(rhs)) => Some(Value::Int(lhs ^ rhs)),
+            _ => None,
+        }
+    }
+
     pub fn binary_div(&self, rhs: &Value) -> Option<Value> {
         match (self, rhs) {
             (Value::Int(lhs), Value::Int(rhs)) => Some(Value::Int(lhs.div(rhs))),

@@ -39,6 +39,7 @@ pub enum Bytecode {
     FnCall,
     Ret,
     Mod,
+    BinaryPow,
 }
 
 #[derive(Clone, Debug)]

@@ -29,7 +29,7 @@ pub enum LogosToken<'a> {
     #[token("->")]
     Arrow,
     #[token("^")]
-    Pow,
+    BinaryPow,
     #[token(",")]
     Comma,
     #[token(":")]
@@ -138,7 +138,7 @@ impl<'a> fmt::Display for LogosToken<'a> {
             LogosToken::Minus => write!(f, "-"),
             LogosToken::Times => write!(f, "*"),
             LogosToken::Slash => write!(f, "/"),
-            LogosToken::Pow => write!(f, "^"),
+            LogosToken::BinaryPow => write!(f, "^"),
             LogosToken::Colon => write!(f, ":"),
             LogosToken::Neq => write!(f, "!="),
             LogosToken::Leq => write!(f, "<="),
@@ -175,6 +175,7 @@ impl<'a> LogosToken<'a> {
         match self {
             Self::Times => BinaryOp::Mul,
             Self::Percent => BinaryOp::Mod,
+            Self::BinaryPow => BinaryOp::BinaryPow,
             Self::Slash => BinaryOp::Div,
             Self::Plus => BinaryOp::Add,
             Self::Minus => BinaryOp::Sub,
@@ -230,6 +231,7 @@ pub enum BinaryOp {
     DivEq,
     Attr,
     Mod,
+    BinaryPow,
 }
 
 impl BinaryOp {
@@ -442,6 +444,7 @@ impl<'a> PParser<'a> {
             Eqq | Neq | Leq | Geq | RAngle | LAngle | Or | And => (5, 6),
             Times | Slash => (8, 9),
             Percent => (10, 11),
+            BinaryPow => (12, 13),
             Question => (4, 3),
             // For attributes and methods
             Dot => (1, 2),
