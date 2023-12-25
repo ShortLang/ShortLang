@@ -1,4 +1,5 @@
 use miette::{miette, LabeledSpan};
+use rug::{Assign, Float, Integer};
 use std::ptr::NonNull;
 use std::{collections::HashMap, ops::Range};
 
@@ -646,8 +647,8 @@ impl VM {
 
             Inc => {
                 match self.modify_variable(|var| match var {
-                    Value::Int(i) => Ok(Value::Int(*i + 1)),
-                    Value::Float(f) => Ok(Value::Float(*f + 1.0)),
+                    Value::Int(i) => Ok(Value::Int(i + Integer::from(1))),
+                    Value::Float(f) => Ok(Value::Float(f + Float::with_val(53, 1.0))),
                     _ => Err(format!(
                         "Cannot increment value of type {:?}",
                         var.get_type()
@@ -659,8 +660,8 @@ impl VM {
             }
             Dec => {
                 match self.modify_variable(|var| match var {
-                    Value::Int(i) => Ok(Value::Int(*i - 1)),
-                    Value::Float(f) => Ok(Value::Float(*f - 1.0)),
+                    Value::Int(i) => Ok(Value::Int(i - Integer::from(1))),
+                    Value::Float(f) => Ok(Value::Float(f - Float::with_val(53, 1.0))),
                     _ => Err(format!(
                         "Cannot decrement value of type {:?}",
                         var.get_type()
@@ -674,8 +675,20 @@ impl VM {
                 let val = self.stack.pop().unwrap().as_ref();
                 self.stack
                     .push(NonNull::new_unchecked(alloc_new_value(match val {
-                        Value::Int(i) => Value::Int((1..=*i).product()),
-                        Value::Float(f) => Value::Float((1..=*f as i128).product::<i128>() as f64),
+                        Value::Int(i) => {
+                            let mut result = Integer::from(1);
+                            for j in 1..=i.to_u32().unwrap() {
+                                result.assign(&result * Integer::from(j));
+                            }
+                            Value::Int(result)
+                        }
+                        Value::Float(f) => {
+                            let mut result = Float::with_val(53, 1.0);
+                            for j in 1..=f.to_i32_saturating().unwrap() {
+                                result.assign(&result * Float::with_val(53, j));
+                            }
+                            Value::Float(result)
+                        }
                         _ => self.runtime_error(
                             &format!(
                                 "Cannot perform factorial on value of type {:?}",
@@ -750,39 +763,39 @@ impl VM {
 
             ToInt => unsafe {
                 let val = self.stack.pop().unwrap().as_ref();
-                self.stack.push(allocate(Value::Int(match val {
-                    Value::Int(i) => *i,
-                    Value::Float(f) => *f as _,
-                    Value::Bool(b) => *b as _,
-
+                self.stack.push(allocate(match val {
+                    Value::Int(i) => Value::Int(i.clone()),
+                    Value::Float(f) => Value::Int(f.to_integer().unwrap()),
+                    Value::Bool(b) => Value::Int(Integer::from(*b as i32)),
                     Value::String(s) => match s.parse::<i64>() {
-                        Ok(i) => i,
-                        Err(e) => self.runtime_error(
-                            &format!("cannot parse the string to int value, {e:?}"),
-                            span,
-                        ),
+                        Ok(i) => Value::Int(Integer::from(i)),
+                        Err(e) => {
+                            self.runtime_error(
+                                &format!("cannot parse the string to int value, {e:?}"),
+                                span,
+                            );
+                        }
                     },
-
-                    Value::Nil => 0,
-                })));
+                    Value::Nil => Value::Int(Integer::from(0)),
+                }));
             },
 
             ToFloat => unsafe {
                 let val = self.stack.pop().unwrap().as_ref();
                 self.stack.push(allocate(Value::Float(match val {
-                    Value::Int(i) => *i as _,
-                    Value::Float(f) => *f,
-                    Value::Bool(b) => *b as i64 as f64,
-
+                    Value::Int(i) => Float::with_val(53, i),
+                    Value::Float(f) => Float::with_val(53, f),
+                    Value::Bool(b) => Float::with_val(53, *b as i32),
                     Value::String(s) => match s.parse::<f64>() {
-                        Ok(f) => f,
-                        Err(e) => self.runtime_error(
-                            &format!("cannot parse the string to int value, {e:?}"),
-                            span,
-                        ),
+                        Ok(i) => Float::with_val(53, i),
+                        Err(e) => {
+                            self.runtime_error(
+                                &format!("cannot parse the string to float value, {e:?}"),
+                                span,
+                            );
+                        }
                     },
-
-                    Value::Nil => 0.0,
+                    Value::Nil => Float::with_val(53, 0.0),
                 })));
             },
 
@@ -881,9 +894,8 @@ impl VM {
         F: FnOnce(&Value) -> Result<Value, String>,
     {
         unsafe {
-            let val = self.stack.pop().unwrap().as_ref();
+            let _ = self.stack.pop().unwrap().as_ref();
             let var_name = self.stack_var_names.pop().unwrap();
-
             let var_id = *self.variables_id.get(&var_name).unwrap();
             let var = self.get_var(var_id).unwrap();
             let modified_value = modify_fn(var.as_ref())?;

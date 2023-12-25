@@ -1,15 +1,3 @@
-a=43
-b=3
-a++
-a--
-b++
-c=123
-c--
-a++
+a = 50! // no longer overflows
 $a
-a--
-b++
-$a
-$c
-$b
-$b!
+$a-1 // you can use really large integers normally

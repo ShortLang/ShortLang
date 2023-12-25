@@ -1,9 +1,11 @@
+use rug::ops::Pow;
+use rug::{Float, Integer};
 use std::ops::*;
 
 #[derive(Clone, Debug, Default, PartialEq)]
 pub enum Value {
-    Int(i64),
-    Float(f64),
+    Int(Integer),
+    Float(Float),
     String(String),
     Bool(bool),
 
@@ -12,16 +14,16 @@ pub enum Value {
 }
 
 impl Value {
-    pub fn as_int(&self) -> i64 {
-        match self {
-            &Self::Int(i) => i,
+    pub fn as_int(&self) -> Integer {
+        match self.clone() {
+            Self::Int(i) => i,
             _ => panic!("Expected an int value, found: {}", self.get_type()),
         }
     }
 
-    pub fn as_float(&self) -> f64 {
-        match self {
-            &Self::Float(f) => f,
+    pub fn as_float(&self) -> Float {
+        match self.clone() {
+            Self::Float(f) => f,
             _ => panic!("Expected an float value, found: {}", self.get_type()),
         }
     }
@@ -42,14 +44,20 @@ impl Value {
 
     pub fn binary_add(&self, rhs: &Value) -> Option<Value> {
         match (self, rhs) {
-            (Value::Int(lhs), Value::Int(rhs)) => Some(Value::Int(lhs + rhs)),
-            (Value::Float(lhs), Value::Float(rhs)) => Some(Value::Float(lhs + rhs)),
+            (Value::Int(lhs), Value::Int(rhs)) => Some(Value::Int(Integer::from(lhs + rhs))),
+            (Value::Float(lhs), Value::Float(rhs)) => {
+                Some(Value::Float(Float::with_val(53, lhs + rhs)))
+            }
             // Concetrate strings
             (Value::String(lhs), Value::String(rhs)) => Some(Value::String(format!("{lhs}{rhs}"))),
             // Int or float
             // Float or Int
-            (Value::Int(lhs), Value::Float(rhs)) => Some(Value::Float(*lhs as f64 + *rhs)),
-            (Value::Float(lhs), Value::Int(rhs)) => Some(Value::Float(*lhs + *rhs as f64)),
+            (Value::Int(lhs), Value::Float(rhs)) => {
+                Some(Value::Float(Float::with_val(53, lhs + rhs)))
+            }
+            (Value::Float(lhs), Value::Int(rhs)) => {
+                Some(Value::Float(Float::with_val(53, lhs + rhs)))
+            }
             _ => None,
         }
     }
@@ -85,79 +93,118 @@ impl Value {
 
     pub fn binary_sub(&self, rhs: &Value) -> Option<Value> {
         match (self, rhs) {
-            (Value::Int(lhs), Value::Int(rhs)) => Some(Value::Int(lhs - rhs)),
-            (Value::Float(lhs), Value::Float(rhs)) => Some(Value::Float(lhs - rhs)),
-            (Value::Int(lhs), Value::Float(rhs)) => Some(Value::Float(*lhs as f64 - *rhs)),
-            (Value::Float(lhs), Value::Int(rhs)) => Some(Value::Float(*lhs - *rhs as f64)),
+            (Value::Int(lhs), Value::Int(rhs)) => Some(Value::Int(Integer::from(lhs - rhs))),
+            (Value::Float(lhs), Value::Float(rhs)) => {
+                Some(Value::Float(Float::with_val(53, lhs - rhs)))
+            }
+            (Value::Int(lhs), Value::Float(rhs)) => {
+                Some(Value::Float(Float::with_val(53, lhs - rhs)))
+            }
+            (Value::Float(lhs), Value::Int(rhs)) => {
+                Some(Value::Float(Float::with_val(53, lhs - rhs)))
+            }
             _ => None,
         }
     }
 
     pub fn binary_mul(&self, rhs: &Value) -> Option<Value> {
         match (self, rhs) {
-            (Value::Int(lhs), Value::Int(rhs)) => Some(Value::Int(lhs * rhs)),
-            (Value::Float(lhs), Value::Float(rhs)) => Some(Value::Float(lhs * rhs)),
-            (Value::Int(lhs), Value::Float(rhs)) => Some(Value::Float(*lhs as f64 * *rhs)),
-            (Value::Float(lhs), Value::Int(rhs)) => Some(Value::Float(*lhs * *rhs as f64)),
+            (Value::Int(lhs), Value::Int(rhs)) => Some(Value::Int(Integer::from(lhs * rhs))),
+            (Value::Float(lhs), Value::Float(rhs)) => {
+                Some(Value::Float(Float::with_val(53, lhs * rhs)))
+            }
+            (Value::Int(lhs), Value::Float(rhs)) => {
+                Some(Value::Float(Float::with_val(53, lhs * rhs)))
+            }
+            (Value::Float(lhs), Value::Int(rhs)) => {
+                Some(Value::Float(Float::with_val(53, lhs * rhs)))
+            }
             _ => None,
         }
     }
 
     pub fn binary_mod(&self, rhs: &Value) -> Option<Value> {
         match (self, rhs) {
-            (Value::Int(lhs), Value::Int(rhs)) => Some(Value::Int(lhs % rhs)),
-            (Value::Float(lhs), Value::Float(rhs)) => Some(Value::Float(lhs % rhs)),
-            (Value::Int(lhs), Value::Float(rhs)) => Some(Value::Float(*lhs as f64 % *rhs)),
-            (Value::Float(lhs), Value::Int(rhs)) => Some(Value::Float(*lhs % *rhs as f64)),
+            (Value::Int(lhs), Value::Int(rhs)) => Some(Value::Int(Integer::from(lhs % rhs))),
+            (Value::Float(lhs), Value::Float(rhs)) => {
+                Some(Value::Float(Float::with_val(53, lhs % rhs)))
+            }
+            (Value::Int(lhs), Value::Float(rhs)) => Some(Value::Float(Float::with_val(
+                53,
+                Float::with_val(53, lhs) % rhs,
+            ))),
+            (Value::Float(lhs), Value::Int(rhs)) => Some(Value::Float(Float::with_val(
+                53,
+                lhs % Float::with_val(53, rhs),
+            ))),
             _ => None,
         }
     }
 
     pub fn binary_bitwise_xor(&self, rhs: &Value) -> Option<Value> {
         match (self, rhs) {
-            (Value::Int(lhs), Value::Int(rhs)) => Some(Value::Int(lhs ^ rhs)),
+            (Value::Int(lhs), Value::Int(rhs)) => Some(Value::Int(Integer::from(lhs ^ rhs))),
             _ => None,
         }
     }
 
     pub fn binary_pow(&self, rhs: &Value) -> Option<Value> {
         match (self, rhs) {
-            (Value::Int(lhs), Value::Int(rhs)) => Some(Value::Int(lhs.pow(*rhs as u32))),
-            (Value::Float(lhs), Value::Float(rhs)) => Some(Value::Float(lhs.powf(*rhs))),
-            (Value::Int(lhs), Value::Float(rhs)) => Some(Value::Float((*lhs as f64).powf(*rhs))),
-            (Value::Float(lhs), Value::Int(rhs)) => Some(Value::Float((*lhs).powf(*rhs as f64))),
+            (Value::Int(lhs), Value::Int(rhs)) => Some(Value::Float(Float::with_val(
+                53,
+                Float::with_val(53, lhs).pow(rhs),
+            ))),
+            (Value::Float(lhs), Value::Float(rhs)) => {
+                Some(Value::Float(Float::with_val(53, lhs.pow(rhs))))
+            }
+            (Value::Int(lhs), Value::Float(rhs)) => Some(Value::Float(Float::with_val(
+                53,
+                Float::with_val(53, lhs).pow(rhs),
+            ))),
+            (Value::Float(lhs), Value::Int(rhs)) => {
+                Some(Value::Float(Float::with_val(53, lhs.pow(rhs))))
+            }
             _ => None,
         }
     }
 
     pub fn binary_div(&self, rhs: &Value) -> Option<Value> {
         match (self, rhs) {
-            (Value::Int(lhs), Value::Int(rhs)) => Some(Value::Int(lhs.div(rhs))),
-            (Value::Float(lhs), Value::Float(rhs)) => Some(Value::Float(lhs / rhs)),
-            (Value::Int(lhs), Value::Float(rhs)) => Some(Value::Float(*lhs as f64 / *rhs)),
-            (Value::Float(lhs), Value::Int(rhs)) => Some(Value::Float(*lhs / *rhs as f64)),
+            (Value::Int(lhs), Value::Int(rhs)) => Some(Value::Int(Integer::from(lhs.div(rhs)))),
+            (Value::Float(lhs), Value::Float(rhs)) => {
+                Some(Value::Float(Float::with_val(53, lhs.div(rhs))))
+            }
+            (Value::Int(lhs), Value::Float(rhs)) => {
+                Some(Value::Float(Float::with_val(53, lhs.div(rhs))))
+            }
+            (Value::Float(lhs), Value::Int(rhs)) => {
+                Some(Value::Float(Float::with_val(53, lhs.div(rhs))))
+            }
             _ => None,
         }
     }
 
     pub fn less_than(&self, other: &Value) -> Option<Value> {
-        Some(Value::Bool(match (self, other) {
-            (Value::Int(lhs), Value::Int(rhs)) => lhs < rhs,
-            (Value::Float(lhs), Value::Float(rhs)) => lhs < rhs,
-            (Value::Int(lhs), Value::Float(rhs)) => (*lhs as f64) < *rhs,
-            (Value::Float(lhs), Value::Int(rhs)) => *lhs < *rhs as f64,
-            (Value::String(lhs), Value::String(rhs)) => lhs < rhs,
-
-            _ => return None,
-        }))
+        match (self, other) {
+            (Value::Int(lhs), Value::Int(rhs)) => Some(Value::Bool(lhs < rhs)),
+            (Value::Float(lhs), Value::Float(rhs)) => Some(Value::Bool(lhs < rhs)),
+            (Value::Int(lhs), Value::Float(rhs)) => {
+                Some(Value::Bool(Float::with_val(53, lhs) < *rhs))
+            }
+            (Value::Float(lhs), Value::Int(rhs)) => {
+                Some(Value::Bool(lhs < &Float::with_val(53, rhs)))
+            }
+            (Value::String(lhs), Value::String(rhs)) => Some(Value::Bool(lhs < rhs)),
+            _ => None,
+        }
     }
 
     pub fn greater_than(&self, other: &Value) -> Option<Value> {
         Some(Value::Bool(match (self, other) {
             (Value::Int(lhs), Value::Int(rhs)) => lhs > rhs,
             (Value::Float(lhs), Value::Float(rhs)) => lhs > rhs,
-            (Value::Int(lhs), Value::Float(rhs)) => (*lhs as f64) > *rhs,
-            (Value::Float(lhs), Value::Int(rhs)) => *lhs > *rhs as f64,
+            (Value::Int(lhs), Value::Float(rhs)) => lhs > rhs,
+            (Value::Float(lhs), Value::Int(rhs)) => lhs > rhs,
             (Value::String(lhs), Value::String(rhs)) => lhs > rhs,
 
             _ => return None,
@@ -168,8 +215,8 @@ impl Value {
         Some(Value::Bool(match (self, other) {
             (Value::Int(lhs), Value::Int(rhs)) => lhs <= rhs,
             (Value::Float(lhs), Value::Float(rhs)) => lhs <= rhs,
-            (Value::Int(lhs), Value::Float(rhs)) => (*lhs as f64) <= *rhs,
-            (Value::Float(lhs), Value::Int(rhs)) => *lhs <= *rhs as f64,
+            (Value::Int(lhs), Value::Float(rhs)) => lhs <= rhs,
+            (Value::Float(lhs), Value::Int(rhs)) => lhs <= rhs,
             (Value::String(lhs), Value::String(rhs)) => lhs <= rhs,
 
             _ => return None,
@@ -180,8 +227,8 @@ impl Value {
         Some(Value::Bool(match (self, other) {
             (Value::Int(lhs), Value::Int(rhs)) => lhs >= rhs,
             (Value::Float(lhs), Value::Float(rhs)) => lhs >= rhs,
-            (Value::Int(lhs), Value::Float(rhs)) => (*lhs as f64) >= *rhs,
-            (Value::Float(lhs), Value::Int(rhs)) => *lhs >= *rhs as f64,
+            (Value::Int(lhs), Value::Float(rhs)) => lhs >= rhs,
+            (Value::Float(lhs), Value::Int(rhs)) => lhs >= rhs,
             (Value::String(lhs), Value::String(rhs)) => lhs >= rhs,
 
             _ => return None,
@@ -192,8 +239,8 @@ impl Value {
         Some(Value::Bool(match (self, other) {
             (Value::Int(lhs), Value::Int(rhs)) => lhs == rhs,
             (Value::Float(lhs), Value::Float(rhs)) => lhs == rhs,
-            (Value::Int(lhs), Value::Float(rhs)) => (*lhs as f64) == *rhs,
-            (Value::Float(lhs), Value::Int(rhs)) => *lhs == *rhs as f64,
+            (Value::Int(lhs), Value::Float(rhs)) => lhs == rhs,
+            (Value::Float(lhs), Value::Int(rhs)) => lhs == rhs,
             (Value::Bool(lhs), Value::Bool(rhs)) => lhs == rhs,
             (Value::String(lhs), Value::String(rhs)) => lhs == rhs,
 
@@ -211,8 +258,14 @@ impl Value {
 
     pub fn bool_eval(&self) -> bool {
         match self {
-            Value::Int(0) | Value::Bool(false) | Value::Nil => false,
-
+            Value::Int(i) => {
+                if *i == 0 {
+                    false
+                } else {
+                    true
+                }
+            }
+            Value::Bool(false) | Value::Nil => false,
             Value::Float(f) if *f == 0.0 => false,
             Value::String(s) if s.is_empty() => false,
 
@@ -237,13 +290,13 @@ impl Value {
     }
 }
 
-impl From<Value> for i64 {
+impl From<Value> for Integer {
     fn from(value: Value) -> Self {
         value.as_int()
     }
 }
 
-impl From<Value> for f64 {
+impl From<Value> for Float {
     fn from(value: Value) -> Self {
         value.as_float()
     }
@@ -275,24 +328,24 @@ impl<'a> From<&'a str> for Value {
 
 impl From<u32> for Value {
     fn from(value: u32) -> Self {
-        Self::Int(value as _)
+        Self::Int(value.into())
     }
 }
 
 impl From<&u32> for Value {
     fn from(value: &u32) -> Self {
-        Self::Int(*value as _)
+        Self::Int((*value).into())
     }
 }
 
-impl From<&f64> for Value {
-    fn from(value: &f64) -> Self {
-        Value::Float(*value)
+impl From<&Integer> for Value {
+    fn from(value: &Integer) -> Self {
+        Value::Float(Float::with_val(53, value))
     }
 }
 
-impl From<f64> for Value {
-    fn from(value: f64) -> Self {
+impl From<Float> for Value {
+    fn from(value: Float) -> Self {
         Value::Float(value)
     }
 }

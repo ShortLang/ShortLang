@@ -2,6 +2,7 @@ use miette::{miette, LabeledSpan};
 use std::{fmt, ops::Range};
 
 use logos::Logos;
+use rug::{Float, Integer};
 
 #[derive(Logos, Debug, Clone, PartialEq)]
 #[logos(skip r"[ \r\n\f\t]+")]
@@ -257,8 +258,8 @@ impl BinaryOp {
 
 #[derive(Debug, Clone)]
 pub enum ExprKind {
-    Int(i64),
-    Float(f64),
+    Int(Integer),
+    Float(Float),
     Bool(bool),
     Return(Box<Expr>),
     InlineFunction(String, Vec<String>, Box<Expr>),
@@ -584,8 +585,10 @@ impl<'a> PParser<'a> {
                 }
                 ExprKind::Array(values)
             }
-            LogosToken::Int(value) => ExprKind::Int(value.parse().unwrap()),
-            LogosToken::Float(value) => ExprKind::Float(value.parse().unwrap()),
+            LogosToken::Int(value) => ExprKind::Int(Integer::from(Integer::parse(value).unwrap())),
+            LogosToken::Float(value) => {
+                ExprKind::Float(Float::with_val(53, Float::parse(value).unwrap()))
+            }
             LogosToken::True => ExprKind::Bool(true),
             LogosToken::False => ExprKind::Bool(false),
             LogosToken::String(value) => {
