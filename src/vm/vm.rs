@@ -3,6 +3,7 @@ use std::ptr::NonNull;
 use std::{collections::HashMap, ops::Range};
 
 use super::value::Value;
+use crate::parser::PostfixOp;
 use crate::{
     parser::{BinaryOp, Expr, ExprKind},
     vm::memory::alloc_new_value,
@@ -100,6 +101,25 @@ impl VM {
                     expr.span,
                 ));
             }
+
+            ExprKind::Postfix(expr, op) => match op {
+                PostfixOp::Increase => {
+                    self.compile_expr(*expr.clone());
+                    self.instructions
+                        .push((Instr(Bytecode::Inc, vec![]), expr.span));
+                }
+                PostfixOp::Decrease => {
+                    self.compile_expr(*expr.clone());
+                    self.instructions
+                        .push((Instr(Bytecode::Dec, vec![]), expr.span));
+                }
+                PostfixOp::Factorial => {
+                    self.compile_expr(*expr.clone());
+                    self.instructions
+                        .push((Instr(Bytecode::Factorial, vec![]), expr.span));
+                }
+                _ => unreachable!(),
+            },
 
             ExprKind::EqStmt(name, op, val) => {
                 let id = self.variables_id.clone();
@@ -616,6 +636,50 @@ impl VM {
                 a.binary_div(b)
             }),
 
+            Inc => {
+                match self.modify_variable(|var| match var {
+                    Value::Int(i) => Ok(Value::Int(*i + 1)),
+                    Value::Float(f) => Ok(Value::Float(*f + 1.0)),
+                    _ => Err(format!(
+                        "Cannot increment value of type {:?}",
+                        var.get_type()
+                    )),
+                }) {
+                    Ok(_) => {}
+                    Err(e) => self.runtime_error(&e, span),
+                }
+            }
+            Dec => {
+                match self.modify_variable(|var| match var {
+                    Value::Int(i) => Ok(Value::Int(*i - 1)),
+                    Value::Float(f) => Ok(Value::Float(*f - 1.0)),
+                    _ => Err(format!(
+                        "Cannot decrement value of type {:?}",
+                        var.get_type()
+                    )),
+                }) {
+                    Ok(_) => {}
+                    Err(e) => self.runtime_error(&e, span),
+                }
+            }
+            Factorial => unsafe {
+                let val = self.stack.pop().unwrap().as_ref();
+                self.stack
+                    .push(NonNull::new_unchecked(alloc_new_value(match val {
+                        Value::Int(i) => Value::Int((1..=*i).product()),
+                        Value::Float(f) => {
+                            Value::Float((1..=*f as i64 as i128).product::<i128>() as f64)
+                        }
+                        _ => self.runtime_error(
+                            &format!(
+                                "Cannot perform factorial on value of type {:?}",
+                                val.get_type()
+                            ),
+                            span,
+                        ),
+                    })));
+            },
+
             Lt => self.compare_values(span, |a, b| a.less_than(b)),
             Gt => self.compare_values(span, |a, b| a.greater_than(b)),
             Le => self.compare_values(span, |a, b| a.less_than_or_equal(b)),
@@ -803,6 +867,37 @@ impl VM {
                     span,
                 ),
             }
+        }
+    }
+
+    fn modify_variable<F>(&mut self, modify_fn: F) -> Result<(), String>
+    where
+        F: FnOnce(&Value) -> Result<Value, String>,
+    {
+        unsafe {
+            let val = self.stack.pop().unwrap().as_ref();
+            let var_name = self
+                .variables_id
+                .iter()
+                .find(|(_, v)| {
+                    self.variables
+                        .last()
+                        .unwrap()
+                        .get(v)
+                        .map_or(false, |v| v.unwrap().as_ref() == val)
+                })
+                .map(|(k, _)| k.clone())
+                .unwrap();
+
+            let var_id = *self.variables_id.get(&var_name).unwrap();
+            let var = self.get_var(var_id).unwrap();
+            let modified_value = modify_fn(var.as_ref())?;
+
+            self.variables.last_mut().unwrap().insert(
+                var_id,
+                Some(NonNull::new_unchecked(alloc_new_value(modified_value))),
+            );
+            Ok(())
         }
     }
 }

@@ -41,6 +41,9 @@ pub enum Bytecode {
     Mod,
     BinaryPow,
     Pow,
+    Inc,
+    Dec,
+    Factorial,
 }
 
 #[derive(Clone, Debug)]
