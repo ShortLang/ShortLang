@@ -29,6 +29,7 @@ pub struct VM {
 
     variables_id: HashMap<String, VarId>,
     variables: Vec<HashMap<u32, Option<NonNull<Value>>>>,
+    stack_var_names: Vec<String>,
 
     // memory: Memory,
     constants: Vec<Value>,
@@ -48,6 +49,7 @@ impl VM {
             stack: vec![],
             iteration: 0,
             variables: vec![HashMap::new()],
+            stack_var_names: vec![],
             var_id_count: 0,
             variables_id: HashMap::new(),
             constants: vec![],
@@ -118,7 +120,6 @@ impl VM {
                     self.instructions
                         .push((Instr(Bytecode::Factorial, vec![]), expr.span));
                 }
-                _ => unreachable!(),
             },
 
             ExprKind::EqStmt(name, op, val) => {
@@ -541,7 +542,14 @@ impl VM {
                 let id = args[0];
                 let v = self.get_var(id as _);
                 if self.get_var(id).is_some() {
-                    self.stack.push(v.unwrap_or(allocate(Value::Nil)))
+                    self.stack.push(v.unwrap_or(allocate(Value::Nil)));
+                    self.stack_var_names.push(
+                        self.variables_id
+                            .iter()
+                            .find(|(_, &v_id)| v_id == id)
+                            .map(|(name, _)| name.clone())
+                            .unwrap(),
+                    );
                 } else {
                     self.runtime_error("Variable not found", span)
                 }
@@ -667,9 +675,7 @@ impl VM {
                 self.stack
                     .push(NonNull::new_unchecked(alloc_new_value(match val {
                         Value::Int(i) => Value::Int((1..=*i).product()),
-                        Value::Float(f) => {
-                            Value::Float((1..=*f as i64 as i128).product::<i128>() as f64)
-                        }
+                        Value::Float(f) => Value::Float((1..=*f as i128).product::<i128>() as f64),
                         _ => self.runtime_error(
                             &format!(
                                 "Cannot perform factorial on value of type {:?}",
@@ -876,18 +882,7 @@ impl VM {
     {
         unsafe {
             let val = self.stack.pop().unwrap().as_ref();
-            let var_name = self
-                .variables_id
-                .iter()
-                .find(|(_, v)| {
-                    self.variables
-                        .last()
-                        .unwrap()
-                        .get(v)
-                        .map_or(false, |v| v.unwrap().as_ref() == val)
-                })
-                .map(|(k, _)| k.clone())
-                .unwrap();
+            let var_name = self.stack_var_names.pop().unwrap();
 
             let var_id = *self.variables_id.get(&var_name).unwrap();
             let var = self.get_var(var_id).unwrap();
