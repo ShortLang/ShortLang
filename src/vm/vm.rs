@@ -908,3 +908,193 @@ impl VM {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::parser::ExprKind;
+
+    #[test]
+    fn test_compile_expr_int() {
+        let mut vm = VM::new("", vec![]);
+        vm.compile_expr(Expr {
+            span: 0..0,
+            inner: ExprKind::Int(Integer::from(5)),
+        });
+        assert_eq!(vm.instructions.len(), 1);
+        assert_eq!(vm.instructions[0].0 .0, Bytecode::LoadConst);
+        assert_eq!(vm.constants[0], Value::Int(Integer::from(5)));
+    }
+
+    #[test]
+    fn test_compile_expr_float() {
+        let mut vm = VM::new("", vec![]);
+        vm.compile_expr(Expr {
+            span: 0..0,
+            inner: ExprKind::Float(Float::with_val(53, 5.0)),
+        });
+        assert_eq!(vm.instructions.len(), 1);
+        assert_eq!(vm.instructions[0].0 .0, Bytecode::LoadConst);
+        assert_eq!(vm.constants[0], Value::Float(Float::with_val(53, 5.0)));
+    }
+
+    #[test]
+    fn test_compile_expr_ident() {
+        let mut vm = VM::new("", vec![]);
+        vm.variables_id.insert("x".to_string(), 0);
+        vm.compile_expr(Expr {
+            span: 0..0,
+            inner: ExprKind::Ident("x".to_string()),
+        });
+        assert_eq!(vm.instructions.len(), 1);
+        assert_eq!(vm.instructions[0].0 .0, Bytecode::GetVar);
+    }
+
+    #[test]
+    fn test_compile_expr_set() {
+        let mut vm = VM::new("", vec![]);
+        vm.compile_expr(Expr {
+            span: 0..0,
+            inner: ExprKind::Set(
+                "x".to_string(),
+                Box::new(Expr {
+                    span: 0..0,
+                    inner: ExprKind::Int(Integer::from(5)),
+                }),
+            ),
+        });
+        assert_eq!(vm.instructions.len(), 3);
+        assert_eq!(vm.instructions[0].0 .0, Bytecode::MakeVar);
+        assert_eq!(vm.instructions[1].0 .0, Bytecode::LoadConst);
+        assert_eq!(vm.instructions[2].0 .0, Bytecode::Replace);
+    }
+
+    #[test]
+    fn test_run_byte_load_const() {
+        let mut vm = VM::new("", vec![]);
+        vm.add_constant(Value::Int(Integer::from(5)));
+        let instr = Instr(Bytecode::LoadConst, vec![0]);
+        vm.run_byte(instr, 0..0);
+        assert_eq!(vm.stack.len(), 1);
+        assert_eq!(
+            unsafe { vm.stack[0].as_ref() },
+            &Value::Int(Integer::from(5))
+        );
+    }
+
+    #[test]
+    fn test_compile_expr_function() {
+        let mut vm = VM::new("", vec![]);
+        vm.compile_expr(Expr {
+            span: 0..0,
+            inner: ExprKind::InlineFunction(
+                "f".to_string(),
+                vec!["x".to_string()],
+                Box::new(Expr {
+                    span: 0..0,
+                    inner: ExprKind::Ident("x".to_string()),
+                }),
+            ),
+        });
+        assert_eq!(vm.functions.len(), 1);
+        assert!(vm.functions.contains_key("f"));
+    }
+
+    #[test]
+    fn test_compile_expr_function_call() {
+        let mut vm = VM::new("", vec![]);
+        vm.functions.insert(
+            "f".to_string(),
+            FunctionData {
+                name: "f".to_string(),
+                parameters: vec![("x".to_string(), 0)],
+                instruction_range: 0..0,
+                returns: false,
+                scope_idx: 0,
+            },
+        );
+        vm.compile_expr(Expr {
+            span: 0..0,
+            inner: ExprKind::Call(
+                "f".to_string(),
+                Some(vec![Expr {
+                    span: 0..0,
+                    inner: ExprKind::Int(Integer::from(5)),
+                }]),
+            ),
+        });
+        assert_eq!(vm.instructions.len(), 3);
+        assert_eq!(vm.instructions[1].0 .0, Bytecode::LoadConst);
+        assert_eq!(vm.instructions[2].0 .0, Bytecode::FnCall);
+    }
+
+    #[test]
+    fn test_run_byte_fn_call() {
+        let mut vm = VM::new("", vec![]);
+        vm.add_constant(Value::Int(Integer::from(5)));
+        vm.functions.insert(
+            "f".to_string(),
+            FunctionData {
+                name: "f".to_string(),
+                parameters: vec![("x".to_string(), 0)],
+                instruction_range: 0..0,
+                returns: false,
+                scope_idx: 0,
+            },
+        );
+        let instr = Instr(Bytecode::FnCall, vec![0]);
+        vm.run_byte(instr, 0..0);
+        assert_eq!(vm.stack.len(), 1);
+        assert_eq!(
+            unsafe { vm.stack[0].as_ref() },
+            &Value::Int(Integer::from(5))
+        );
+    }
+
+    #[test]
+    fn test_compile_expr_bin_op() {
+        let mut vm = VM::new("", vec![]);
+        vm.compile_expr(Expr {
+            span: 0..0,
+            inner: ExprKind::Binary(
+                Box::new(Expr {
+                    span: 0..0,
+                    inner: ExprKind::Int(Integer::from(5)),
+                }),
+                BinaryOp::Add,
+                Box::new(Expr {
+                    span: 0..0,
+                    inner: ExprKind::Int(Integer::from(3)),
+                }),
+            ),
+        });
+        assert_eq!(vm.instructions.len(), 3);
+        assert_eq!(vm.instructions[0].0 .0, Bytecode::LoadConst);
+        assert_eq!(vm.instructions[1].0 .0, Bytecode::LoadConst);
+        assert_eq!(vm.instructions[2].0 .0, Bytecode::Add);
+    }
+
+    #[test]
+    fn test_compile() {
+        let mut vm = VM::new(
+            "",
+            vec![
+                Expr {
+                    span: 0..0,
+                    inner: ExprKind::Int(Integer::from(5)),
+                },
+                Expr {
+                    span: 0..0,
+                    inner: ExprKind::Int(Integer::from(3)),
+                },
+            ],
+        );
+        vm.compile();
+        assert_eq!(vm.instructions.len(), 3);
+        assert_eq!(vm.instructions[0].0 .0, Bytecode::LoadConst);
+        assert_eq!(vm.instructions[1].0 .0, Bytecode::LoadConst);
+        assert_eq!(vm.instructions[2].0 .0, Bytecode::Halt);
+        assert_eq!(vm.constants[0], Value::Int(Integer::from(5)));
+        assert_eq!(vm.constants[1], Value::Int(Integer::from(3)));
+    }
+}
