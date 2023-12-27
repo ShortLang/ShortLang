@@ -29,6 +29,7 @@ pub enum Bytecode {
     // Some built in functions
     Print,
     Println,
+    Len,
     Input,
     TypeOf,
     ToInt,

@@ -114,6 +114,8 @@ impl VM {
             }
 
             ExprKind::Postfix(expr, op) => match op {
+                // TODO: fix the inc and dec instructions
+
                 PostfixOp::Increase => {
                     if let ExprKind::Ident(name) = expr.inner {
                         self.push_data(Value::String(name), 0..0);
@@ -122,6 +124,7 @@ impl VM {
                     self.instructions
                         .push((Instr(Bytecode::Inc, vec![]), expr.span));
                 }
+
                 PostfixOp::Decrease => {
                     if let ExprKind::Ident(name) = expr.inner {
                         self.push_data(Value::String(name), 0..0);
@@ -130,6 +133,7 @@ impl VM {
                     self.instructions
                         .push((Instr(Bytecode::Dec, vec![]), expr.span));
                 }
+
                 PostfixOp::Factorial => {
                     self.compile_expr(*expr.clone());
                     self.instructions
@@ -482,6 +486,16 @@ impl VM {
                             .push((Instr(Bytecode::Print, vec![]), expr.span));
                     }
 
+                    "len" => {
+                        for_each_arg!(args, 1,
+                            Some(e) => { self.compile_expr(e) },
+                            None => { self.stack.push(allocate(Value::Nil)) }
+                        );
+
+                        self.instructions
+                            .push((Instr(Bytecode::Len, vec![]), expr.span));
+                    }
+
                     "type" => {
                         for_each_arg!(args, 1,
                             Some(e) => { self.compile_expr(e) },
@@ -592,9 +606,9 @@ impl VM {
         let args = instr.1.clone();
         let byte = instr.0;
 
-        if self.iteration == GC_TRIGGER {
-            self.gc_recollect();
-        }
+        // if self.iteration == GC_TRIGGER {
+        // self.gc_recollect();
+        // }
 
         match byte {
             Halt => {
@@ -725,7 +739,8 @@ impl VM {
                 let index = self.stack.pop().unwrap().as_ref().as_int();
                 let array = self.stack.pop().unwrap().as_ref().as_array();
 
-                self.stack.push(allocate(array[index.to_usize().unwrap()].clone()));
+                self.stack
+                    .push(allocate(array[index.to_usize().unwrap()].clone()));
             },
 
             Mul => self.perform_bin_op(byte, span, |_, a, b| a.binary_mul(b)),
@@ -858,6 +873,11 @@ impl VM {
                         v => format!("{v}\n"),
                     }
                 )
+            },
+
+            Len => unsafe {
+                let len = self.stack.pop().unwrap().as_ref().as_array().len();
+                self.stack.push(allocate(Value::Int(len.into())));
             },
 
             Input => unsafe {
