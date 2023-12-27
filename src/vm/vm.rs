@@ -30,7 +30,7 @@ pub struct VM {
 
     variables_id: HashMap<String, VarId>,
     variables: Vec<HashMap<u32, Option<NonNull<Value>>>>,
-    stack_var_names: Vec<String>,
+    // stack_var_names: Vec<String>,
 
     // memory: Memory,
     constants: Vec<Value>,
@@ -50,7 +50,7 @@ impl VM {
             stack: vec![],
             iteration: 0,
             variables: vec![HashMap::new()],
-            stack_var_names: vec![],
+            // stack_var_names: vec![],
             var_id_count: 0,
             variables_id: HashMap::new(),
             constants: vec![],
@@ -107,12 +107,18 @@ impl VM {
 
             ExprKind::Postfix(expr, op) => match op {
                 PostfixOp::Increase => {
-                    self.compile_expr(*expr.clone());
+                    if let ExprKind::Ident(name) = expr.inner {
+                        self.stack.push(allocate(Value::String(name)));
+                    }
+
                     self.instructions
                         .push((Instr(Bytecode::Inc, vec![]), expr.span));
                 }
                 PostfixOp::Decrease => {
-                    self.compile_expr(*expr.clone());
+                    if let ExprKind::Ident(name) = expr.inner {
+                        self.stack.push(allocate(Value::String(name)));
+                    }
+
                     self.instructions
                         .push((Instr(Bytecode::Dec, vec![]), expr.span));
                 }
@@ -544,13 +550,13 @@ impl VM {
                 let v = self.get_var(id as _);
                 if self.get_var(id).is_some() {
                     self.stack.push(v.unwrap_or(allocate(Value::Nil)));
-                    self.stack_var_names.push(
-                        self.variables_id
-                            .iter()
-                            .find(|(_, &v_id)| v_id == id)
-                            .map(|(name, _)| name.clone())
-                            .unwrap(),
-                    );
+                    // self.stack_var_names.push(
+                    // self.variables_id
+                    // .iter()
+                    // .find(|(_, &v_id)| v_id == id)
+                    // .map(|(name, _)| name.clone())
+                    // .unwrap(),
+                    // );
                 } else {
                     self.runtime_error("Variable not found", span)
                 }
@@ -645,32 +651,43 @@ impl VM {
                 a.binary_div(b)
             }),
 
-            Inc => {
-                match self.modify_variable(|var| match var {
-                    Value::Int(i) => Ok(Value::Int(i + Integer::from(1))),
-                    Value::Float(f) => Ok(Value::Float(f + Float::with_val(53, 1.0))),
-                    _ => Err(format!(
-                        "Cannot increment value of type {:?}",
-                        var.get_type()
-                    )),
-                }) {
-                    Ok(_) => {}
-                    Err(e) => self.runtime_error(&e, span),
+            Inc => unsafe {
+                let var_name = self.stack.pop().unwrap().as_ref().as_str();
+                dbg!(var_name);
+                let mut value_ptr = self.get_var(self.variables_id[var_name]).unwrap();
+
+                match value_ptr.as_mut() {
+                    Value::Int(i) => *i += 1,
+                    Value::Float(f) => *f += 1,
+                    Value::Bool(b) => *b = !*b,
+                    _ => self.runtime_error(
+                        &format!(
+                            "Cannot increment value of type {}",
+                            value_ptr.as_ref().get_type()
+                        ),
+                        span,
+                    ),
                 }
-            }
-            Dec => {
-                match self.modify_variable(|var| match var {
-                    Value::Int(i) => Ok(Value::Int(i - Integer::from(1))),
-                    Value::Float(f) => Ok(Value::Float(f - Float::with_val(53, 1.0))),
-                    _ => Err(format!(
-                        "Cannot decrement value of type {:?}",
-                        var.get_type()
-                    )),
-                }) {
-                    Ok(_) => {}
-                    Err(e) => self.runtime_error(&e, span),
+            },
+
+            Dec => unsafe {
+                let var_name = self.stack.pop().unwrap().as_ref().as_str();
+                let mut value_ptr = self.get_var(self.variables_id[var_name]).unwrap();
+
+                match value_ptr.as_mut() {
+                    Value::Int(i) => *i -= 1,
+                    Value::Float(f) => *f -= 1,
+                    Value::Bool(b) => *b = !*b,
+                    _ => self.runtime_error(
+                        &format!(
+                            "Cannot decrement value of type {}",
+                            value_ptr.as_ref().get_type()
+                        ),
+                        span,
+                    ),
                 }
-            }
+            },
+
             Factorial => unsafe {
                 let val = self.stack.pop().unwrap().as_ref();
                 self.stack
@@ -889,24 +906,24 @@ impl VM {
         }
     }
 
-    fn modify_variable<F>(&mut self, modify_fn: F) -> Result<(), String>
-    where
-        F: FnOnce(&Value) -> Result<Value, String>,
-    {
-        unsafe {
-            let _ = self.stack.pop().unwrap().as_ref();
-            let var_name = self.stack_var_names.pop().unwrap();
-            let var_id = *self.variables_id.get(&var_name).unwrap();
-            let var = self.get_var(var_id).unwrap();
-            let modified_value = modify_fn(var.as_ref())?;
+    // fn modify_variable<F>(&mut self, modify_fn: F) -> Result<(), String>
+    // where
+    //     F: FnOnce(&Value) -> Result<Value, String>,
+    // {
+    //     unsafe {
+    //         let _ = self.stack.pop().unwrap().as_ref();
+    //         let var_name = self.stack_var_names.pop().unwrap();
+    //         let var_id = *self.variables_id.get(&var_name).unwrap();
+    //         let var = self.get_var(var_id).unwrap();
+    //         let modified_value = modify_fn(var.as_ref())?;
 
-            self.variables.last_mut().unwrap().insert(
-                var_id,
-                Some(NonNull::new_unchecked(alloc_new_value(modified_value))),
-            );
-            Ok(())
-        }
-    }
+    //         self.variables.last_mut().unwrap().insert(
+    //             var_id,
+    //             Some(NonNull::new_unchecked(alloc_new_value(modified_value))),
+    //         );
+    //         Ok(())
+    //     }
+    // }
 }
 
 #[cfg(test)]
