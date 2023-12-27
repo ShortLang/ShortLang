@@ -8,7 +8,6 @@ pub(crate) struct FunctionData {
     pub name: String,
     pub parameters: Vec<(String, VarId)>,
     pub instruction_range: Range<usize>,
-    pub returns: bool,
     pub scope_idx: usize,
 }
 
@@ -30,4 +29,9 @@ impl FunctionData {
 
 pub fn allocate(val: Value) -> NonNull<Value> {
     NonNull::new(alloc_new_value(val)).expect("failed to allocate")
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct FnStackData {
+    pub(crate) pc_before: usize,
 }

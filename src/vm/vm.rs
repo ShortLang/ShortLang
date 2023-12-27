@@ -5,6 +5,7 @@ use std::{collections::HashMap, ops::Range};
 
 use super::value::Value;
 use crate::parser::PostfixOp;
+use crate::vm::memory;
 use crate::{
     parser::{BinaryOp, Expr, ExprKind},
     vm::memory::alloc_new_value,
@@ -18,7 +19,9 @@ use super::{
 
 pub type VarId = u32;
 pub type VarPtr = Option<NonNull<Value>>;
-const GC_TRIGGER: usize = 1000;
+pub(crate) type CallStack = Vec<FnStackData>;
+
+const GC_TRIGGER: usize = 1 << 20;
 
 pub struct VM {
     src: String,
@@ -41,6 +44,7 @@ pub struct VM {
 
     /// ptr to corresponding function bytecode
     functions: HashMap<String, FunctionData>,
+    call_stack: CallStack,
 }
 
 impl VM {
@@ -58,6 +62,7 @@ impl VM {
             src: src.to_owned(),
             exprs,
             functions: HashMap::new(),
+            call_stack: CallStack::new(),
             // memory: Memory::new(),
         }
     }
@@ -82,8 +87,14 @@ impl VM {
         for expr in exprs.iter() {
             self.compile_expr(expr.clone());
         }
+
         self.instructions
             .push((Instr(Bytecode::Halt, vec![]), 0..0));
+
+        // for (Instr(bytecode, _), _) in &self.instructions {
+        // println!("Instr: {bytecode}");
+        // }
+
         self.run();
     }
 
@@ -300,20 +311,21 @@ impl VM {
                 let scope_idx = self.variables.len();
                 self.variables.push(scope);
 
-                let body_start = self.instructions.len();
-
                 self.push_data(name.as_str().into(), expr.span.clone());
                 self.instructions
                     .push((Instr(Bytecode::Function, vec![]), expr.span));
 
-                let mut returns = false;
+                let body_start = self.instructions.len();
+                // let mut returns = false;
                 for expr in body {
-                    if matches![expr.inner, ExprKind::Return(..)] {
-                        returns = true;
-                    }
+                    // if matches![expr.inner, ExprKind::Return(..)] {
+                    // returns = true;
+                    // }
 
                     self.compile_expr(expr);
                 }
+
+                self.instructions.push((Instr(Bytecode::Ret, vec![]), 0..0));
 
                 let body_end = self.instructions.len();
 
@@ -323,14 +335,11 @@ impl VM {
                         name: name.clone(),
                         parameters: fn_params,
                         instruction_range: body_start..body_end,
-                        returns,
                         scope_idx,
                     },
                 );
 
                 self.variables_id = old_var_id;
-                self.stack
-                    .push(NonNull::new(alloc_new_value(Value::String(name.clone()))).unwrap());
             }
 
             ExprKind::InlineFunction(name, param_names, body) => {
@@ -349,12 +358,11 @@ impl VM {
                 let scope_idx = self.variables.len();
                 self.variables.push(scope);
 
-                let body_start = self.instructions.len();
-
                 self.push_data(name.as_str().into(), expr.span.clone());
                 self.instructions
                     .push((Instr(Bytecode::Function, vec![]), expr.span.clone()));
 
+                let body_start = self.instructions.len();
                 self.compile_expr(Expr {
                     span: expr.span,
                     inner: ExprKind::Return(body),
@@ -368,7 +376,6 @@ impl VM {
                         name: name.clone(),
                         parameters: fn_params,
                         instruction_range: body_start..body_end,
-                        returns: true,
                         scope_idx,
                     },
                 );
@@ -378,6 +385,8 @@ impl VM {
 
             ExprKind::Return(val) => {
                 self.compile_expr(*val);
+                self.instructions
+                    .push((Instr(Bytecode::Ret, vec![]), expr.span));
             }
 
             ExprKind::Call(ref name, ref args) => {
@@ -575,10 +584,6 @@ impl VM {
             },
 
             Function => unsafe {
-                // for i in &self.stack {
-                //     println!("stack: {}", i.as_ref());
-                // }
-
                 let fn_name = self
                     .stack
                     .pop()
@@ -587,9 +592,7 @@ impl VM {
                     .as_str();
                 let fn_obj = &self.functions[fn_name];
 
-                if fn_obj.instruction_range.contains(&self.pc) {
-                    self.pc = fn_obj.instruction_range.end - 1;
-                }
+                self.pc = fn_obj.instruction_range.end - 1;
             },
 
             FnCall => unsafe {
@@ -611,7 +614,11 @@ impl VM {
                 } = fn_obj_option.unwrap();
 
                 let mut fn_args = (0..parameters.len())
-                    .map(|_| self.stack.pop().unwrap_or(allocate(Value::Nil)))
+                    .map(|_| {
+                        self.stack
+                            .pop()
+                            .unwrap_or(memory::mark(allocate(Value::Nil)))
+                    })
                     .collect::<Vec<_>>();
 
                 fn_args.reverse();
@@ -622,8 +629,10 @@ impl VM {
                         Some(fn_args[idx]);
                 }
 
-                self.call_function(fn_name);
+                self.push_call_stack(fn_obj.instruction_range.start);
             },
+
+            Ret => self.pop_call_stack(),
 
             Mul => self.perform_bin_op(byte, span, |_, a, b| a.binary_mul(b)),
             Mod => self.perform_bin_op(byte, span, |_, a, b| a.binary_mod(b)),
@@ -653,7 +662,7 @@ impl VM {
 
             Inc => unsafe {
                 let var_name = self.stack.pop().unwrap().as_ref().as_str();
-                dbg!(var_name);
+                // dbg!(var_name);
                 let mut value_ptr = self.get_var(self.variables_id[var_name]).unwrap();
 
                 match value_ptr.as_mut() {
@@ -837,14 +846,14 @@ impl VM {
 
     pub fn gc_recollect(&mut self) {
         for item in &mut self.stack {
-            mark(unsafe { item.as_mut() })
+            mark(*item);
         }
 
         // Marking the values in the variables
         for scope in self.variables.iter() {
             for item in scope.values() {
                 if item.is_some() {
-                    mark(unsafe { item.unwrap().as_mut() })
+                    mark(item.unwrap());
                 }
             }
         }
@@ -904,6 +913,15 @@ impl VM {
                 ),
             }
         }
+    }
+
+    fn push_call_stack(&mut self, fn_ptr: usize) {
+        self.call_stack.push(FnStackData { pc_before: self.pc });
+        self.pc = fn_ptr - 1;
+    }
+
+    fn pop_call_stack(&mut self) {
+        self.pc = self.call_stack.pop().unwrap().pc_before;
     }
 
     // fn modify_variable<F>(&mut self, modify_fn: F) -> Result<(), String>
@@ -1026,7 +1044,6 @@ mod tests {
                 name: "f".to_string(),
                 parameters: vec![("x".to_string(), 0)],
                 instruction_range: 0..0,
-                returns: false,
                 scope_idx: 0,
             },
         );
@@ -1055,7 +1072,6 @@ mod tests {
                 name: "f".to_string(),
                 parameters: vec![("x".to_string(), 0)],
                 instruction_range: 0..0,
-                returns: false,
                 scope_idx: 0,
             },
         );

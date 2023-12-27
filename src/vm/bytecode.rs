@@ -38,6 +38,7 @@ pub enum Bytecode {
     Function,
     FnCall,
     Ret,
+
     Mod,
     BinaryPow,
     Pow,

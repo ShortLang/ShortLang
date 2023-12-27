@@ -1,7 +1,7 @@
 use std::{
     alloc::{alloc, dealloc, Layout},
     collections::HashMap,
-    sync::Mutex,
+    sync::Mutex, ptr::NonNull,
 };
 
 use lazy_static::lazy_static;
@@ -39,11 +39,11 @@ pub fn alloc_new_value(val: Value) -> *mut Value {
     ptr
 }
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
-pub fn mark(node: *mut Value) {
+pub fn mark(node: NonNull<Value>) -> NonNull<Value> {
     let mut all_allocations = ALL_ALLOCATIONS.lock().unwrap();
     let mut grey_objects = Vec::new();
 
-    if let Some(item) = all_allocations.get_mut(&(node as usize)) {
+    if let Some(item) = all_allocations.get_mut(&(node.as_ptr() as usize)) {
         if *item == GCItemState::White {
             *item = GCItemState::Grey;
             grey_objects.push(node);
@@ -51,16 +51,16 @@ pub fn mark(node: *mut Value) {
     }
 
     while let Some(g) = grey_objects.pop() {
-        if let Some(item) = all_allocations.get_mut(&(g as usize)) {
+        if let Some(item) = all_allocations.get_mut(&(g.as_ptr() as usize)) {
             if *item == GCItemState::Grey {
                 *item = GCItemState::Black;
                 // We'll be needing this when we addd arrays / tuples later
-                if let Some(children) = unsafe { (*g).referenced_children() } {
+                if let Some(children) = unsafe { g.as_ref().referenced_children() } {
                     for child in children {
                         if let Some(item) = all_allocations.get_mut(&(child as usize)) {
                             if *item == GCItemState::White {
                                 *item = GCItemState::Grey;
-                                grey_objects.push(child);
+                                grey_objects.push(unsafe { child.as_ref().unwrap().into() });
                             }
                         }
                     }
@@ -68,6 +68,8 @@ pub fn mark(node: *mut Value) {
             }
         }
     }
+
+    node
 }
 
 pub fn sweep() {
