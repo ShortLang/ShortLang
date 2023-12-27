@@ -92,7 +92,7 @@ impl VM {
             .push((Instr(Bytecode::Halt, vec![]), 0..0));
 
         // for (Instr(bytecode, _), _) in &self.instructions {
-        // println!("Instr: {bytecode}");
+            // println!("Instr: {bytecode}");
         // }
 
         self.run();
@@ -115,7 +115,7 @@ impl VM {
             ExprKind::Postfix(expr, op) => match op {
                 PostfixOp::Increase => {
                     if let ExprKind::Ident(name) = expr.inner {
-                        self.stack.push(allocate(Value::String(name)));
+                        self.push_data(Value::String(name), 0..0);
                     }
 
                     self.instructions
@@ -123,7 +123,7 @@ impl VM {
                 }
                 PostfixOp::Decrease => {
                     if let ExprKind::Ident(name) = expr.inner {
-                        self.stack.push(allocate(Value::String(name)));
+                        self.push_data(Value::String(name), 0..0);
                     }
 
                     self.instructions
@@ -511,6 +511,27 @@ impl VM {
                     .push(ternary_else_start);
             }
 
+            ExprKind::While(condition, body) => {
+                // evaluate the conditional
+                let body_start = self.instructions.len();
+                self.compile_expr(*condition);
+
+                let while_instr_ptr = self.instructions.len();
+                self.instructions
+                    .push((Instr(Bytecode::While, vec![]), expr.span));
+
+                for expr in body {
+                    self.compile_expr(expr);
+                }
+
+                self.instructions
+                    .push((Instr(Bytecode::Jmp, vec![body_start]), 0..0));
+
+                let body_end = self.instructions.len();
+
+                self.instructions[while_instr_ptr].0 .1.push(body_end);
+            }
+
             _ => {}
         }
     }
@@ -624,6 +645,15 @@ impl VM {
                 self.pc = fn_obj.instruction_range.end - 1;
             },
 
+            While => unsafe {
+                let loop_end = args[0];
+                let condition = self.stack.pop().unwrap().as_ref().bool_eval();
+
+                if !condition {
+                    self.pc = loop_end - 1;
+                }
+            },
+
             FnCall => unsafe {
                 let fn_name = self
                     .stack
@@ -691,7 +721,6 @@ impl VM {
 
             Inc => unsafe {
                 let var_name = self.stack.pop().unwrap().as_ref().as_str();
-                // dbg!(var_name);
                 let mut value_ptr = self.get_var(self.variables_id[var_name]).unwrap();
 
                 match value_ptr.as_mut() {

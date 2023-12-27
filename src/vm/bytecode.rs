@@ -49,6 +49,7 @@ pub enum Bytecode {
     // Conditionals
     TernaryStart,
     Jmp,
+    While,
 }
 
 #[derive(Clone, Debug)]

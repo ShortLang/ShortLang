@@ -1,7 +1,5 @@
-say_hello: {
-	$"hello world"
+a = 0
+>. a < 10 {
+	$("a = " + a)
+	a++
 }
-
-get_bool: true
-
-get_bool() ? say_hello():$"nah"
