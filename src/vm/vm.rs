@@ -113,9 +113,14 @@ impl VM {
                     .push((Instr(Bytecode::LoadConst, vec![index - 1]), expr.span));
             }
 
+            ExprKind::Nil => {
+                let index = self.add_constant(Value::Nil);
+                self.instructions
+                    .push((Instr(Bytecode::LoadConst, vec![index - 1]), expr.span));
+            }
+
             ExprKind::Postfix(expr, op) => match op {
                 // TODO: fix the inc and dec instructions
-
                 PostfixOp::Increase => {
                     if let ExprKind::Ident(name) = expr.inner {
                         self.push_data(Value::String(name), 0..0);
@@ -410,7 +415,6 @@ impl VM {
             }
 
             ExprKind::Call(ref name, ref args) => {
-                // i'm obsessed with macros
                 macro_rules! for_each_arg {
                     { $arg:ident, $n:expr, Some($e:ident) => { $($some:tt)* }, None => { $($none:tt)* } } => {
                         $arg.as_ref()
@@ -512,6 +516,7 @@ impl VM {
                         self.push_data(name.as_str().into(), expr.span.clone());
                         self.instructions
                             .push((Instr(Bytecode::FnCall, vec![]), expr.span));
+                        self.stack.push(allocate(Value::Nil));
                     }
                 }
             }

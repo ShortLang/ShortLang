@@ -1,7 +1,8 @@
 use std::{
     alloc::{alloc, dealloc, Layout},
     collections::HashMap,
-    sync::Mutex, ptr::NonNull,
+    ptr::NonNull,
+    sync::Mutex,
 };
 
 use lazy_static::lazy_static;

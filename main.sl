@@ -1,12 +1,4 @@
-arr = [1, 2, 3, 4, 5]
-print_each(arr)
-
-print_each arr: {
-	len = len(arr)
-	i = 0
-
-	>.i < len {
-		$("item " + i + ": " + arr[i])
-		i = i + 1
-	}
-}
+a b: _hello
+$istype(_hello, _int)==false
+$println(_damn)==nil
+$a(1)==_hello
