@@ -8,6 +8,7 @@ pub enum Value {
     Float(Float),
     String(String),
     Bool(bool),
+    Array(Vec<Value>),
 
     #[default]
     Nil,
@@ -42,6 +43,13 @@ impl Value {
         }
     }
 
+    pub fn as_array(&self) -> &[Value] {
+        match self {
+            Self::Array(arr) => arr,
+            _ => panic!("Expected an array value, found, {}", self.get_type()),
+        }
+    }
+
     pub fn binary_add(&self, rhs: &Value) -> Option<Value> {
         match (self, rhs) {
             (Value::Int(lhs), Value::Int(rhs)) => Some(Value::Int(Integer::from(lhs + rhs))),
@@ -68,6 +76,7 @@ impl Value {
             Value::Float(_) => "float".to_string(),
             Value::String(_) => "str".to_string(),
             Value::Bool(_) => "bool".to_string(),
+            Value::Array(_) => "array".to_string(),
             Value::Nil => "nil".to_string(),
         }
     }
@@ -77,17 +86,6 @@ impl Value {
             Value::Int(i) => *i == 0,
             Value::Float(f) => *f == 0.0,
             _ => false,
-        }
-    }
-
-    pub fn to_string(&self) -> String {
-        match self {
-            Value::Int(i) => i.to_string(),
-            Value::Float(f) => f.to_string(),
-            Value::String(s) => s.clone(),
-            Value::Bool(b) => b.to_string(),
-
-            _ => unreachable!(),
         }
     }
 
@@ -287,6 +285,10 @@ impl Value {
 
     pub fn referenced_children(&self) -> Option<Vec<*mut Value>> {
         None
+        // match self {
+        //     Value::Array(a) => Some(a.clone()),
+        //     _ => None,
+        // }
     }
 }
 
@@ -399,6 +401,14 @@ impl std::fmt::Display for Value {
                 Self::Float(f) => f.to_string(),
                 Self::Bool(b) => b.to_string(),
                 Self::String(s) => s.to_string(),
+                Self::Array(arr) => format!(
+                    "[{}]",
+                    arr.iter()
+                        .map(|i| i.to_string())
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                ),
+
                 Self::Nil => "nil".to_string(),
             }
         )

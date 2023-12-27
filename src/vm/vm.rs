@@ -1,5 +1,6 @@
 use miette::{miette, LabeledSpan};
 use rug::{Assign, Float, Integer};
+use std::array;
 use std::ptr::NonNull;
 use std::{collections::HashMap, ops::Range};
 
@@ -92,7 +93,7 @@ impl VM {
             .push((Instr(Bytecode::Halt, vec![]), 0..0));
 
         // for (Instr(bytecode, _), _) in &self.instructions {
-            // println!("Instr: {bytecode}");
+        // println!("Instr: {bytecode}");
         // }
 
         self.run();
@@ -185,6 +186,14 @@ impl VM {
                     .push((Instr(Bytecode::GetVar, vec![*id as usize]), expr.span));
             }
 
+            ExprKind::Index(array, index) => {
+                self.compile_expr(*array);
+                self.compile_expr(*index);
+
+                self.instructions
+                    .push((Instr(Bytecode::Index, vec![]), expr.span))
+            }
+
             ExprKind::Set(name, value) => {
                 // special case for functions
                 match value.inner {
@@ -229,12 +238,23 @@ impl VM {
                     expr.span,
                 ));
             }
+
             ExprKind::Bool(boolean) => {
                 let index = self.add_constant(Value::Bool(boolean));
                 self.instructions.push((
                     Instr(Bytecode::LoadConst, vec![index as usize - 1]),
                     expr.span,
                 ));
+            }
+
+            ExprKind::Array(val) => {
+                let len = val.len();
+                for elem in val {
+                    self.compile_expr(elem);
+                }
+
+                self.instructions
+                    .push((Instr(Bytecode::Array, vec![len]), expr.span));
             }
 
             ExprKind::Binary(a, op, b) => {
@@ -483,7 +503,6 @@ impl VM {
             }
 
             ExprKind::Ternary(condition, then_block, else_block) => {
-                // eval the conditional and push it into the stack
                 self.compile_expr(*condition);
 
                 let ternary_instr_ptr = self.instructions.len();
@@ -512,7 +531,6 @@ impl VM {
             }
 
             ExprKind::While(condition, body) => {
-                // evaluate the conditional
                 let body_start = self.instructions.len();
                 self.compile_expr(*condition);
 
@@ -693,6 +711,23 @@ impl VM {
 
             Ret => self.pop_call_stack(),
 
+            Array => unsafe {
+                let items = args[0];
+                let mut array = vec![];
+
+                (0..items).for_each(|_| array.push(self.stack.pop().unwrap().as_ref().clone()));
+                array.reverse();
+
+                self.stack.push(allocate(Value::Array(array)));
+            },
+
+            Index => unsafe {
+                let index = self.stack.pop().unwrap().as_ref().as_int();
+                let array = self.stack.pop().unwrap().as_ref().as_array();
+
+                self.stack.push(allocate(array[index.to_usize().unwrap()].clone()));
+            },
+
             Mul => self.perform_bin_op(byte, span, |_, a, b| a.binary_mul(b)),
             Mod => self.perform_bin_op(byte, span, |_, a, b| a.binary_mod(b)),
             BinaryPow => self.perform_bin_op(byte, span, |_, a, b| a.binary_bitwise_xor(b)),
@@ -870,7 +905,9 @@ impl VM {
                             );
                         }
                     },
+
                     Value::Nil => Value::Int(Integer::from(0)),
+                    Value::Array(_) => self.runtime_error("cannot convert array type to int", span),
                 }));
             },
 
@@ -889,11 +926,11 @@ impl VM {
                             );
                         }
                     },
+
                     Value::Nil => Float::with_val(53, 0.0),
+                    Value::Array(_) => self.runtime_error("cannot convert array type to int", span),
                 })));
             },
-
-            _ => {}
         }
 
         self.pc += 1;

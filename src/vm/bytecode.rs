@@ -50,6 +50,10 @@ pub enum Bytecode {
     TernaryStart,
     Jmp,
     While,
+
+    // Array
+    Array,
+    Index,
 }
 
 #[derive(Clone, Debug)]
