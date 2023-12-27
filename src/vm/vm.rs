@@ -102,18 +102,14 @@ impl VM {
         match expr.inner {
             ExprKind::Int(integer) => {
                 let index = self.add_constant(Value::Int(integer));
-                self.instructions.push((
-                    Instr(Bytecode::LoadConst, vec![index as u32 - 1]),
-                    expr.span,
-                ));
+                self.instructions
+                    .push((Instr(Bytecode::LoadConst, vec![index - 1]), expr.span));
             }
 
             ExprKind::Float(float) => {
                 let index = self.add_constant(Value::Float(float));
-                self.instructions.push((
-                    Instr(Bytecode::LoadConst, vec![index as u32 - 1]),
-                    expr.span,
-                ));
+                self.instructions
+                    .push((Instr(Bytecode::LoadConst, vec![index - 1]), expr.span));
             }
 
             ExprKind::Postfix(expr, op) => match op {
@@ -148,8 +144,10 @@ impl VM {
                 }
 
                 let id = id.unwrap();
-                self.instructions
-                    .push((Instr(Bytecode::GetVar, vec![*id]), expr.span.clone()));
+                self.instructions.push((
+                    Instr(Bytecode::GetVar, vec![*id as usize]),
+                    expr.span.clone(),
+                ));
                 self.compile_expr(*val);
                 match op {
                     BinaryOp::AddEq => {
@@ -173,7 +171,7 @@ impl VM {
                 }
 
                 self.instructions
-                    .push((Instr(Bytecode::Replace, vec![*id]), expr.span));
+                    .push((Instr(Bytecode::Replace, vec![*id as usize]), expr.span));
             }
 
             ExprKind::Ident(x) => {
@@ -184,7 +182,7 @@ impl VM {
 
                 let id = id.unwrap();
                 self.instructions
-                    .push((Instr(Bytecode::GetVar, vec![*id]), expr.span));
+                    .push((Instr(Bytecode::GetVar, vec![*id as usize]), expr.span));
             }
 
             ExprKind::Set(name, value) => {
@@ -208,10 +206,8 @@ impl VM {
                     self.instructions
                         .push((Instr(Bytecode::MakeVar, vec![]), expr.span.clone()));
                     self.compile_expr(*value);
-                    self.instructions.push((
-                        Instr(Bytecode::Replace, vec![self.var_id_count as u32]),
-                        expr.span,
-                    ));
+                    self.instructions
+                        .push((Instr(Bytecode::Replace, vec![self.var_id_count]), expr.span));
                     self.var_id_count += 1;
                     return;
                 }
@@ -219,7 +215,7 @@ impl VM {
                 self.instructions.push((
                     Instr(
                         Bytecode::Replace,
-                        vec![*self.variables_id.get(&name).unwrap()],
+                        vec![*self.variables_id.get(&name).unwrap() as usize],
                     ),
                     expr.span,
                 ));
@@ -229,14 +225,14 @@ impl VM {
             ExprKind::String(string) => {
                 let index = self.add_constant(Value::String(string));
                 self.instructions.push((
-                    Instr(Bytecode::LoadConst, vec![index as u32 - 1]),
+                    Instr(Bytecode::LoadConst, vec![index as usize - 1]),
                     expr.span,
                 ));
             }
             ExprKind::Bool(boolean) => {
                 let index = self.add_constant(Value::Bool(boolean));
                 self.instructions.push((
-                    Instr(Bytecode::LoadConst, vec![index as u32 - 1]),
+                    Instr(Bytecode::LoadConst, vec![index as usize - 1]),
                     expr.span,
                 ));
             }
@@ -485,6 +481,36 @@ impl VM {
                     }
                 }
             }
+
+            ExprKind::Ternary(condition, then_block, else_block) => {
+                // eval the conditional and push it into the stack
+                self.compile_expr(*condition);
+
+                let ternary_instr_ptr = self.instructions.len();
+                self.instructions
+                    .push((Instr(Bytecode::TernaryStart, vec![]), expr.span));
+
+                for expr in then_block {
+                    self.compile_expr(expr);
+                }
+
+                let jump_instr_ptr = self.instructions.len();
+                self.instructions.push((Instr(Bytecode::Jmp, vec![]), 0..0));
+
+                let ternary_else_start = self.instructions.len();
+                for expr in else_block.unwrap_or(vec![]) {
+                    self.compile_expr(expr);
+                }
+
+                let ternary_end = self.instructions.len();
+
+                self.instructions[jump_instr_ptr].0 .1.push(ternary_end);
+                self.instructions[ternary_instr_ptr]
+                    .0
+                     .1
+                    .push(ternary_else_start);
+            }
+
             _ => {}
         }
     }
@@ -552,12 +578,15 @@ impl VM {
                 let id = args[0];
                 let value = self.stack.pop().unwrap_or(allocate(Value::Nil));
 
-                self.variables.last_mut().unwrap().insert(id, Some(value));
+                self.variables
+                    .last_mut()
+                    .unwrap()
+                    .insert(id as u32, Some(value));
             }
             GetVar => {
                 let id = args[0];
                 let v = self.get_var(id as _);
-                if self.get_var(id).is_some() {
+                if self.get_var(id as u32).is_some() {
                     self.stack.push(v.unwrap_or(allocate(Value::Nil)));
                     // self.stack_var_names.push(
                     // self.variables_id
@@ -725,6 +754,16 @@ impl VM {
                     })));
             },
 
+            Jmp => self.pc = args[0] - 1,
+            TernaryStart => unsafe {
+                let ternary_else_start = args[0];
+                let condition = self.stack.pop().unwrap().as_ref().bool_eval();
+
+                if !condition {
+                    self.pc = ternary_else_start - 1;
+                }
+            },
+
             Lt => self.compare_values(span, |a, b| a.less_than(b)),
             Gt => self.compare_values(span, |a, b| a.greater_than(b)),
             Le => self.compare_values(span, |a, b| a.less_than_or_equal(b)),
@@ -864,7 +903,7 @@ impl VM {
     fn push_data(&mut self, data: Value, span: Range<usize>) {
         let const_idx = self.add_constant(data);
         self.instructions
-            .push((Instr(Bytecode::LoadConst, vec![const_idx as u32 - 1]), span));
+            .push((Instr(Bytecode::LoadConst, vec![const_idx - 1]), span));
     }
 
     fn compare_values<F>(&mut self, span: Range<usize>, compare_fn: F)

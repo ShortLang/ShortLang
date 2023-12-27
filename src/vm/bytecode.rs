@@ -45,10 +45,14 @@ pub enum Bytecode {
     Inc,
     Dec,
     Factorial,
+
+    // Conditionals
+    TernaryStart,
+    Jmp,
 }
 
 #[derive(Clone, Debug)]
-pub struct Instr(pub Bytecode, pub Vec<u32>);
+pub struct Instr(pub Bytecode, pub Vec<usize>);
 
 impl std::fmt::Display for Bytecode {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

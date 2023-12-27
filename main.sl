@@ -1,6 +1,7 @@
-recurse x: {
-	$("number: " + x)
-	recurse(x + 1)
+say_hello: {
+	$"hello world"
 }
 
-recurse(0)
+get_bool: true
+
+get_bool() ? say_hello():$"nah"
