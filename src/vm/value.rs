@@ -1,3 +1,4 @@
+use crate::vm::value::Value::Bool;
 use rug::ops::Pow;
 use rug::{Float, Integer};
 use std::ops::*;
@@ -183,18 +184,15 @@ impl Value {
     }
 
     pub fn less_than(&self, other: &Value) -> Option<Value> {
-        match (self, other) {
-            (Value::Int(lhs), Value::Int(rhs)) => Some(Value::Bool(lhs < rhs)),
-            (Value::Float(lhs), Value::Float(rhs)) => Some(Value::Bool(lhs < rhs)),
-            (Value::Int(lhs), Value::Float(rhs)) => {
-                Some(Value::Bool(Float::with_val(53, lhs) < *rhs))
-            }
-            (Value::Float(lhs), Value::Int(rhs)) => {
-                Some(Value::Bool(lhs < &Float::with_val(53, rhs)))
-            }
-            (Value::String(lhs), Value::String(rhs)) => Some(Value::Bool(lhs < rhs)),
-            _ => None,
-        }
+        Some(Value::Bool(match (self, other) {
+            (Value::Int(lhs), Value::Int(rhs)) => lhs < rhs,
+            (Value::Float(lhs), Value::Float(rhs)) => lhs < rhs,
+            (Value::Int(lhs), Value::Float(rhs)) => Float::with_val(53, lhs) < *rhs,
+            (Value::Float(lhs), Value::Int(rhs)) => lhs < &Float::with_val(53, rhs),
+            (Value::String(lhs), Value::String(rhs)) => lhs < rhs,
+            (Value::Array(lhs), Value::Array(rhs)) => lhs.len() < rhs.len(),
+            _ => return None,
+        }))
     }
 
     pub fn greater_than(&self, other: &Value) -> Option<Value> {
@@ -204,6 +202,7 @@ impl Value {
             (Value::Int(lhs), Value::Float(rhs)) => lhs > rhs,
             (Value::Float(lhs), Value::Int(rhs)) => lhs > rhs,
             (Value::String(lhs), Value::String(rhs)) => lhs > rhs,
+            (Value::Array(lhs), Value::Array(rhs)) => lhs.len() > rhs.len(),
 
             _ => return None,
         }))
@@ -216,6 +215,7 @@ impl Value {
             (Value::Int(lhs), Value::Float(rhs)) => lhs <= rhs,
             (Value::Float(lhs), Value::Int(rhs)) => lhs <= rhs,
             (Value::String(lhs), Value::String(rhs)) => lhs <= rhs,
+            (Value::Array(lhs), Value::Array(rhs)) => lhs.len() <= rhs.len(),
 
             _ => return None,
         }))
@@ -228,6 +228,7 @@ impl Value {
             (Value::Int(lhs), Value::Float(rhs)) => lhs >= rhs,
             (Value::Float(lhs), Value::Int(rhs)) => lhs >= rhs,
             (Value::String(lhs), Value::String(rhs)) => lhs >= rhs,
+            (Value::Array(lhs), Value::Array(rhs)) => lhs.len() >= rhs.len(),
 
             _ => return None,
         }))
@@ -241,8 +242,10 @@ impl Value {
             (Value::Float(lhs), Value::Int(rhs)) => lhs == rhs,
             (Value::Bool(lhs), Value::Bool(rhs)) => lhs == rhs,
             (Value::String(lhs), Value::String(rhs)) => lhs == rhs,
+            (Value::Array(lhs), Value::Array(rhs)) => lhs == rhs,
+            (Value::Nil, Value::Nil) => true,
 
-            _ => return None,
+            _ => false,
         }))
     }
 

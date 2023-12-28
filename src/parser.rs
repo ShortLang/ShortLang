@@ -19,6 +19,10 @@ pub enum LogosToken<'a> {
     True,
     #[token("false")]
     False,
+    #[token("nil")]
+    Nil,
+    #[token("inf")]
+    Inf,
     #[token("+")]
     Plus,
     #[token("-")]
@@ -117,6 +121,8 @@ impl<'a> fmt::Display for LogosToken<'a> {
             LogosToken::Or => write!(f, "||"),
             LogosToken::True => write!(f, "true"),
             LogosToken::False => write!(f, "false"),
+            LogosToken::Nil => write!(f, "nil"),
+            LogosToken::Inf => write!(f, "inf"),
             LogosToken::Percent => write!(f, "%"),
             LogosToken::FourDots => write!(f, "::"),
             LogosToken::Bang => write!(f, "!"),
@@ -591,6 +597,8 @@ impl<'a> PParser<'a> {
             }
             LogosToken::True => ExprKind::Bool(true),
             LogosToken::False => ExprKind::Bool(false),
+            LogosToken::Nil => ExprKind::Nil,
+            LogosToken::Inf => ExprKind::Float(Float::with_val(53, Float::parse("inf").unwrap())),
             LogosToken::String(value) => {
                 // remove the first quote and last quote
                 let mut new_str = value.to_owned();
@@ -608,11 +616,6 @@ impl<'a> PParser<'a> {
             }
             LogosToken::Ident(value) => {
                 let ident = ExprKind::Ident(value.to_string());
-                if value == "nil" {
-                    self.proceed();
-                    let current = &self.current;
-                    return Expr::new(span.start..current.1.end, ExprKind::Nil);
-                }
                 self.proceed();
                 if LogosToken::LParen == self.current.0 {
                     self.proceed();
@@ -633,16 +636,10 @@ impl<'a> PParser<'a> {
                     let kind = ExprKind::Call(value.to_string(), Some(args));
                     return Expr::new(span, kind);
                 }
-                let kind = {
-                    if value.starts_with("_") && value.len() > 1 {
-                        // Delete the _ and replace every next _ with a space
-                        let mut new_value = value.to_string();
-                        new_value.remove(0);
-                        new_value = new_value.replace("_", " ");
-                        ExprKind::String(new_value)
-                    } else {
-                        ident
-                    }
+                let kind = if value.starts_with("_") {
+                    ExprKind::String(value[1..].replace("_", " "))
+                } else {
+                    ident
                 };
                 let current = &self.current;
                 return Expr::new(span.start..current.1.end, kind);
