@@ -9,6 +9,7 @@ pub(crate) struct FunctionData {
     pub parameters: Vec<(String, VarId)>,
     pub instruction_range: Range<usize>,
     pub scope_idx: usize,
+    pub returns: bool,
 }
 
 impl FunctionData {

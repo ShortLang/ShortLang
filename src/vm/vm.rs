@@ -1,6 +1,5 @@
 use miette::{miette, LabeledSpan};
 use rug::{Assign, Float, Integer};
-use std::array;
 use std::ptr::NonNull;
 use std::{collections::HashMap, ops::Range};
 
@@ -93,7 +92,7 @@ impl VM {
             .push((Instr(Bytecode::Halt, vec![]), 0..0));
 
         // for (Instr(bytecode, _), _) in &self.instructions {
-        // println!("Instr: {bytecode}");
+            // println!("Instr: {bytecode}");
         // }
 
         self.run();
@@ -115,10 +114,16 @@ impl VM {
 
             ExprKind::Postfix(expr, op) => match op {
                 // TODO: fix the inc and dec instructions
-
                 PostfixOp::Increase => {
-                    if let ExprKind::Ident(name) = expr.inner {
-                        self.push_data(Value::String(name), 0..0);
+                    match expr.inner {
+                        ExprKind::Ident(name) => {
+                            self.push_data(Value::String(name), expr.span.clone())
+                        }
+
+                        _ => self.runtime_error(
+                            "Increment operator is only allowed with var names",
+                            expr.span.clone(),
+                        ),
                     }
 
                     self.instructions
@@ -126,8 +131,15 @@ impl VM {
                 }
 
                 PostfixOp::Decrease => {
-                    if let ExprKind::Ident(name) = expr.inner {
-                        self.push_data(Value::String(name), 0..0);
+                    match expr.inner {
+                        ExprKind::Ident(name) => {
+                            self.push_data(Value::String(name), expr.span.clone())
+                        }
+
+                        _ => self.runtime_error(
+                            "Increment operator is only allowed with var names",
+                            expr.span.clone(),
+                        ),
                     }
 
                     self.instructions
@@ -216,14 +228,19 @@ impl VM {
                 // If not create a new one
                 if self.variables_id.get(&name).is_none() {
                     self.variables_id.insert(name, self.var_id_count as u32);
+
                     self.instructions
                         .push((Instr(Bytecode::MakeVar, vec![]), expr.span.clone()));
+
                     self.compile_expr(*value);
+
                     self.instructions
                         .push((Instr(Bytecode::Replace, vec![self.var_id_count]), expr.span));
+
                     self.var_id_count += 1;
                     return;
                 }
+
                 self.compile_expr(*value);
                 self.instructions.push((
                     Instr(
@@ -232,7 +249,8 @@ impl VM {
                     ),
                     expr.span,
                 ));
-                self.var_id_count += 1;
+
+                // self.var_id_count += 1;
             }
 
             ExprKind::String(string) => {
@@ -316,7 +334,6 @@ impl VM {
             }
 
             ExprKind::MultilineFunction(name, param_names, body) => {
-                let old_var_id = std::mem::take(&mut self.variables_id);
                 let mut scope = HashMap::new();
 
                 let mut fn_params = vec![];
@@ -336,11 +353,11 @@ impl VM {
                     .push((Instr(Bytecode::Function, vec![]), expr.span));
 
                 let body_start = self.instructions.len();
-                // let mut returns = false;
+                let mut returns = false;
                 for expr in body {
-                    // if matches![expr.inner, ExprKind::Return(..)] {
-                    // returns = true;
-                    // }
+                    if matches![expr.inner, ExprKind::Return(..)] {
+                        returns = true;
+                    }
 
                     self.compile_expr(expr);
                 }
@@ -356,14 +373,12 @@ impl VM {
                         parameters: fn_params,
                         instruction_range: body_start..body_end,
                         scope_idx,
+                        returns,
                     },
                 );
-
-                self.variables_id = old_var_id;
             }
 
             ExprKind::InlineFunction(name, param_names, body) => {
-                let old_var_id = std::mem::take(&mut self.variables_id);
                 let mut scope = HashMap::new();
 
                 let mut fn_params = vec![];
@@ -397,10 +412,9 @@ impl VM {
                         parameters: fn_params,
                         instruction_range: body_start..body_end,
                         scope_idx,
+                        returns: false,
                     },
                 );
-
-                self.variables_id = old_var_id;
             }
 
             ExprKind::Return(val) => {
@@ -615,18 +629,21 @@ impl VM {
                 self.gc_recollect();
                 return true;
             }
+
             TypeOf => unsafe {
                 let value = self.stack.pop().unwrap();
                 let ty = value.as_ref().get_type();
                 self.stack
                     .push(NonNull::new_unchecked(alloc_new_value(Value::String(ty))));
             },
+
             MakeVar => {
                 self.variables
                     .last_mut()
                     .unwrap()
                     .insert(self.var_id_count as u32, None);
             }
+
             Replace => {
                 let id = args[0];
                 let value = self.stack.pop().unwrap_or(allocate(Value::Nil));
@@ -636,18 +653,12 @@ impl VM {
                     .unwrap()
                     .insert(id as u32, Some(value));
             }
+
             GetVar => {
                 let id = args[0];
                 let v = self.get_var(id as _);
                 if self.get_var(id as u32).is_some() {
                     self.stack.push(v.unwrap_or(allocate(Value::Nil)));
-                    // self.stack_var_names.push(
-                    // self.variables_id
-                    // .iter()
-                    // .find(|(_, &v_id)| v_id == id)
-                    // .map(|(name, _)| name.clone())
-                    // .unwrap(),
-                    // );
                 } else {
                     self.runtime_error("Variable not found", span)
                 }
@@ -701,6 +712,7 @@ impl VM {
                 let fn_obj @ FunctionData {
                     parameters,
                     scope_idx,
+                    returns,
                     ..
                 } = fn_obj_option.unwrap();
 
@@ -720,7 +732,12 @@ impl VM {
                         Some(fn_args[idx]);
                 }
 
+                let returns = *returns;
                 self.push_call_stack(fn_obj.instruction_range.start);
+
+                if !returns {
+                    self.stack.push(allocate(Value::Nil));
+                }
             },
 
             Ret => self.pop_call_stack(),
@@ -1170,6 +1187,7 @@ mod tests {
                 parameters: vec![("x".to_string(), 0)],
                 instruction_range: 0..0,
                 scope_idx: 0,
+                returns: false,
             },
         );
         vm.compile_expr(Expr {
@@ -1198,6 +1216,7 @@ mod tests {
                 parameters: vec![("x".to_string(), 0)],
                 instruction_range: 0..0,
                 scope_idx: 0,
+                returns: true,
             },
         );
         let instr = Instr(Bytecode::FnCall, vec![0]);

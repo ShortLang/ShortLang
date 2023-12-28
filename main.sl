@@ -7,6 +7,6 @@ print_each arr: {
 
 	>.i < len {
 		$("item " + i + ": " + arr[i])
-		i = i + 1
+		i++
 	}
 }
