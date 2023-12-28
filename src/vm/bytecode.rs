@@ -49,8 +49,11 @@ pub enum Bytecode {
 
     // Conditionals
     TernaryStart,
-    Jmp,
     While,
+
+    Jmp,
+    Break,
+    Continue,
 
     // Array
     Array,

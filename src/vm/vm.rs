@@ -91,8 +91,8 @@ impl VM {
         self.instructions
             .push((Instr(Bytecode::Halt, vec![]), 0..0));
 
-        // for (Instr(bytecode, _), _) in &self.instructions {
-        //     println!("Instr: {bytecode}");
+        // for (idx, (Instr(bytecode, args), _)) in self.instructions.iter().enumerate() {
+        //     println!("instr[{idx}] = ({bytecode}, {args:?})");
         // }
 
         self.run();
@@ -570,7 +570,7 @@ impl VM {
 
                 let while_instr_ptr = self.instructions.len();
                 self.instructions
-                    .push((Instr(Bytecode::While, vec![]), expr.span));
+                    .push((Instr(Bytecode::While, vec![]), expr.span.clone()));
 
                 for expr in body {
                     self.compile_expr(expr);
@@ -581,7 +581,41 @@ impl VM {
 
                 let body_end = self.instructions.len();
 
-                self.instructions[while_instr_ptr].0 .1.push(body_end);
+                self.instructions[while_instr_ptr].0 .1.extend_from_slice(&[body_end, body_start]);
+
+                // for br_instr_ptr in breaks {
+                //     self.instructions[br_instr_ptr].0 .1.push(body_end);
+                // }
+
+                // for ct_instr_ptr in continues {
+                //     self.instructions[ct_instr_ptr].0 .1.push(body_start);
+                // }
+            }
+
+            ExprKind::Break => {
+                let (parent_loop_instr_ptr, _) =
+                    match self.find_parent_loop_start_instr(self.instructions.len()) {
+                        Some(ptr) => ptr,
+                        None => self.runtime_error("break outside a loop?", expr.span),
+                    };
+
+                self.instructions.push((
+                    Instr(Bytecode::Break, vec![parent_loop_instr_ptr]),
+                    expr.span,
+                ));
+            }
+
+            ExprKind::Continue => {
+                let (parent_loop_instr_ptr, _) =
+                    match self.find_parent_loop_start_instr(self.instructions.len()) {
+                        Some(ptr) => ptr,
+                        None => self.runtime_error("break outside a loop?", expr.span),
+                    };
+
+                self.instructions.push((
+                    Instr(Bytecode::Continue, vec![parent_loop_instr_ptr]),
+                    expr.span,
+                ));
             }
 
             _ => {}
@@ -867,6 +901,19 @@ impl VM {
             },
 
             Jmp => self.pc = args[0] - 1,
+
+            Break => {
+                let while_instr_ptr = args[0];
+                let (Instr(_, loop_args), _) = &self.instructions[while_instr_ptr];
+                self.pc = loop_args[0] - 1;
+            }
+
+            Continue => {
+                let while_instr_ptr = args[0];
+                let (Instr(_, loop_args), _) = &self.instructions[while_instr_ptr];
+                self.pc = loop_args[1] - 1;
+            }
+
             TernaryStart => unsafe {
                 let ternary_else_start = args[0];
                 let condition = self.stack.pop().unwrap().as_ref().bool_eval();
@@ -1098,6 +1145,16 @@ impl VM {
 
         self.pc = pc_before;
         self.variables[scope_idx] = variables;
+    }
+
+    fn find_parent_loop_start_instr(
+        &mut self,
+        current_instr_ptr: usize,
+    ) -> Option<(usize, &(Instr, Range<usize>))> {
+        (0..current_instr_ptr)
+            .rev()
+            .map(|i| (i, &self.instructions[i]))
+            .find(|&(_, (instr, _))| matches!(instr.0, Bytecode::While))
     }
 }
 

@@ -1,7 +1,7 @@
 a=0
->.a<10{
+>. a < 10 {
     a++
     $a
-    a==5?br:ct  // <- will stop at 5
+    a == 5 ? br:ct
     $_unreachable
 }
