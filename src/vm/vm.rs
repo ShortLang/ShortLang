@@ -51,7 +51,7 @@ impl VM {
     pub fn new(src: &str, exprs: Vec<Expr>) -> Self {
         Self {
             pc: 0,
-            stack: vec![],
+            stack: Vec::with_capacity(1000),
             iteration: 0,
             variables: vec![HashMap::new()],
             // stack_var_names: vec![],
@@ -92,7 +92,7 @@ impl VM {
             .push((Instr(Bytecode::Halt, vec![]), 0..0));
 
         // for (Instr(bytecode, _), _) in &self.instructions {
-            // println!("Instr: {bytecode}");
+        // println!("Instr: {bytecode}");
         // }
 
         self.run();
@@ -418,7 +418,7 @@ impl VM {
                         parameters: fn_params,
                         instruction_range: body_start..body_end,
                         scope_idx,
-                        returns: false,
+                        returns: true,
                     },
                 );
             }
@@ -1048,6 +1048,7 @@ impl VM {
             let a = self.stack.pop().unwrap().as_ref();
 
             let result = binary_op(self, a, b);
+
             match result {
                 Some(r) => self.stack.push(NonNull::new_unchecked(alloc_new_value(r))),
                 None => self.runtime_error(
@@ -1071,25 +1072,12 @@ impl VM {
     fn pop_call_stack(&mut self) {
         self.pc = self.call_stack.pop().unwrap().pc_before;
     }
+}
 
-    // fn modify_variable<F>(&mut self, modify_fn: F) -> Result<(), String>
-    // where
-    //     F: FnOnce(&Value) -> Result<Value, String>,
-    // {
-    //     unsafe {
-    //         let _ = self.stack.pop().unwrap().as_ref();
-    //         let var_name = self.stack_var_names.pop().unwrap();
-    //         let var_id = *self.variables_id.get(&var_name).unwrap();
-    //         let var = self.get_var(var_id).unwrap();
-    //         let modified_value = modify_fn(var.as_ref())?;
-
-    //         self.variables.last_mut().unwrap().insert(
-    //             var_id,
-    //             Some(NonNull::new_unchecked(alloc_new_value(modified_value))),
-    //         );
-    //         Ok(())
-    //     }
-    // }
+impl Drop for VM {
+    fn drop(&mut self) {
+        memory::deallocate_all();
+    }
 }
 
 #[cfg(test)]

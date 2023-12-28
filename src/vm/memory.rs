@@ -1,15 +1,8 @@
-use std::{
-    alloc::{alloc, dealloc, Layout},
-    collections::HashMap,
-    ptr::NonNull,
-    sync::Mutex,
-};
+use std::{collections::HashMap, ptr::NonNull, sync::Mutex};
 
 use lazy_static::lazy_static;
 
 use super::value::Value;
-
-static LAYOUT: Layout = Layout::new::<Value>();
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[repr(u8)]
@@ -24,11 +17,14 @@ lazy_static! {
 }
 
 pub fn alloc_value_ptr() -> *mut Value {
-    let ptr = unsafe { alloc(LAYOUT) as *mut Value };
+    // let ptr = unsafe { alloc(LAYOUT) as *mut Value };
+    let ptr = Box::leak(Box::new(Value::Nil));
+
     ALL_ALLOCATIONS
         .lock()
         .unwrap()
-        .insert(ptr as usize, GCItemState::White);
+        .insert(ptr as *mut Value as usize, GCItemState::White);
+
     ptr
 }
 
@@ -78,9 +74,7 @@ pub fn sweep() {
     let mut to_remove = Vec::new();
     for (ptr, state) in all_allocations.iter() {
         if *state == GCItemState::White {
-            unsafe {
-                dealloc(*ptr as *mut u8, LAYOUT);
-            }
+            dealloc(*ptr as *mut Value);
             to_remove.push(*ptr);
         }
     }
@@ -92,4 +86,15 @@ pub fn sweep() {
     for (_, state) in all_allocations.iter_mut() {
         *state = GCItemState::White;
     }
+}
+
+pub fn deallocate_all() {
+    for (ptr, _) in ALL_ALLOCATIONS.lock().unwrap().iter() {
+        let ptr: *mut Value = *ptr as *mut usize as _;
+        drop(unsafe { Box::from_raw(ptr) });
+    }
+}
+
+pub fn dealloc(ptr: *mut Value) {
+    drop(unsafe { Box::from_raw(ptr) });
 }
