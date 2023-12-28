@@ -19,7 +19,7 @@ use super::{
 
 pub type VarId = u32;
 pub type VarPtr = Option<NonNull<Value>>;
-pub(crate) type CallStack = Vec<FnStackData>;
+pub(crate) type CallStack = Vec<(FnStackData, usize, HashMap<u32, VarPtr>)>;
 
 const GC_TRIGGER: usize = 1 << 20;
 
@@ -92,7 +92,7 @@ impl VM {
             .push((Instr(Bytecode::Halt, vec![]), 0..0));
 
         // for (Instr(bytecode, _), _) in &self.instructions {
-        // println!("Instr: {bytecode}");
+        //     println!("Instr: {bytecode}");
         // }
 
         self.run();
@@ -732,6 +732,8 @@ impl VM {
 
                 fn_args.reverse();
 
+                let variables = self.variables[*scope_idx].clone();
+
                 // setup the variables
                 for (idx, param_var_idx) in fn_obj.get_var_ids().into_iter().enumerate() {
                     *self.variables[*scope_idx].get_mut(&param_var_idx).unwrap() =
@@ -739,7 +741,7 @@ impl VM {
                 }
 
                 let returns = *returns;
-                self.push_call_stack(fn_obj.instruction_range.start);
+                self.push_call_stack(fn_obj.instruction_range.start, *scope_idx, variables);
 
                 if !returns {
                     self.stack.push(allocate(Value::Nil));
@@ -762,8 +764,19 @@ impl VM {
                 let index = self.stack.pop().unwrap().as_ref().as_int();
                 let array = self.stack.pop().unwrap().as_ref().as_array();
 
-                self.stack
-                    .push(allocate(array[index.to_usize().unwrap()].clone()));
+                self.stack.push(allocate(
+                    match array.get(index.to_usize().unwrap()) {
+                        Some(e) => e,
+                        None => self.runtime_error(
+                            &format!(
+                                "Index out of bounds, size is: {size}, index is: {index}",
+                                size = array.len()
+                            ),
+                            span,
+                        ),
+                    }
+                    .clone(),
+                ));
             },
 
             Mul => self.perform_bin_op(byte, span, |_, a, b| a.binary_mul(b)),
@@ -1064,13 +1077,25 @@ impl VM {
         }
     }
 
-    fn push_call_stack(&mut self, fn_ptr: usize) {
-        self.call_stack.push(FnStackData { pc_before: self.pc });
-        self.pc = fn_ptr - 1;
+    fn push_call_stack(
+        &mut self,
+        fn_ptr: usize,
+        scope_idx: usize,
+        variables: HashMap<u32, VarPtr>,
+    ) {
+        let new_pc = fn_ptr - 1;
+
+        self.call_stack
+            .push((FnStackData { pc_before: self.pc }, scope_idx, variables));
+
+        self.pc = new_pc;
     }
 
     fn pop_call_stack(&mut self) {
-        self.pc = self.call_stack.pop().unwrap().pc_before;
+        let (FnStackData { pc_before }, scope_idx, variables) = self.call_stack.pop().unwrap();
+
+        self.pc = pc_before;
+        self.variables[scope_idx] = variables;
     }
 }
 
