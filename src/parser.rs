@@ -609,6 +609,8 @@ impl<'a> PParser<'a> {
             v @ LogosToken::Dollar | v @ LogosToken::DollarDollar => {
                 self.proceed();
                 let expr = self.expr(0);
+                println!("{:?}", expr);
+                println!("{:?}", span);
                 return Expr::new(
                     span.start..self.current.1.end,
                     ExprKind::Call(v.to_string(), Some(vec![expr])),

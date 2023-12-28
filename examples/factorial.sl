@@ -3,3 +3,7 @@ factorial x: {
 }
 
 $factorial(30)
+
+// or simply use the built-in postfix operator
+
+$30!

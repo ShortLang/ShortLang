@@ -1,4 +1,3 @@
-use crate::vm::value::Value::Bool;
 use rug::ops::Pow;
 use rug::{Float, Integer};
 use std::ops::*;

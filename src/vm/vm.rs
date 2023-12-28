@@ -466,6 +466,16 @@ impl VM {
                             .push((Instr(Bytecode::Println, vec![]), expr.span));
                     }
 
+                    "$$" => {
+                        for_each_arg!(args, 1,
+                            Some(e) => { self.compile_expr(e) },
+                            None => { self.stack.push(allocate(Value::Nil)) }
+                        );
+
+                        self.instructions
+                            .push((Instr(Bytecode::Print, vec![]), expr.span));
+                    }
+
                     "to_i" => {
                         for_each_arg!(args, 1,
                             Some(e) => { self.compile_expr(e) },
@@ -493,16 +503,6 @@ impl VM {
 
                         self.instructions
                             .push((Instr(Bytecode::Input, vec![]), expr.span));
-                    }
-
-                    "$$" => {
-                        for_each_arg!(args, 1,
-                            Some(e) => { self.compile_expr(e) },
-                            None => { self.stack.push(allocate(Value::Nil)) }
-                        );
-
-                        self.instructions
-                            .push((Instr(Bytecode::Print, vec![]), expr.span));
                     }
 
                     "len" => {
@@ -796,10 +796,7 @@ impl VM {
 
             Div => self.perform_bin_op(byte, span.clone(), |s, a, b| {
                 if b.is_zero() {
-                    s.runtime_error(
-                        &format!("Cannot divide by zero, {a} / {b} = undefined"),
-                        span,
-                    );
+                    s.runtime_error("Cannot divide by zero", span);
                 }
 
                 a.binary_div(b)
@@ -903,10 +900,15 @@ impl VM {
             },
 
             Println => unsafe {
-                print!(
+                println!(
                     "{}",
-                    match self.stack.pop().unwrap_or(allocate(Value::Nil)).as_ref() {
-                        v => format!("{v}\n"),
+                    match self
+                        .stack
+                        .pop()
+                        .unwrap_or(allocate(Value::String("\n".to_string())))
+                        .as_ref()
+                    {
+                        v => v.to_string(),
                     }
                 )
             },
