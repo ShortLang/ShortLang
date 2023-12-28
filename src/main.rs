@@ -36,8 +36,7 @@ pub struct Args {
 
 fn main() {
     let args = Args::parse();
-    let std_sl = std::str::from_utf8(include_bytes!("std.sl")).expect("Failed to read std.sl file");
-    let src = std_sl.to_owned()
+    let src = include_str!("../std/std.sl").to_owned()
         + "\n"
         + &fs::read_to_string(&args.file).unwrap_or_else(|_| {
             println!("Error: Input file could not be read");

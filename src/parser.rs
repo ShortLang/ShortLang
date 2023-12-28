@@ -112,6 +112,11 @@ pub enum LogosToken<'a> {
     Ident(&'a str),
     #[token(">.")]
     While,
+    #[token("br")]
+    Break,
+    #[token("ct")]
+    Continue,
+
     Error,
 }
 impl<'a> fmt::Display for LogosToken<'a> {
@@ -166,6 +171,8 @@ impl<'a> fmt::Display for LogosToken<'a> {
             LogosToken::Dollar => write!(f, "$"),
             LogosToken::DollarDollar => write!(f, "$$"),
             LogosToken::While => write!(f, ">."),
+            LogosToken::Break => write!(f, "br"),
+            LogosToken::Continue => write!(f, "ct"),
             LogosToken::PAdd => write!(f, "++"),
             LogosToken::PSub => write!(f, "--"),
         }
@@ -283,6 +290,8 @@ pub enum ExprKind {
     Index(Box<Expr>, Box<Expr>),
     Nil,
     Error,
+    Break,
+    Continue,
 }
 
 pub struct PParser<'a> {
@@ -599,6 +608,8 @@ impl<'a> PParser<'a> {
             LogosToken::False => ExprKind::Bool(false),
             LogosToken::Nil => ExprKind::Nil,
             LogosToken::Inf => ExprKind::Float(Float::with_val(53, Float::parse("inf").unwrap())),
+            LogosToken::Break => ExprKind::Break,
+            LogosToken::Continue => ExprKind::Continue,
             LogosToken::String(value) => {
                 // remove the first quote and last quote
                 let mut new_str = value.to_owned();
@@ -609,8 +620,6 @@ impl<'a> PParser<'a> {
             v @ LogosToken::Dollar | v @ LogosToken::DollarDollar => {
                 self.proceed();
                 let expr = self.expr(0);
-                println!("{:?}", expr);
-                println!("{:?}", span);
                 return Expr::new(
                     span.start..self.current.1.end,
                     ExprKind::Call(v.to_string(), Some(vec![expr])),

@@ -1,3 +1,7 @@
-a=[1,2,3]
-b=[1,2]
-$a<=b
+a=0
+>.a<10{
+    a++
+    $a
+    a==5?br:ct  // <- will stop at 5
+    $_unreachable
+}
