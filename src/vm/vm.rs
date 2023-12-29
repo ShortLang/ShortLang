@@ -20,7 +20,12 @@ use super::{
 
 pub type VarId = u32;
 pub type VarPtr = Option<NonNull<Value>>;
-pub(crate) type CallStack = Vec<(FnStackData, usize, HashMap<u32, VarPtr>)>;
+pub(crate) type CallStack = Vec<(
+    FnStackData,
+    usize,
+    HashMap<String, VarId>,
+    HashMap<u32, VarPtr>,
+)>;
 
 const GC_TRIGGER: usize = 1 << 20;
 
@@ -376,6 +381,9 @@ impl VM {
             }
 
             ExprKind::MultilineFunction(name, param_names, body) => {
+                let old_id = self.variables_id.clone();
+                self.variables_id.clear();
+
                 let mut scope = HashMap::new();
 
                 let mut fn_params = vec![];
@@ -418,9 +426,14 @@ impl VM {
                         returns,
                     },
                 );
+
+                self.variables_id = old_id;
             }
 
             ExprKind::InlineFunction(name, param_names, body) => {
+                let old_id = self.variables_id.clone();
+                self.variables_id.clear();
+
                 let mut scope = HashMap::new();
 
                 let mut fn_params = vec![];
@@ -457,6 +470,8 @@ impl VM {
                         returns: true,
                     },
                 );
+
+                self.variables_id = old_id;
             }
 
             ExprKind::Return(val) => {
@@ -594,14 +609,6 @@ impl VM {
                     .0
                      .1
                     .extend_from_slice(&[body_end, body_start]);
-
-                // for br_instr_ptr in breaks {
-                //     self.instructions[br_instr_ptr].0 .1.push(body_end);
-                // }
-
-                // for ct_instr_ptr in continues {
-                //     self.instructions[ct_instr_ptr].0 .1.push(body_start);
-                // }
             }
 
             ExprKind::Break => {
@@ -956,10 +963,15 @@ impl VM {
                 let mut var_ptr = self
                     .get_var(self.variables_id[var_name])
                     .unwrap_or_else(|| {
-                        self.runtime_error(&format!("Variable '{var_name}' not found"), span.clone())
+                        self.runtime_error(
+                            &format!("Variable '{var_name}' not found"),
+                            span.clone(),
+                        )
                     });
 
-                if !matches!(var_ptr.as_ref().get_type().as_str(), "array" | "string") || !var_ptr.as_mut().push(value) {
+                if !matches!(var_ptr.as_ref().get_type().as_str(), "array" | "string")
+                    || !var_ptr.as_mut().push(value)
+                {
                     self.runtime_error(
                         &format!(
                             "Cannot push value of type {val_type} into the type of: {var_type}",
@@ -1173,17 +1185,23 @@ impl VM {
     ) {
         let new_pc = fn_ptr - 1;
 
-        self.call_stack
-            .push((FnStackData { pc_before: self.pc }, scope_idx, variables));
+        self.call_stack.push((
+            FnStackData { pc_before: self.pc },
+            scope_idx,
+            self.variables_id.clone(),
+            variables,
+        ));
 
         self.pc = new_pc;
     }
 
     fn pop_call_stack(&mut self) {
-        let (FnStackData { pc_before }, scope_idx, variables) = self.call_stack.pop().unwrap();
+        let (FnStackData { pc_before }, scope_idx, variables_id, variables) =
+            self.call_stack.pop().unwrap();
 
         self.pc = pc_before;
         self.variables[scope_idx] = variables;
+        self.variables_id = variables_id;
     }
 
     fn find_parent_loop_start_instr(

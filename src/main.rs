@@ -36,7 +36,8 @@ pub struct Args {
 
 fn main() {
     let args = Args::parse();
-    let src = include_str!("../std/std.sl").to_owned()
+    let std_lib = include_str!("../std/std.sl").to_owned();
+    let src = std_lib
         + "\n"
         + &fs::read_to_string(&args.file).unwrap_or_else(|_| {
             println!("Error: Input file could not be read");
