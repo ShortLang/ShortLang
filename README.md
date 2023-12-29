@@ -115,10 +115,11 @@ The last expression in a multiline function is the return value.
 
 <br>
 
-You can also use `&` explicitly to denote the return value.
+You can also use `&` explicitly to denote the return value, if it is not at the end of the function.
 ```
 max a b: {
-    a > b ? 
+    a > b ? &a : &b
+    $"this line won't be printed"
 } 
 ```
 
@@ -188,7 +189,7 @@ Value of i is: 9
 ### Factorial function example
 ```
 factorial x: x < 2 ? 1 : x * factorial(x - 1)
-$factorial(10)
+$factorial(30)
 ```
 
 Prints
