@@ -112,6 +112,8 @@ pub enum LogosToken<'a> {
     Ident(&'a str),
     #[token(">.")]
     While,
+    #[token("ev")]
+    Every,
     #[token("br")]
     Break,
     #[token("ct")]
@@ -171,6 +173,7 @@ impl<'a> fmt::Display for LogosToken<'a> {
             LogosToken::Dollar => write!(f, "$"),
             LogosToken::DollarDollar => write!(f, "$$"),
             LogosToken::While => write!(f, ">."),
+            LogosToken::Every => write!(f, "ev"),
             LogosToken::Break => write!(f, "br"),
             LogosToken::Continue => write!(f, "ct"),
             LogosToken::PAdd => write!(f, "++"),
@@ -203,6 +206,10 @@ impl<'a> LogosToken<'a> {
             Self::Geq => BinaryOp::GreaterEq,
             Self::Neq => BinaryOp::NotEq,
             Self::Eqq => BinaryOp::Eq,
+            Self::AddEq => BinaryOp::AddEq,
+            Self::SubEq => BinaryOp::SubEq,
+            Self::MulEq => BinaryOp::MulEq,
+            Self::DivEq => BinaryOp::DivEq,
             Self::Or => BinaryOp::Or,
             Self::And => BinaryOp::And,
             Self::Dot => BinaryOp::Attr,
@@ -287,6 +294,7 @@ pub enum ExprKind {
     Postfix(Box<Expr>, PostfixOp),
     Array(Vec<Expr>),
     While(Box<Expr>, Vec<Expr>),
+    ForLoop(String, String, Vec<Expr>),
     Index(Box<Expr>, Box<Expr>),
     Nil,
     Error,
@@ -386,6 +394,7 @@ impl<'a> PParser<'a> {
                     ExprKind::While(Box::new(condition), block),
                 );
             }
+            LogosToken::Every => todo!(),
             LogosToken::Return => {
                 let start = self.current.1.start;
                 self.proceed();
@@ -463,6 +472,7 @@ impl<'a> PParser<'a> {
         Some(match op {
             Plus | Minus => (6, 7),
             Eqq | Neq | Leq | Geq | RAngle | LAngle | Or | And => (5, 6),
+            AddEq | SubEq | MulEq | DivEq => (1, 2),
             Times | Slash => (8, 9),
             Percent => (10, 11),
             BinaryPow => (12, 13),

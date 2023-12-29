@@ -56,15 +56,26 @@ impl Value {
             (Value::Float(lhs), Value::Float(rhs)) => {
                 Some(Value::Float(Float::with_val(53, lhs + rhs)))
             }
-            // Concetrate strings
             (Value::String(lhs), Value::String(rhs)) => Some(Value::String(format!("{lhs}{rhs}"))),
-            // Int or float
-            // Float or Int
             (Value::Int(lhs), Value::Float(rhs)) => {
                 Some(Value::Float(Float::with_val(53, lhs + rhs)))
             }
             (Value::Float(lhs), Value::Int(rhs)) => {
                 Some(Value::Float(Float::with_val(53, lhs + rhs)))
+            }
+            (Value::String(lhs), Value::Int(rhs)) => Some(Value::String(format!("{lhs}{rhs}"))),
+            (Value::Int(lhs), Value::String(rhs)) => Some(Value::String(format!("{lhs}{rhs}"))),
+            (Value::Float(lhs), Value::String(rhs)) => Some(Value::String(format!("{lhs}{rhs}"))),
+            (Value::String(lhs), Value::Float(rhs)) => Some(Value::String(format!("{lhs}{rhs}"))),
+            (Value::Array(lhs), Value::Array(rhs)) => {
+                let mut arr = lhs.clone();
+                arr.extend(rhs.clone());
+                Some(Value::Array(arr))
+            }
+            (Value::Array(lhs), rhs) | (rhs, Value::Array(lhs)) => {
+                let mut arr = lhs.clone();
+                arr.push(rhs.clone());
+                Some(Value::Array(arr))
             }
             _ => None,
         }
@@ -116,6 +127,12 @@ impl Value {
             }
             (Value::Float(lhs), Value::Int(rhs)) => {
                 Some(Value::Float(Float::with_val(53, lhs * rhs)))
+            }
+            (Value::String(lhs), Value::Int(rhs)) => {
+                Some(Value::String(lhs.repeat(rhs.to_u32().unwrap() as usize)))
+            }
+            (Value::Int(lhs), Value::String(rhs)) => {
+                Some(Value::String(rhs.repeat(lhs.to_u32().unwrap() as usize)))
             }
             _ => None,
         }
@@ -286,7 +303,7 @@ impl Value {
 
             Self::String(string) => match other {
                 Self::String(s) => string.push_str(s.as_str()),
-                _ => return false
+                _ => return false,
             },
 
             _ => panic!("Cannot push into the type of: {}", self.get_type()),

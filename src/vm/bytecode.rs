@@ -61,6 +61,10 @@ pub enum Bytecode {
     // Array
     Array,
     Index,
+    AddEq,
+    SubEq,
+    MulEq,
+    DivEq,
 }
 
 #[derive(Clone, Debug)]

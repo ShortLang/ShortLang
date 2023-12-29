@@ -348,6 +348,18 @@ impl VM {
                     BinaryOp::Eq => self
                         .instructions
                         .push((Instr(Bytecode::Eq, vec![]), expr.span)),
+                    BinaryOp::AddEq => self
+                        .instructions
+                        .push((Instr(Bytecode::AddEq, vec![]), expr.span)),
+                    BinaryOp::SubEq => self
+                        .instructions
+                        .push((Instr(Bytecode::SubEq, vec![]), expr.span)),
+                    BinaryOp::MulEq => self
+                        .instructions
+                        .push((Instr(Bytecode::MulEq, vec![]), expr.span)),
+                    BinaryOp::DivEq => self
+                        .instructions
+                        .push((Instr(Bytecode::DivEq, vec![]), expr.span)),
                     BinaryOp::And => self
                         .instructions
                         .push((Instr(Bytecode::And, vec![]), expr.span)),
@@ -846,6 +858,10 @@ impl VM {
                     None
                 }
             }),
+            AddEq => self.perform_bin_op_in_place(byte, span, |_, a, b| a.binary_add(b)),
+            SubEq => self.perform_bin_op_in_place(byte, span, |_, a, b| a.binary_sub(b)),
+            MulEq => self.perform_bin_op_in_place(byte, span, |_, a, b| a.binary_mul(b)),
+            DivEq => self.perform_bin_op_in_place(byte, span, |_, a, b| a.binary_div(b)),
 
             Div => self.perform_bin_op(byte, span.clone(), |s, a, b| {
                 if b.is_zero() {
@@ -881,6 +897,9 @@ impl VM {
                     Value::Int(i) => *i -= 1,
                     Value::Float(f) => *f -= 1,
                     Value::Bool(b) => *b = !*b,
+                    Value::Array(a) => {
+                        a.pop();
+                    }
                     _ => self.runtime_error(
                         &format!(
                             "Cannot decrement value of type {}",
@@ -1164,6 +1183,31 @@ impl VM {
 
             match result {
                 Some(r) => self.stack.push(NonNull::new_unchecked(alloc_new_value(r))),
+                None => self.runtime_error(
+                    format!(
+                        "Cannot perform {op} operation on values of type {:?} and {:?}",
+                        a.get_type(),
+                        b.get_type()
+                    )
+                    .as_str(),
+                    span,
+                ),
+            }
+        }
+    }
+
+    fn perform_bin_op_in_place<F>(&mut self, op: Bytecode, span: Range<usize>, binary_op: F)
+    where
+        F: FnOnce(&Self, &Value, &Value) -> Option<Value>,
+    {
+        unsafe {
+            let b = self.stack.pop().unwrap().as_ref();
+            let a = self.stack.pop().unwrap().as_mut();
+
+            let result = binary_op(self, a, b);
+
+            match result {
+                Some(r) => *a = r,
                 None => self.runtime_error(
                     format!(
                         "Cannot perform {op} operation on values of type {:?} and {:?}",
