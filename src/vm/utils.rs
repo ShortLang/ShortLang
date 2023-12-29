@@ -3,6 +3,32 @@ use std::ptr::NonNull;
 
 use super::{memory::alloc_new_value, value::Value, vm::VarId};
 
+#[macro_export]
+macro_rules! for_each_arg {
+    { $arg:ident, $n:expr, Some($e:ident) => { $($some:tt)* }, None => { $($none:tt)* } } => {
+        $arg.as_ref()
+            .unwrap_or(&vec![])
+            .into_iter()
+            .cloned()
+            .map(|i| Some(i))
+            .chain([None; $n])
+            .take($n)
+            .for_each(|i| match i {
+                Some($e) => $($some)*,
+                None => $($none)*,
+            }
+        )
+    };
+
+    { $arg:ident, $e:ident => { $($b:tt)* }} => {
+        $arg.as_ref()
+            .unwrap_or(&vec![])
+            .into_iter()
+            .cloned()
+            .for_each(|$e| $($b)*)
+    };
+}
+
 #[derive(Debug, Clone)]
 pub(crate) struct FunctionData {
     pub name: String,

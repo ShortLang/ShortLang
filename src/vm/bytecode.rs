@@ -35,6 +35,9 @@ pub enum Bytecode {
     ToInt,
     ToFloat,
 
+    // Method functions
+    Push,
+
     // FUNCTION,
     Function,
     FnCall,

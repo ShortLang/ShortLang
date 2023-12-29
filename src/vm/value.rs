@@ -273,6 +273,28 @@ impl Value {
         }
     }
 
+    pub fn push(&mut self, other: &Value) -> bool {
+        match self {
+            Self::Array(arr) => match other {
+                Self::Int(i) => arr.push(i.into()),
+                Self::Float(f) => arr.push(f.into()),
+                Self::Bool(b) => arr.push(b.into()),
+                Self::String(s) => arr.push(s.as_str().into()),
+                Self::Array(a) => arr.extend_from_slice(a),
+                Self::Nil => arr.push(Value::Nil),
+            },
+
+            Self::String(string) => match other {
+                Self::String(s) => string.push_str(s.as_str()),
+                _ => return false
+            },
+
+            _ => panic!("Cannot push into the type of: {}", self.get_type()),
+        }
+
+        true
+    }
+
     pub fn and(&self, other: &Value) -> Option<Value> {
         Some(Value::Bool(match (self, other) {
             (a, b) => a.bool_eval() == b.bool_eval(),
@@ -344,13 +366,19 @@ impl From<&u32> for Value {
 
 impl From<&Integer> for Value {
     fn from(value: &Integer) -> Self {
-        Value::Float(Float::with_val(53, value))
+        Value::Int(value.clone())
     }
 }
 
 impl From<Float> for Value {
     fn from(value: Float) -> Self {
         Value::Float(value)
+    }
+}
+
+impl From<&Float> for Value {
+    fn from(value: &Float) -> Self {
+        Value::Float(value.clone())
     }
 }
 

@@ -4,6 +4,7 @@ use std::ptr::NonNull;
 use std::{collections::HashMap, ops::Range};
 
 use super::value::Value;
+use crate::for_each_arg;
 use crate::parser::PostfixOp;
 use crate::vm::memory;
 use crate::{
@@ -286,8 +287,22 @@ impl VM {
             }
 
             ExprKind::Binary(a, op, b) => {
-                self.compile_expr(*a);
-                self.compile_expr(*b);
+                if !matches!(op, BinaryOp::Attr) {
+                    self.compile_expr(*a);
+                    self.compile_expr(*b.clone());
+                } else {
+                    match a.inner {
+                        ExprKind::Ident(name) => {
+                            self.push_data(Value::String(name), expr.span.clone())
+                        }
+
+                        _ => self.runtime_error(
+                            "Use of members is only allowed with identifiers",
+                            expr.span.clone(),
+                        ),
+                    }
+                }
+
                 match op {
                     BinaryOp::Add => self
                         .instructions
@@ -334,6 +349,27 @@ impl VM {
                     BinaryOp::Or => self
                         .instructions
                         .push((Instr(Bytecode::Or, vec![]), expr.span)),
+
+                    BinaryOp::Attr => match b.inner {
+                        ExprKind::Call(name, args) => match name.as_str() {
+                            "push" => {
+                                for_each_arg!(args, 1,
+                                    Some(e) => { self.compile_expr(e) },
+                                    None => { self.stack.push(allocate(Value::Nil)) }
+                                );
+
+                                self.instructions
+                                    .push((Instr(Bytecode::Push, vec![]), expr.span));
+                            }
+
+                            _ => self.runtime_error(
+                                &format!("Unknown member function: {name}"),
+                                expr.span,
+                            ),
+                        },
+
+                        _ => self.runtime_error("unknown member", expr.span),
+                    },
 
                     _ => todo!(),
                 }
@@ -429,112 +465,85 @@ impl VM {
                     .push((Instr(Bytecode::Ret, vec![]), expr.span));
             }
 
-            ExprKind::Call(ref name, ref args) => {
-                macro_rules! for_each_arg {
-                    { $arg:ident, $n:expr, Some($e:ident) => { $($some:tt)* }, None => { $($none:tt)* } } => {
-                        $arg.as_ref()
-                            .unwrap_or(&vec![])
-                            .into_iter()
-                            .cloned()
-                            .map(|i| Some(i))
-                            .chain([None; $n])
-                            .take($n)
-                            .for_each(|i| match i {
-                                Some($e) => $($some)*,
-                                None => $($none)*,
-                            }
-                        )
-                    };
+            ExprKind::Call(ref name, ref args) => match name.as_str() {
+                "$" => {
+                    for_each_arg!(args, 1,
+                        Some(e) => { self.compile_expr(e) },
+                        None => { self.stack.push(allocate(Value::Nil)) }
+                    );
 
-                    { $arg:ident, $e:ident => { $($b:tt)* }} => {
-                        $arg.as_ref()
-                            .unwrap_or(&vec![])
-                            .into_iter()
-                            .cloned()
-                            .for_each(|$e| $($b)*)
-                    };
+                    self.instructions
+                        .push((Instr(Bytecode::Println, vec![]), expr.span));
                 }
 
-                match name.as_str() {
-                    "$" => {
-                        for_each_arg!(args, 1,
-                            Some(e) => { self.compile_expr(e) },
-                            None => { self.stack.push(allocate(Value::Nil)) }
-                        );
+                "$$" => {
+                    for_each_arg!(args, 1,
+                        Some(e) => { self.compile_expr(e) },
+                        None => { self.stack.push(allocate(Value::Nil)) }
+                    );
 
-                        self.instructions
-                            .push((Instr(Bytecode::Println, vec![]), expr.span));
-                    }
-
-                    "$$" => {
-                        for_each_arg!(args, 1,
-                            Some(e) => { self.compile_expr(e) },
-                            None => { self.stack.push(allocate(Value::Nil)) }
-                        );
-
-                        self.instructions
-                            .push((Instr(Bytecode::Print, vec![]), expr.span));
-                    }
-
-                    "to_i" => {
-                        for_each_arg!(args, 1,
-                            Some(e) => { self.compile_expr(e) },
-                            None => { self.stack.push(allocate(Value::Nil)) }
-                        );
-
-                        self.instructions
-                            .push((Instr(Bytecode::ToInt, vec![]), expr.span));
-                    }
-
-                    "to_f" => {
-                        for_each_arg!(args, 1,
-                            Some(e) => { self.compile_expr(e) },
-                            None => { self.stack.push(allocate(Value::Nil)) }
-                        );
-
-                        self.instructions
-                            .push((Instr(Bytecode::ToFloat, vec![]), expr.span));
-                    }
-                    "input" => {
-                        for_each_arg!(args, 1,
-                            Some(e) => { self.compile_expr(e) },
-                            None => { self.stack.push(allocate(Value::Nil)) }
-                        );
-
-                        self.instructions
-                            .push((Instr(Bytecode::Input, vec![]), expr.span));
-                    }
-
-                    "len" => {
-                        for_each_arg!(args, 1,
-                            Some(e) => { self.compile_expr(e) },
-                            None => { self.stack.push(allocate(Value::Nil)) }
-                        );
-
-                        self.instructions
-                            .push((Instr(Bytecode::Len, vec![]), expr.span));
-                    }
-
-                    "type" => {
-                        for_each_arg!(args, 1,
-                            Some(e) => { self.compile_expr(e) },
-                            None => { self.stack.push(allocate(Value::Nil)) }
-                        );
-
-                        self.instructions
-                            .push((Instr(Bytecode::TypeOf, vec![]), expr.span));
-                    }
-
-                    _ => {
-                        for_each_arg!(args, arg => { self.compile_expr(arg) });
-
-                        self.push_data(name.as_str().into(), expr.span.clone());
-                        self.instructions
-                            .push((Instr(Bytecode::FnCall, vec![]), expr.span));
-                        self.stack.push(allocate(Value::Nil));
-                    }
+                    self.instructions
+                        .push((Instr(Bytecode::Print, vec![]), expr.span));
                 }
-            }
+
+                "to_i" => {
+                    for_each_arg!(args, 1,
+                        Some(e) => { self.compile_expr(e) },
+                        None => { self.stack.push(allocate(Value::Nil)) }
+                    );
+
+                    self.instructions
+                        .push((Instr(Bytecode::ToInt, vec![]), expr.span));
+                }
+
+                "to_f" => {
+                    for_each_arg!(args, 1,
+                        Some(e) => { self.compile_expr(e) },
+                        None => { self.stack.push(allocate(Value::Nil)) }
+                    );
+
+                    self.instructions
+                        .push((Instr(Bytecode::ToFloat, vec![]), expr.span));
+                }
+                "input" => {
+                    for_each_arg!(args, 1,
+                        Some(e) => { self.compile_expr(e) },
+                        None => { self.stack.push(allocate(Value::Nil)) }
+                    );
+
+                    self.instructions
+                        .push((Instr(Bytecode::Input, vec![]), expr.span));
+                }
+
+                "len" => {
+                    for_each_arg!(args, 1,
+                        Some(e) => { self.compile_expr(e) },
+                        None => { self.stack.push(allocate(Value::Nil)) }
+                    );
+
+                    self.instructions
+                        .push((Instr(Bytecode::Len, vec![]), expr.span));
+                }
+
+                "type" => {
+                    for_each_arg!(args, 1,
+                        Some(e) => { self.compile_expr(e) },
+                        None => { self.stack.push(allocate(Value::Nil)) }
+                    );
+
+                    self.instructions
+                        .push((Instr(Bytecode::TypeOf, vec![]), expr.span));
+                }
+
+                _ => {
+                    for_each_arg!(args, arg => { self.compile_expr(arg) });
+
+                    self.push_data(name.as_str().into(), expr.span.clone());
+                    self.instructions
+                        .push((Instr(Bytecode::FnCall, vec![]), expr.span));
+                    self.stack.push(allocate(Value::Nil));
+                }
+            },
 
             ExprKind::Ternary(condition, then_block, else_block) => {
                 self.compile_expr(*condition);
@@ -581,7 +590,10 @@ impl VM {
 
                 let body_end = self.instructions.len();
 
-                self.instructions[while_instr_ptr].0 .1.extend_from_slice(&[body_end, body_start]);
+                self.instructions[while_instr_ptr]
+                    .0
+                     .1
+                    .extend_from_slice(&[body_end, body_start]);
 
                 // for br_instr_ptr in breaks {
                 //     self.instructions[br_instr_ptr].0 .1.push(body_end);
@@ -931,6 +943,33 @@ impl VM {
             Neq => self.compare_values(span, |a, b| a.not_equal_to(b)),
             And => self.compare_values(span, |a, b| a.and(b)),
             Or => self.compare_values(span, |a, b| a.or(b)),
+
+            Push => unsafe {
+                let value = self.stack.pop().unwrap_or(allocate(Value::Nil)).as_ref();
+                let var_name = self
+                    .stack
+                    .pop()
+                    .unwrap_or(allocate(Value::Nil))
+                    .as_ref()
+                    .as_str();
+
+                let mut var_ptr = self
+                    .get_var(self.variables_id[var_name])
+                    .unwrap_or_else(|| {
+                        self.runtime_error(&format!("Variable '{var_name}' not found"), span.clone())
+                    });
+
+                if !matches!(var_ptr.as_ref().get_type().as_str(), "array" | "string") || !var_ptr.as_mut().push(value) {
+                    self.runtime_error(
+                        &format!(
+                            "Cannot push value of type {val_type} into the type of: {var_type}",
+                            val_type = value.get_type(),
+                            var_type = var_ptr.as_ref().get_type()
+                        ),
+                        span,
+                    );
+                }
+            },
 
             Print => unsafe {
                 print!(

@@ -1,7 +1,4 @@
-a=0
->. a < 10 {
-    a++
-    $a
-    a == 5 ? br:ct
-    $_unreachable
-}
+arr = [1, 2, 3, 4]
+arr.push(69)
+
+$arr
