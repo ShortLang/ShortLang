@@ -39,6 +39,7 @@ pub enum Bytecode {
     Push,
     Split,
     Clear,
+    Join,
 
     // FUNCTION,
     Function,

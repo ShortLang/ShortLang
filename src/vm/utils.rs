@@ -1,4 +1,4 @@
-use std::ops::Range;
+use std::{ops::Range, collections::HashMap};
 use std::ptr::NonNull;
 
 use super::{memory::alloc_new_value, value::Value, vm::VarId};
@@ -55,10 +55,14 @@ impl FunctionData {
 }
 
 pub fn allocate(val: Value) -> NonNull<Value> {
-    NonNull::new(alloc_new_value(val)).expect("failed to allocate")
+    NonNull::new(alloc_new_value(val)).expect("Failed to allocate")
 }
 
 #[derive(Debug, Clone)]
 pub(crate) struct FnStackData {
     pub(crate) pc_before: usize,
+    pub(crate) scope_idx: usize,
+    pub(crate) previous_stack_len: usize,
+    pub(crate) variables_id: HashMap<String, u32>,
+    pub(crate) variables: HashMap<u32, Option<NonNull<Value>>>,
 }

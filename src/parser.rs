@@ -478,8 +478,9 @@ impl<'a> PParser<'a> {
             BinaryPow => (12, 13),
             Pow => (14, 15),
             Question => (4, 3),
+
             // For attributes and methods
-            Dot => (1, 2),
+            Dot => (16, 17),
             _ => return None,
         })
     }

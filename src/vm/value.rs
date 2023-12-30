@@ -1,5 +1,6 @@
 use rug::ops::Pow;
 use rug::{Float, Integer};
+use std::borrow::Cow;
 use std::ops::*;
 
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -43,9 +44,15 @@ impl Value {
         }
     }
 
-    pub fn as_array(&self) -> &[Value] {
+    pub fn as_array(&self) -> Cow<Vec<Value>> {
         match self {
-            Self::Array(arr) => arr,
+            Self::Array(arr) => Cow::Borrowed(arr),
+            Self::String(s) => Cow::Owned(
+                s.chars()
+                    .map(|i| Value::String(i.to_string()))
+                    .collect::<Vec<Value>>(),
+            ),
+
             _ => panic!("Expected an array value, found, {}", self.get_type()),
         }
     }
@@ -81,14 +88,14 @@ impl Value {
         }
     }
 
-    pub fn get_type(&self) -> String {
+    pub fn get_type(&self) -> &str {
         match self {
-            Value::Int(_) => "int".to_string(),
-            Value::Float(_) => "float".to_string(),
-            Value::String(_) => "str".to_string(),
-            Value::Bool(_) => "bool".to_string(),
-            Value::Array(_) => "array".to_string(),
-            Value::Nil => "nil".to_string(),
+            Value::Int(_) => "int",
+            Value::Float(_) => "float",
+            Value::String(_) => "str",
+            Value::Bool(_) => "bool",
+            Value::Array(_) => "array",
+            Value::Nil => "nil",
         }
     }
 

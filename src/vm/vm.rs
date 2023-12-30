@@ -20,12 +20,7 @@ use super::{
 
 pub type VarId = u32;
 pub type VarPtr = Option<NonNull<Value>>;
-pub(crate) type CallStack = Vec<(
-    FnStackData,
-    usize,
-    HashMap<String, VarId>,
-    HashMap<u32, VarPtr>,
-)>;
+pub(crate) type CallStack = Vec<FnStackData>;
 
 const GC_TRIGGER: usize = 1 << 20;
 
@@ -126,35 +121,15 @@ impl VM {
 
             ExprKind::Postfix(expr, op) => match op {
                 PostfixOp::Increase => {
-                    match expr.inner {
-                        ExprKind::Ident(name) => {
-                            self.push_data(Value::String(name), expr.span.clone())
-                        }
-
-                        _ => self.runtime_error(
-                            "Increment operator is only allowed with var names",
-                            expr.span.clone(),
-                        ),
-                    }
-
-                    self.instructions
-                        .push((Instr(Bytecode::Inc, vec![]), expr.span));
+                    let span = expr.span.clone();
+                    self.compile_expr(*expr);
+                    self.instructions.push((Instr(Bytecode::Inc, vec![]), span));
                 }
 
                 PostfixOp::Decrease => {
-                    match expr.inner {
-                        ExprKind::Ident(name) => {
-                            self.push_data(Value::String(name), expr.span.clone())
-                        }
-
-                        _ => self.runtime_error(
-                            "Increment operator is only allowed with var names",
-                            expr.span.clone(),
-                        ),
-                    }
-
-                    self.instructions
-                        .push((Instr(Bytecode::Dec, vec![]), expr.span));
+                    let span = expr.span.clone();
+                    self.compile_expr(*expr);
+                    self.instructions.push((Instr(Bytecode::Dec, vec![]), span));
                 }
 
                 PostfixOp::Factorial => {
@@ -222,19 +197,6 @@ impl VM {
             }
 
             ExprKind::Set(name, value) => {
-                // special case for functions
-                match value.inner {
-                    ExprKind::Ident(x) => {
-                        if let Some(func) = self.functions.get(&x) {
-                            self.functions.insert(name, func.clone());
-                        }
-
-                        return;
-                    }
-
-                    _ => {}
-                }
-
                 // Check if the variable exists
                 // If not create a new one
                 if self.variables_id.get(&name).is_none() {
@@ -260,8 +222,6 @@ impl VM {
                     ),
                     expr.span,
                 ));
-
-                // self.var_id_count += 1;
             }
 
             ExprKind::String(string) => {
@@ -293,7 +253,10 @@ impl VM {
             ExprKind::Binary(a, op, b) => {
                 self.compile_expr(*a);
 
-                if !matches!((&op, &b.inner), (&BinaryOp::Attr, &ExprKind::Call(..))) {
+                if !matches!(
+                    (&op, &b.inner),
+                    (&BinaryOp::Attr, &ExprKind::Call(..) | &ExprKind::Int(..))
+                ) {
                     self.compile_expr(*b.clone());
                 }
 
@@ -356,13 +319,8 @@ impl VM {
                         .instructions
                         .push((Instr(Bytecode::Or, vec![]), expr.span)),
 
-                    BinaryOp::Attr => {
-                        let ExprKind::Call(name, args) = b.inner else {
-                            // safe
-                            unreachable!()
-                        };
-
-                        match name.as_str() {
+                    BinaryOp::Attr => match b.inner {
+                        ExprKind::Call(name, args) => match name.as_str() {
                             "push" => {
                                 for_each_arg!(args, 1,
                                     Some(e) => { self.compile_expr(e) },
@@ -383,6 +341,16 @@ impl VM {
                                     .push((Instr(Bytecode::Split, vec![]), expr.span));
                             }
 
+                            "join" => {
+                                for_each_arg!(args, 1,
+                                    Some(e) => { self.compile_expr(e) },
+                                    None => { self.push_data(Value::Nil, 0..0) }
+                                );
+
+                                self.instructions
+                                    .push((Instr(Bytecode::Join, vec![]), expr.span));
+                            }
+
                             "clear" => {
                                 self.instructions
                                     .push((Instr(Bytecode::Clear, vec![]), expr.span));
@@ -392,8 +360,15 @@ impl VM {
                                 &format!("Unknown member function: '{}'", name),
                                 expr.span,
                             ),
-                        }
-                    }
+                        },
+
+                        // ExprKind::Int(..) => {
+                        //     self.compile_expr(*b);
+                        //     self.instructions
+                        //         .push((Instr(Bytecode::Index, vec![]), expr.span));
+                        // }
+                        _ => unreachable!(),
+                    },
                 }
             }
 
@@ -710,7 +685,9 @@ impl VM {
                 let value = self.stack.pop().unwrap();
                 let ty = value.as_ref().get_type();
                 self.stack
-                    .push(NonNull::new_unchecked(alloc_new_value(Value::String(ty))));
+                    .push(NonNull::new_unchecked(alloc_new_value(Value::String(
+                        ty.to_owned(),
+                    ))));
             },
 
             MakeVar => {
@@ -722,19 +699,23 @@ impl VM {
 
             Replace => {
                 let id = args[0];
-                let value = self.stack.pop().unwrap_or(allocate(Value::Nil));
+                let value = self
+                    .stack
+                    .pop()
+                    .map(|i| unsafe { i.as_ref().clone() })
+                    .unwrap_or_else(|| Value::Nil);
 
                 self.variables
                     .last_mut()
                     .unwrap()
-                    .insert(id as u32, Some(value));
+                    .insert(id as u32, Some(allocate(value)));
             }
 
             GetVar => {
                 let id = args[0];
                 let v = self.get_var(id as _);
                 if self.get_var(id as u32).is_some() {
-                    self.stack.push(v.unwrap_or(allocate(Value::Nil)));
+                    self.stack.push(v.unwrap_or_else(|| allocate(Value::Nil)));
                 } else {
                     self.runtime_error("Variable not found", span)
                 }
@@ -756,7 +737,7 @@ impl VM {
                 let fn_name = self
                     .stack
                     .pop()
-                    .unwrap_or(allocate(Value::Nil))
+                    .unwrap_or_else(|| allocate(Value::Nil))
                     .as_ref()
                     .as_str();
                 let fn_obj = &self.functions[fn_name];
@@ -777,7 +758,7 @@ impl VM {
                 let fn_name = self
                     .stack
                     .pop()
-                    .unwrap_or(allocate(Value::Nil))
+                    .unwrap_or_else(|| allocate(Value::Nil))
                     .as_ref()
                     .as_str();
                 let fn_obj_option = self.functions.get(fn_name);
@@ -796,7 +777,7 @@ impl VM {
                     .map(|_| {
                         self.stack
                             .pop()
-                            .unwrap_or(memory::mark(allocate(Value::Nil)))
+                            .unwrap_or_else(|| memory::mark(allocate(Value::Nil)))
                     })
                     .collect::<Vec<_>>();
 
@@ -877,39 +858,30 @@ impl VM {
             }),
 
             Inc => unsafe {
-                let var_name = self.stack.pop().unwrap().as_ref().as_str();
-                let mut value_ptr = self.get_var(self.variables_id[var_name]).unwrap();
+                let value = self.stack.pop().unwrap().as_mut();
 
-                match value_ptr.as_mut() {
+                match value {
                     Value::Int(i) => *i += 1,
                     Value::Float(f) => *f += 1,
                     Value::Bool(b) => *b = !*b,
                     _ => self.runtime_error(
-                        &format!(
-                            "Cannot increment value of type {}",
-                            value_ptr.as_ref().get_type()
-                        ),
+                        &format!("Cannot increment the value of type {}", value.get_type()),
                         span,
                     ),
                 }
             },
 
             Dec => unsafe {
-                let var_name = self.stack.pop().unwrap().as_ref().as_str();
-                let mut value_ptr = self.get_var(self.variables_id[var_name]).unwrap();
+                let value = self.stack.pop().unwrap().as_mut();
 
-                match value_ptr.as_mut() {
+                match value {
                     Value::Int(i) => *i -= 1,
                     Value::Float(f) => *f -= 1,
                     Value::Bool(b) => *b = !*b,
-                    Value::Array(a) => {
-                        a.pop();
-                    }
+                    Value::Array(a) => { a.pop(); },
+
                     _ => self.runtime_error(
-                        &format!(
-                            "Cannot decrement value of type {}",
-                            value_ptr.as_ref().get_type()
-                        ),
+                        &format!("Cannot decrement the value of type {}", value.get_type()),
                         span,
                     ),
                 }
@@ -980,8 +952,8 @@ impl VM {
                 let dest = self.stack.pop().unwrap().as_mut();
 
                 if let Some(result) = dest.binary_add(src) {
-                    *dest = result.clone();
-                    self.stack.push(allocate(result));
+                    *dest = result;
+                    self.stack.push(NonNull::new_unchecked(dest as *mut Value));
                 } else {
                     self.runtime_error(
                         &format!(
@@ -1006,7 +978,32 @@ impl VM {
                     );
                 }
 
-                self.stack.push(allocate(var.clone()));
+                self.stack.push(NonNull::new_unchecked(var as *mut Value));
+            },
+
+            Join => unsafe {
+                let separator = self.stack.pop().unwrap().as_ref();
+                let dest = self.stack.pop().unwrap().as_ref();
+
+                let array = dest.as_array();
+                let result_string = array
+                    .iter()
+                    .map(|i| i.to_string())
+                    .collect::<Vec<_>>()
+                    .join(match separator {
+                        Value::Nil => "",
+                        Value::String(s) => s,
+
+                        _ => self.runtime_error(
+                            &format!(
+                                "Cannot join with the value of type '{}'",
+                                separator.get_type()
+                            ),
+                            span,
+                        ),
+                    });
+
+                self.stack.push(allocate(result_string.into()));
             },
 
             Split => unsafe {
@@ -1049,7 +1046,12 @@ impl VM {
             Print => unsafe {
                 print!(
                     "{}",
-                    match self.stack.pop().unwrap_or(allocate(Value::Nil)).as_ref() {
+                    match self
+                        .stack
+                        .pop()
+                        .unwrap_or_else(|| allocate(Value::Nil))
+                        .as_ref()
+                    {
                         v => format!("{v}"),
                     }
                 );
@@ -1066,7 +1068,7 @@ impl VM {
                     match self
                         .stack
                         .pop()
-                        .unwrap_or(allocate(Value::String("\n".to_string())))
+                        .unwrap_or_else(|| allocate(Value::String("\n".to_string())))
                         .as_ref()
                     {
                         v => v.to_string(),
@@ -1271,25 +1273,53 @@ impl VM {
         scope_idx: usize,
         variables: HashMap<u32, VarPtr>,
     ) {
+        // For debugging weird stack state
+        // println!("stack before ==========");
+        // for (idx, itm) in self.stack.iter().enumerate() {
+        //     println!("stack[{idx}] = {}", unsafe { itm.as_ref() });
+        // }
+        // println!("=======================");
+
         let new_pc = fn_ptr - 1;
 
-        self.call_stack.push((
-            FnStackData { pc_before: self.pc },
+        self.call_stack.push(FnStackData {
+            pc_before: self.pc,
             scope_idx,
-            self.variables_id.clone(),
+            previous_stack_len: self.stack.len(),
+            variables_id: self.variables_id.clone(),
             variables,
-        ));
+        });
 
         self.pc = new_pc;
     }
 
     fn pop_call_stack(&mut self) {
-        let (FnStackData { pc_before }, scope_idx, variables_id, variables) =
-            self.call_stack.pop().unwrap();
+        let FnStackData {
+            pc_before,
+            scope_idx,
+            previous_stack_len,
+            variables_id,
+            variables,
+        } = self.call_stack.pop().unwrap();
+
+        // Remove any extra variables that has been pushed onto the
+        // stack except the return value
+        if previous_stack_len < self.stack.len() - 1 {
+            while previous_stack_len < self.stack.len() - 1 {
+                self.stack.remove(self.stack.len() - 2);
+            }
+        }
 
         self.pc = pc_before;
         self.variables[scope_idx] = variables;
         self.variables_id = variables_id;
+
+        // For debugging weird stack state
+        // println!("stack after ==========");
+        // for (idx, itm) in self.stack.iter().enumerate() {
+        //     println!("stack[{idx}] = {}", unsafe { itm.as_ref() });
+        // }
+        // println!("=======================");
     }
 
     fn find_parent_loop_start_instr(
