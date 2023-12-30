@@ -232,7 +232,7 @@ impl<'a> LogosToken<'a> {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Expr {
     pub span: Range<usize>,
     pub inner: ExprKind,
@@ -244,20 +244,20 @@ impl Expr {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum UnaryOp {
     Not,
     Neg,
     Plus,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum PostfixOp {
     Increase,
     Decrease,
     Factorial,
 }
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum BinaryOp {
     Mul,
     Div,
@@ -297,7 +297,7 @@ impl BinaryOp {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum ExprKind {
     Int(Integer),
     Float(Float),

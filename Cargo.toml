@@ -17,7 +17,6 @@ clap = { version = "4.4.11", features = ["derive"] }
 lazy_static = "1.4.0"
 logos = "0.13.0"
 miette = {version = "5.10.0", features = ["fancy"]}
-regex = "1.10.2"
 
 [dependencies.rug]
 version = "1.22.0"

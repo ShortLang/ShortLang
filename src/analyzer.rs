@@ -1,25 +1,25 @@
 use super::Args;
-use crate::parser::Expr;
-use crate::parser::ExprKind::{Binary, Ident, InlineFunction, MultilineFunction, Return, Set};
+use crate::parser::ExprKind::*;
+use crate::parser::{BinaryOp, Expr};
 use miette::{miette, Diagnostic, LabeledSpan, Severity};
-use regex::Regex;
+use rug::ops::Pow;
 use std::collections::HashMap;
 
-pub struct Analyzer {
-    src: String,
-    args: Args,
-    parsed_exprs: Vec<Expr>,
-    scopes: Vec<HashMap<String, VariableInfo>>,
+pub struct Analyzer<'a> {
+    src: std::string::String,
+    args: &'a Args,
+    ast: &'a mut Vec<Expr>,
+    scopes: Vec<HashMap<std::string::String, VariableInfo>>,
     errors: Vec<Box<dyn Diagnostic>>,
     warnings: Vec<Box<dyn Diagnostic>>,
 }
 
-impl Analyzer {
-    pub fn new(src: &str, args: Args, parsed_exprs: Vec<Expr>) -> Self {
+impl<'a> Analyzer<'a> {
+    pub fn new(src: &str, args: &'a Args, ast: &'a mut Vec<Expr>) -> Self {
         Self {
             src: src.to_owned(),
             args,
-            parsed_exprs,
+            ast,
 
             scopes: Vec::new(),
             errors: Vec::new(),
@@ -28,19 +28,9 @@ impl Analyzer {
     }
 
     pub fn analyze(&mut self) {
-        if Regex::new(r"//.*").unwrap().is_match(&self.src) {
-            self.warnings.push(Box::from(
-                miette!(
-                    severity = Severity::Warning,
-                    "Input file contains comments, this is not recommended for ShortLang"
-                )
-                .with_source_code(self.src.clone()),
-            ));
-        }
-
         self.scopes.push(HashMap::new()); // Add the global scope
-        for i in 0..self.parsed_exprs.len() {
-            self.analyze_expr(&self.parsed_exprs[i].clone());
+        for i in 0..self.ast.len() {
+            self.analyze_expr(&self.ast[i].clone(), None);
         }
 
         self.check_unused_variables();
@@ -83,37 +73,94 @@ impl Analyzer {
 
     fn check_unused_variables(&mut self) {
         if let Some(scope) = self.scopes.last() {
+            let mut to_remove = Vec::new();
             for (name, var_info) in scope {
-                if var_info.is_used {
-                    continue;
+                if !var_info.is_used {
+                    to_remove.push((var_info.expr_index, name));
                 }
-
+            }
+            to_remove.sort_unstable();
+            to_remove.dedup();
+            for index in to_remove.into_iter().rev() {
                 self.warnings.push(Box::from(
                     miette!(
                         severity = Severity::Warning,
-                        help = "Remove the variable or use it",
-                        labels = vec![LabeledSpan::at(var_info.range.clone(), "unused variable")],
+                        help = "Use the variable or remove it",
+                        labels = vec![LabeledSpan::at(
+                            self.ast[index.0].span.clone(),
+                            "unused variable"
+                        )],
                         "Variable `{}` is unused",
-                        name
+                        index.1
                     )
                     .with_source_code(self.src.clone()),
                 ));
+                self.ast.remove(index.0);
             }
         }
     }
 
-    fn analyze_expr(&mut self, expr: &Expr) {
+    fn constant_fold(&mut self, expr: &Expr) {
+        match &expr.inner {
+            Binary(left, op, right) => {
+                self.constant_fold(&left);
+                self.constant_fold(&right);
+
+                match (left.inner.clone(), right.inner.clone()) {
+                    (Int(left), Int(right)) => {
+                        let result = match op {
+                            BinaryOp::Add => left + right,
+                            BinaryOp::Sub => left - right,
+                            BinaryOp::Mul => left * right,
+                            BinaryOp::Div => left / right,
+                            BinaryOp::Mod => left % right,
+                            BinaryOp::Pow => rug::Float::with_val(53, left)
+                                .pow(right)
+                                .to_integer()
+                                .unwrap(),
+                            _ => return,
+                        };
+                        let expr_index = self.ast.iter().position(|e| *e == *expr).unwrap();
+                        self.ast[expr_index] = Expr {
+                            inner: Int(result),
+                            span: expr.span.clone(),
+                        };
+                    }
+                    (Float(left), Float(right)) => {
+                        let result = match op {
+                            BinaryOp::Add => left + right,
+                            BinaryOp::Sub => left - right,
+                            BinaryOp::Mul => left * right,
+                            BinaryOp::Div => left / right,
+                            BinaryOp::Mod => left % right,
+                            BinaryOp::Pow => left.pow(right),
+                            _ => return,
+                        };
+                        let expr_index = self.ast.iter().position(|e| *e == *expr).unwrap();
+                        self.ast[expr_index] = Expr {
+                            inner: Float(result),
+                            span: expr.span.clone(),
+                        };
+                    }
+                    _ => {}
+                }
+            }
+            _ => {}
+        }
+    }
+
+    fn analyze_expr(&mut self, expr: &Expr, current_function: Option<&std::string::String>) {
         match &expr.inner {
             Set(name, current_expr) => {
+                let expr_index = self.ast.iter().position(|e| e == expr).unwrap();
                 self.scopes.last_mut().unwrap().insert(
                     name.clone(),
                     VariableInfo {
-                        range: expr.span.clone(),
-                        is_used: false,
+                        expr_index,
+                        ..Default::default()
                     },
                 );
-
-                self.analyze_expr(current_expr);
+                self.analyze_expr(current_expr, current_function);
             }
             Ident(name) => {
                 if let Some(var_info) = self
@@ -143,26 +190,94 @@ impl Analyzer {
             }
 
             Binary(left, _, right) => {
-                self.analyze_expr(left);
-                self.analyze_expr(right);
+                self.constant_fold(expr);
+                self.analyze_expr(left, current_function);
+                self.analyze_expr(right, current_function);
             }
 
-            InlineFunction(_, args, curr_expr) => {
-                self.process_function(args, expr, &vec![*curr_expr.clone()]);
+            InlineFunction(name, args, curr_expr) => {
+                self.process_function((Some(name), None), args, expr, &vec![*curr_expr.clone()]);
             }
 
-            MultilineFunction(_, args, curr_expr) => {
-                self.process_function(args, expr, curr_expr);
+            MultilineFunction(name, args, curr_expr) => {
+                self.process_function((Some(name), None), args, expr, curr_expr);
+            }
+
+            While(cond, curr_expr) => {
+                self.analyze_expr(cond, current_function);
+                self.process_function((None, current_function), &vec![], expr, curr_expr);
+            }
+
+            Call(name, args) => {
+                if let Some(var_info) = self
+                    .scopes
+                    .iter_mut()
+                    .rev()
+                    .find_map(|scope| scope.get_mut(name))
+                {
+                    var_info.is_used = true;
+                    if let Some(current_function) = current_function {
+                        if current_function == name {
+                            var_info.is_used = false;
+                        }
+                    }
+                }
+
+                for arg in args.clone().unwrap() {
+                    self.analyze_expr(&arg, current_function);
+                }
+            }
+
+            Index(name, index) => {
+                self.analyze_expr(name, current_function);
+                self.analyze_expr(index, current_function);
+            }
+
+            Array(exprs) => {
+                for expr in exprs {
+                    self.analyze_expr(expr, current_function);
+                }
+            }
+
+            Ternary(cond, if_true, if_false) => {
+                self.analyze_expr(cond, current_function);
+                self.process_function((None, current_function), &vec![], expr, if_true);
+                if let Some(if_false) = if_false {
+                    self.process_function((None, current_function), &vec![], expr, if_false);
+                }
             }
 
             Return(expr) => {
-                self.analyze_expr(expr);
+                self.analyze_expr(expr, current_function);
             }
+
             _ => {}
         }
     }
 
-    fn process_function(&mut self, args: &Vec<String>, expr: &Expr, curr_expr: &Vec<Expr>) {
+    fn process_function(
+        &mut self,
+        name: (Option<&std::string::String>, Option<&std::string::String>),
+        args: &Vec<std::string::String>,
+        expr: &Expr,
+        curr_expr: &Vec<Expr>,
+    ) {
+        let use_me;
+        if let Some(name) = name.0 {
+            use_me = name.clone();
+            let expr_index = self.ast.iter().position(|e| e == expr).unwrap();
+            self.scopes.last_mut().unwrap().insert(
+                name.clone(),
+                VariableInfo {
+                    range: expr.span.clone(),
+                    is_used: false,
+                    expr_index,
+                },
+            );
+        } else {
+            use_me = name.1.unwrap().clone();
+        }
+
         self.scopes.push(HashMap::new());
         for arg in args {
             if self.scopes.last().unwrap().contains_key(arg) {
@@ -177,18 +292,19 @@ impl Analyzer {
                     .with_source_code(self.src.clone()),
                 ));
             } else {
+                let expr_index = self.ast.iter().position(|e| e == expr).unwrap();
                 self.scopes.last_mut().unwrap().insert(
                     arg.clone(),
                     VariableInfo {
-                        range: expr.span.clone(),
-                        is_used: false,
+                        expr_index,
+                        ..Default::default()
                     },
                 );
             }
         }
 
         for expr in curr_expr {
-            self.analyze_expr(expr);
+            self.analyze_expr(expr, Some(&use_me));
         }
 
         self.check_unused_variables();
@@ -197,6 +313,17 @@ impl Analyzer {
 }
 
 pub struct VariableInfo {
-    pub range: std::ops::Range<usize>,
     pub is_used: bool,
+    pub expr_index: usize,
+    pub range: std::ops::Range<usize>,
+}
+
+impl Default for VariableInfo {
+    fn default() -> Self {
+        Self {
+            is_used: false,
+            expr_index: 0,
+            range: 0..0,
+        }
+    }
 }

@@ -53,11 +53,11 @@ fn main() {
         .collect::<Vec<_>>();
 
     let mut parser = PParser::new(&src, tokens);
-    let ast = parser.parse();
+    let mut ast = parser.parse();
+    Analyzer::new(&src, &args, &mut ast).analyze();
     if args.ast {
         println!("{:?}", &ast);
     }
-    // Analyzer::new(&src, args, ast.clone()).analyze();
     let mut vm = VM::new(&src, ast);
     vm.compile();
     vm.run();

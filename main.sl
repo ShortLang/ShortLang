@@ -1,16 +1,2 @@
-impl int {
-	// auto define the variable "self" to the value of the object
-	// idk how you'll implement it but you got the point @wizard
-	field = 5
-	addone: self + 1
-}
-// $5.method()
-// $5.addone
-mc [1, 2, 3] {
-	h::t: {
-		$h // 1
-		$t // [2, 3]
-	}
-}
-
-// 5 * -5
+10+10 // wow constant folding, but without any nesting, dont do nesting, or the program panics cuz i cant deal with this anymore
+// at least std functions got removed by dead code removal since they arent used
