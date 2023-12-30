@@ -118,7 +118,10 @@ pub enum LogosToken<'a> {
     Break,
     #[token("ct")]
     Continue,
-
+    #[token("mc")]
+    Match,
+    #[token("impl")]
+    Impl,
     Error,
 }
 impl<'a> fmt::Display for LogosToken<'a> {
@@ -177,6 +180,8 @@ impl<'a> fmt::Display for LogosToken<'a> {
             LogosToken::Break => write!(f, "br"),
             LogosToken::Continue => write!(f, "ct"),
             LogosToken::PAdd => write!(f, "++"),
+            LogosToken::Match => write!(f, "mc"),
+            LogosToken::Impl => write!(f, "impl"),
             LogosToken::PSub => write!(f, "--"),
         }
     }
@@ -188,6 +193,14 @@ impl<'a> LogosToken<'a> {
             Self::PAdd => PostfixOp::Increase,
             Self::PSub => PostfixOp::Decrease,
             Self::Bang => PostfixOp::Factorial,
+            _ => unreachable!(),
+        }
+    }
+    pub fn to_unary_op(&self) -> UnaryOp {
+        match self {
+            Self::Minus => UnaryOp::Neg,
+            Self::Plus => UnaryOp::Plus,
+            Self::Bang => UnaryOp::Not,
             _ => unreachable!(),
         }
     }
@@ -230,6 +243,14 @@ impl Expr {
         Expr { inner, span }
     }
 }
+
+#[derive(Debug, Clone)]
+pub enum UnaryOp {
+    Not,
+    Neg,
+    Plus,
+}
+
 #[derive(Debug, Clone)]
 pub enum PostfixOp {
     Increase,
@@ -294,8 +315,13 @@ pub enum ExprKind {
     Postfix(Box<Expr>, PostfixOp),
     Array(Vec<Expr>),
     While(Box<Expr>, Vec<Expr>),
-    ForLoop(String, String, Vec<Expr>),
+    Every(Box<Expr>, Vec<Expr>),
+    Impl(String, Vec<Expr>),
+    // used inside the match statement
+    HeadTail(String, String),
+    Match(Box<Expr>, Vec<(Expr, Vec<Expr>)>),
     Index(Box<Expr>, Box<Expr>),
+    Unary(UnaryOp, Box<Expr>),
     Nil,
     Error,
     Break,
@@ -331,7 +357,7 @@ impl<'a> PParser<'a> {
         } else {
             0..0
         };
-
+        // LogosToken::Error can mean it's EOF as well
         self.current = (LogosToken::Error, span);
         if token.is_some() {
             self.current = token.clone().unwrap();
@@ -378,7 +404,7 @@ impl<'a> PParser<'a> {
             exprs.push(self.declaration(token))
         }
         if self.errored {
-            std::process::exit(0);
+            std::process::exit(1);
         }
         exprs
     }
@@ -394,7 +420,64 @@ impl<'a> PParser<'a> {
                     ExprKind::While(Box::new(condition), block),
                 );
             }
-            LogosToken::Every => todo!(),
+            LogosToken::Impl => {
+                let start = self.current.1.start;
+                self.proceed();
+                let ident = self.expect_ident();
+                self.proceed();
+                let (block, _) = self.block();
+                let end = self.current.1.end.clone();
+                Expr::new(start..end, ExprKind::Impl(ident, block))
+            }
+            LogosToken::Match => {
+                let start = self.current.1.start;
+                self.proceed();
+                let condition = self.expr(0);
+                self.expect(LogosToken::LBrace);
+                self.proceed();
+                let mut exprs: Vec<(Expr, Vec<Expr>)> = Vec::new();
+                loop {
+                    if self.current() == &LogosToken::RBrace {
+                        self.proceed();
+                        break;
+                    }
+                    let current = self.current.0.clone();
+                    let val = if let LogosToken::Ident(first) = current {
+                        if self.peek(0) == Some(LogosToken::FourDots) {
+                            let start = self.current.1.start.clone();
+                            self.proceed();
+                            self.proceed();
+                            let last = self.expect_ident();
+                            self.proceed();
+
+                            let end = self.current.1.end.clone();
+                            Expr::new(start..end, ExprKind::HeadTail(first.to_string(), last))
+                        } else {
+                            self.term(self.current.clone())
+                        }
+                    } else {
+                        self.term(self.current.clone())
+                    };
+                    self.expect(LogosToken::Colon);
+                    self.proceed();
+                    let (expr, _) = self.block();
+                    exprs.push((val, expr))
+                }
+                Expr::new(
+                    start..self.current.1.end,
+                    ExprKind::Match(Box::new(condition), exprs),
+                )
+            }
+            LogosToken::Every => {
+                let start = self.current.1.start;
+                self.proceed();
+                let for_el = self.expr(0);
+                let (block, _) = self.block();
+                return Expr::new(
+                    start..self.current.1.end,
+                    ExprKind::Every(Box::new(for_el), block),
+                );
+            }
             LogosToken::Return => {
                 let start = self.current.1.start;
                 self.proceed();
@@ -471,7 +554,7 @@ impl<'a> PParser<'a> {
         use LogosToken::*;
         Some(match op {
             Plus | Minus => (6, 7),
-            Eqq | Neq | Leq | Geq | RAngle | LAngle | Or | And => (5, 6),
+            Eqq | Neq | Leq | Geq | RAngle | LAngle | Or | And => (18, 19),
             AddEq | SubEq | MulEq | DivEq => (1, 2),
             Times | Slash => (8, 9),
             Percent => (10, 11),
@@ -672,7 +755,11 @@ impl<'a> PParser<'a> {
                 self.expect(LogosToken::RParen);
                 expr.inner
             }
-
+            LogosToken::Plus | LogosToken::Minus | LogosToken::Bang => {
+                self.proceed();
+                let expr = self.expr(0);
+                ExprKind::Unary(token.to_unary_op(), Box::new(expr))
+            }
             _ => {
                 println!("{:?}", self.current());
                 let report = miette!(

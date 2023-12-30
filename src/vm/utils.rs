@@ -1,5 +1,5 @@
-use std::{ops::Range, collections::HashMap};
 use std::ptr::NonNull;
+use std::{collections::HashMap, ops::Range};
 
 use super::{memory::alloc_new_value, value::Value, vm::VarId};
 

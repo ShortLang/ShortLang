@@ -878,7 +878,9 @@ impl VM {
                     Value::Int(i) => *i -= 1,
                     Value::Float(f) => *f -= 1,
                     Value::Bool(b) => *b = !*b,
-                    Value::Array(a) => { a.pop(); },
+                    Value::Array(a) => {
+                        a.pop();
+                    }
 
                     _ => self.runtime_error(
                         &format!("Cannot decrement the value of type {}", value.get_type()),
