@@ -236,7 +236,7 @@ pub enum PostfixOp {
     Decrease,
     Factorial,
 }
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub enum BinaryOp {
     Mul,
     Div,

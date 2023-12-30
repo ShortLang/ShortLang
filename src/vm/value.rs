@@ -100,6 +100,16 @@ impl Value {
         }
     }
 
+    pub fn clear(&mut self) -> bool {
+        match self {
+            Value::String(s) => s.clear(),
+            Value::Array(a) => a.clear(),
+            _ => return false,
+        }
+
+        true
+    }
+
     pub fn binary_sub(&self, rhs: &Value) -> Option<Value> {
         match (self, rhs) {
             (Value::Int(lhs), Value::Int(rhs)) => Some(Value::Int(Integer::from(lhs - rhs))),

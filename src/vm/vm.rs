@@ -292,7 +292,10 @@ impl VM {
 
             ExprKind::Binary(a, op, b) => {
                 self.compile_expr(*a);
-                self.compile_expr(*b.clone());
+
+                if !matches!((&op, &b.inner), (&BinaryOp::Attr, &ExprKind::Call(..))) {
+                    self.compile_expr(*b.clone());
+                }
 
                 match op {
                     BinaryOp::Add => self
@@ -353,7 +356,44 @@ impl VM {
                         .instructions
                         .push((Instr(Bytecode::Or, vec![]), expr.span)),
 
-                    BinaryOp::Attr => {}
+                    BinaryOp::Attr => {
+                        let ExprKind::Call(name, args) = b.inner else {
+                            // safe
+                            unreachable!()
+                        };
+
+                        match name.as_str() {
+                            "push" => {
+                                for_each_arg!(args, 1,
+                                    Some(e) => { self.compile_expr(e) },
+                                    None => { self.stack.push(allocate(Value::Nil)) }
+                                );
+
+                                self.instructions
+                                    .push((Instr(Bytecode::Push, vec![]), expr.span));
+                            }
+
+                            "split" => {
+                                for_each_arg!(args, 1,
+                                    Some(e) => { self.compile_expr(e) },
+                                    None => { self.stack.push(allocate(Value::Nil)) }
+                                );
+
+                                self.instructions
+                                    .push((Instr(Bytecode::Split, vec![]), expr.span));
+                            }
+
+                            "clear" => {
+                                self.instructions
+                                    .push((Instr(Bytecode::Clear, vec![]), expr.span));
+                            }
+
+                            _ => self.runtime_error(
+                                &format!("Unknown member function: '{}'", name),
+                                expr.span,
+                            ),
+                        }
+                    }
                 }
             }
 
@@ -527,28 +567,6 @@ impl VM {
                         .push((Instr(Bytecode::TypeOf, vec![]), expr.span));
                 }
 
-                // Member functions
-                "push" => {
-                    for_each_arg!(args, 1,
-                        Some(e) => { self.compile_expr(e) },
-                        None => { self.stack.push(allocate(Value::Nil)) }
-                    );
-
-                    self.instructions
-                        .push((Instr(Bytecode::Push, vec![]), expr.span));
-                }
-
-                "split" => {
-                    for_each_arg!(args, 1,
-                        Some(e) => { self.compile_expr(e) },
-                        None => { self.stack.push(allocate(Value::Nil)) }
-                    );
-
-                    self.instructions
-                        .push((Instr(Bytecode::Split, vec![]), expr.span));
-                }
-
-                ///////////////////
                 _ => {
                     for_each_arg!(args, arg => { self.compile_expr(arg) });
 
@@ -974,6 +992,21 @@ impl VM {
                         span,
                     );
                 }
+            },
+
+            Clear => unsafe {
+                let var = self.stack.pop().unwrap().as_mut();
+                if !var.clear() {
+                    self.runtime_error(
+                        &format!(
+                            "No method named 'clear' found on the type '{}'",
+                            var.get_type()
+                        ),
+                        span,
+                    );
+                }
+
+                self.stack.push(allocate(var.clone()));
             },
 
             Split => unsafe {
