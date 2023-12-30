@@ -72,7 +72,7 @@ impl Value {
                 arr.extend(rhs.clone());
                 Some(Value::Array(arr))
             }
-            (Value::Array(lhs), rhs) | (rhs, Value::Array(lhs)) => {
+            (Value::Array(lhs), rhs) => {
                 let mut arr = lhs.clone();
                 arr.push(rhs.clone());
                 Some(Value::Array(arr))
@@ -288,28 +288,6 @@ impl Value {
 
             _ => true,
         }
-    }
-
-    pub fn push(&mut self, other: &Value) -> bool {
-        match self {
-            Self::Array(arr) => match other {
-                Self::Int(i) => arr.push(i.into()),
-                Self::Float(f) => arr.push(f.into()),
-                Self::Bool(b) => arr.push(b.into()),
-                Self::String(s) => arr.push(s.as_str().into()),
-                Self::Array(a) => arr.extend_from_slice(a),
-                Self::Nil => arr.push(Value::Nil),
-            },
-
-            Self::String(string) => match other {
-                Self::String(s) => string.push_str(s.as_str()),
-                _ => return false,
-            },
-
-            _ => panic!("Cannot push into the type of: {}", self.get_type()),
-        }
-
-        true
     }
 
     pub fn and(&self, other: &Value) -> Option<Value> {

@@ -125,7 +125,6 @@ impl VM {
             }
 
             ExprKind::Postfix(expr, op) => match op {
-                // TODO: fix the inc and dec instructions
                 PostfixOp::Increase => {
                     match expr.inner {
                         ExprKind::Ident(name) => {
@@ -292,21 +291,8 @@ impl VM {
             }
 
             ExprKind::Binary(a, op, b) => {
-                if !matches!(op, BinaryOp::Attr) {
-                    self.compile_expr(*a);
-                    self.compile_expr(*b.clone());
-                } else {
-                    match a.inner {
-                        ExprKind::Ident(name) => {
-                            self.push_data(Value::String(name), expr.span.clone())
-                        }
-
-                        _ => self.runtime_error(
-                            "Use of members is only allowed with identifiers",
-                            expr.span.clone(),
-                        ),
-                    }
-                }
+                self.compile_expr(*a);
+                self.compile_expr(*b.clone());
 
                 match op {
                     BinaryOp::Add => self
@@ -367,28 +353,7 @@ impl VM {
                         .instructions
                         .push((Instr(Bytecode::Or, vec![]), expr.span)),
 
-                    BinaryOp::Attr => match b.inner {
-                        ExprKind::Call(name, args) => match name.as_str() {
-                            "push" => {
-                                for_each_arg!(args, 1,
-                                    Some(e) => { self.compile_expr(e) },
-                                    None => { self.stack.push(allocate(Value::Nil)) }
-                                );
-
-                                self.instructions
-                                    .push((Instr(Bytecode::Push, vec![]), expr.span));
-                            }
-
-                            _ => self.runtime_error(
-                                &format!("Unknown member function: {name}"),
-                                expr.span,
-                            ),
-                        },
-
-                        _ => self.runtime_error("unknown member", expr.span),
-                    },
-
-                    _ => todo!(),
+                    BinaryOp::Attr => {}
                 }
             }
 
@@ -560,6 +525,16 @@ impl VM {
 
                     self.instructions
                         .push((Instr(Bytecode::TypeOf, vec![]), expr.span));
+                }
+
+                "push" => {
+                    for_each_arg!(args, 1,
+                        Some(e) => { self.compile_expr(e) },
+                        None => { self.stack.push(allocate(Value::Nil)) }
+                    );
+
+                    self.instructions
+                        .push((Instr(Bytecode::Push, vec![]), expr.span));
                 }
 
                 _ => {
@@ -971,31 +946,18 @@ impl VM {
             Or => self.compare_values(span, |a, b| a.or(b)),
 
             Push => unsafe {
-                let value = self.stack.pop().unwrap_or(allocate(Value::Nil)).as_ref();
-                let var_name = self
-                    .stack
-                    .pop()
-                    .unwrap_or(allocate(Value::Nil))
-                    .as_ref()
-                    .as_str();
+                let src = self.stack.pop().unwrap().as_ref();
+                let dest = self.stack.pop().unwrap().as_mut();
 
-                let mut var_ptr = self
-                    .get_var(self.variables_id[var_name])
-                    .unwrap_or_else(|| {
-                        self.runtime_error(
-                            &format!("Variable '{var_name}' not found"),
-                            span.clone(),
-                        )
-                    });
-
-                if !matches!(var_ptr.as_ref().get_type().as_str(), "array" | "string")
-                    || !var_ptr.as_mut().push(value)
-                {
+                if let Some(result) = dest.binary_add(src) {
+                    *dest = result.clone();
+                    self.stack.push(allocate(result));
+                } else {
                     self.runtime_error(
                         &format!(
-                            "Cannot push value of type {val_type} into the type of: {var_type}",
-                            val_type = value.get_type(),
-                            var_type = var_ptr.as_ref().get_type()
+                            "Cannot push value of type '{val_type}' into the type of '{var_type}'",
+                            val_type = src.get_type(),
+                            var_type = dest.get_type()
                         ),
                         span,
                     );
