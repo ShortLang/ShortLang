@@ -37,6 +37,7 @@ pub enum Bytecode {
 
     // Method functions
     Push,
+    Split,
 
     // FUNCTION,
     Function,

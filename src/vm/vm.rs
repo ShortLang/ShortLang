@@ -527,6 +527,7 @@ impl VM {
                         .push((Instr(Bytecode::TypeOf, vec![]), expr.span));
                 }
 
+                // Member functions
                 "push" => {
                     for_each_arg!(args, 1,
                         Some(e) => { self.compile_expr(e) },
@@ -537,6 +538,17 @@ impl VM {
                         .push((Instr(Bytecode::Push, vec![]), expr.span));
                 }
 
+                "split" => {
+                    for_each_arg!(args, 1,
+                        Some(e) => { self.compile_expr(e) },
+                        None => { self.stack.push(allocate(Value::Nil)) }
+                    );
+
+                    self.instructions
+                        .push((Instr(Bytecode::Split, vec![]), expr.span));
+                }
+
+                ///////////////////
                 _ => {
                     for_each_arg!(args, arg => { self.compile_expr(arg) });
 
@@ -962,6 +974,43 @@ impl VM {
                         span,
                     );
                 }
+            },
+
+            Split => unsafe {
+                let split = self.stack.pop().unwrap().as_ref();
+                let dest = self.stack.pop().unwrap().as_ref();
+
+                if dest.get_type() != "str" {
+                    self.runtime_error(
+                        &format!(
+                            "No method named 'split' found on the type '{}'",
+                            dest.get_type()
+                        ),
+                        span,
+                    );
+                }
+
+                if split.get_type() != "str" {
+                    self.runtime_error(
+                        &format!(
+                            "Expected 'str' as argument of split, found '{}'",
+                            split.get_type()
+                        ),
+                        span,
+                    );
+                }
+
+                let (Value::String(dest_str), Value::String(split_str)) = (dest, split) else {
+                    // SAFETY: we already checked the type
+                    unreachable!()
+                };
+
+                let split = dest_str
+                    .split(split_str)
+                    .map(|i| i.into())
+                    .collect::<Vec<Value>>();
+
+                self.stack.push(allocate(Value::Array(split)));
             },
 
             Print => unsafe {

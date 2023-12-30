@@ -3,3 +3,6 @@ $arr
 arr += [6, 7]
 $arr
 $("hello world".push("!"))
+
+chads = "fireplank,wizard,hamza"
+$chads.split(",")
