@@ -1,11 +1,13 @@
 use miette::{miette, LabeledSpan};
 use rug::{Assign, Float, Integer};
+use std::collections::HashMap;
+use std::ops::Range;
 use std::ptr::NonNull;
-use std::{collections::HashMap, ops::Range};
 
-use super::value::Value;
+use super::value::{Type, Value};
 use crate::for_each_arg;
 use crate::parser::PostfixOp;
+use crate::vm::bytecode::MethodFunction;
 use crate::vm::memory;
 use crate::{
     parser::{BinaryOp, Expr, ExprKind},
@@ -23,6 +25,29 @@ pub type VarPtr = Option<NonNull<Value>>;
 pub(crate) type CallStack = Vec<FnStackData>;
 
 const GC_TRIGGER: usize = 1 << 20;
+
+macro_rules! inbuilt_methods {
+    { $self:ident, $names:expr, $args:ident, $({ $fn_name:expr => [$($ty:expr),+ $(,)?], $num_args:expr, $span:expr }),+ $(,)? } => {
+        match $names {
+            $(
+                $fn_name => {
+                    for_each_arg!($args, $num_args,
+                        Some(e) => { $self.compile_expr(e) },
+                        None => { $self.stack.push(allocate(Value::Nil)) }
+                    );
+
+                    $self.instructions.push((Instr(Bytecode::Method(MethodFunction {
+                        name: $fn_name.to_string(),
+                        on_types: vec![$($ty,)*],
+                        num_args: $num_args,
+                    }), vec![]), $span));
+                }
+            )*
+
+            _ => { }
+        }
+    }
+}
 
 pub struct VM {
     src: String,
@@ -320,53 +345,15 @@ impl VM {
                         .push((Instr(Bytecode::Or, vec![]), expr.span)),
 
                     BinaryOp::Attr => match b.inner {
-                        ExprKind::Call(name, args) => match name.as_str() {
-                            "push" => {
-                                for_each_arg!(args, 1,
-                                    Some(e) => { self.compile_expr(e) },
-                                    None => { self.stack.push(allocate(Value::Nil)) }
-                                );
+                        ExprKind::Call(name, args) => {
+                            inbuilt_methods!(self, name.as_str(), args,
+                               { "push"  => [Type::Array, Type::String], 1, expr.span },
+                               { "clear" => [Type::Array, Type::String], 0, expr.span },
+                               { "join"  => [Type::Array],               1, expr.span },
+                               { "split" => [Type::String],              1, expr.span },
+                            )
+                        }
 
-                                self.instructions
-                                    .push((Instr(Bytecode::Push, vec![]), expr.span));
-                            }
-
-                            "split" => {
-                                for_each_arg!(args, 1,
-                                    Some(e) => { self.compile_expr(e) },
-                                    None => { self.stack.push(allocate(Value::Nil)) }
-                                );
-
-                                self.instructions
-                                    .push((Instr(Bytecode::Split, vec![]), expr.span));
-                            }
-
-                            "join" => {
-                                for_each_arg!(args, 1,
-                                    Some(e) => { self.compile_expr(e) },
-                                    None => { self.push_data(Value::Nil, 0..0) }
-                                );
-
-                                self.instructions
-                                    .push((Instr(Bytecode::Join, vec![]), expr.span));
-                            }
-
-                            "clear" => {
-                                self.instructions
-                                    .push((Instr(Bytecode::Clear, vec![]), expr.span));
-                            }
-
-                            _ => self.runtime_error(
-                                &format!("Unknown member function: '{}'", name),
-                                expr.span,
-                            ),
-                        },
-
-                        // ExprKind::Int(..) => {
-                        //     self.compile_expr(*b);
-                        //     self.instructions
-                        //         .push((Instr(Bytecode::Index, vec![]), expr.span));
-                        // }
                         _ => unreachable!(),
                     },
                 }
@@ -949,100 +936,79 @@ impl VM {
             And => self.compare_values(span, |a, b| a.and(b)),
             Or => self.compare_values(span, |a, b| a.or(b)),
 
-            Push => unsafe {
-                let src = self.stack.pop().unwrap().as_ref();
-                let dest = self.stack.pop().unwrap().as_mut();
+            Method(MethodFunction { name, on_types, .. }) => match name.as_str() {
+                "push" => unsafe {
+                    let src = self.stack.pop().unwrap().as_ref();
+                    let dest = self.stack.pop().unwrap().as_mut();
 
-                if let Some(result) = dest.binary_add(src) {
-                    *dest = result;
+                    self.check_type(&name, on_types, dest, span);
+
+                    *dest = dest.binary_add(src).unwrap();
                     self.stack.push(NonNull::new_unchecked(dest as *mut Value));
-                } else {
-                    self.runtime_error(
-                        &format!(
-                            "Cannot push value of type '{val_type}' into the type of '{var_type}'",
-                            val_type = src.get_type(),
-                            var_type = dest.get_type()
-                        ),
-                        span,
-                    );
-                }
-            },
+                },
 
-            Clear => unsafe {
-                let var = self.stack.pop().unwrap().as_mut();
-                if !var.clear() {
-                    self.runtime_error(
-                        &format!(
-                            "No method named 'clear' found on the type '{}'",
-                            var.get_type()
-                        ),
-                        span,
-                    );
-                }
+                "clear" => unsafe {
+                    let var = self.stack.pop().unwrap().as_mut();
 
-                self.stack.push(NonNull::new_unchecked(var as *mut Value));
-            },
+                    self.check_type(&name, on_types, var, span);
 
-            Join => unsafe {
-                let separator = self.stack.pop().unwrap().as_ref();
-                let dest = self.stack.pop().unwrap().as_ref();
+                    if !var.clear() {
+                        panic!();
+                    }
+                },
 
-                let array = dest.as_array();
-                let result_string = array
-                    .iter()
-                    .map(|i| i.to_string())
-                    .collect::<Vec<_>>()
-                    .join(match separator {
-                        Value::Nil => "",
-                        Value::String(s) => s,
+                "join" => unsafe {
+                    let separator = self.stack.pop().unwrap().as_ref();
+                    let dest = self.stack.pop().unwrap().as_ref();
 
-                        _ => self.runtime_error(
+                    self.check_type(&name, on_types, dest, span.clone());
+
+                    let array = dest.as_array();
+                    let result_string = array
+                        .iter()
+                        .map(|i| i.to_string())
+                        .collect::<Vec<_>>()
+                        .join(match separator {
+                            Value::Nil => "",
+                            Value::String(s) => s,
+
+                            _ => self.runtime_error(
+                                &format!(
+                                    "Cannot join with the value of type '{}'",
+                                    separator.get_type()
+                                ),
+                                span,
+                            ),
+                        });
+
+                    self.stack.push(allocate(result_string.into()));
+                },
+
+                "split" => unsafe {
+                    let split = self.stack.pop().unwrap().as_ref();
+                    let val = self.stack.pop().unwrap().as_ref();
+
+                    self.check_type(&name, on_types, val, span.clone());
+
+                    let (Value::String(val_str), Value::String(split_str)) = (val, split) else {
+                        self.runtime_error(
                             &format!(
-                                "Cannot join with the value of type '{}'",
-                                separator.get_type()
+                                "Expected 'str' as argument of split, found '{}'",
+                                split.get_type()
                             ),
                             span,
-                        ),
-                    });
+                        );
+                    };
 
-                self.stack.push(allocate(result_string.into()));
-            },
+                    let split = val_str
+                        .split(split_str)
+                        .map(|i| i.into())
+                        .collect::<Vec<Value>>();
 
-            Split => unsafe {
-                let split = self.stack.pop().unwrap().as_ref();
-                let dest = self.stack.pop().unwrap().as_ref();
+                    self.stack.push(allocate(Value::Array(split)));
+                },
 
-                if dest.get_type() != "str" {
-                    self.runtime_error(
-                        &format!(
-                            "No method named 'split' found on the type '{}'",
-                            dest.get_type()
-                        ),
-                        span,
-                    );
-                }
-
-                if split.get_type() != "str" {
-                    self.runtime_error(
-                        &format!(
-                            "Expected 'str' as argument of split, found '{}'",
-                            split.get_type()
-                        ),
-                        span,
-                    );
-                }
-
-                let (Value::String(dest_str), Value::String(split_str)) = (dest, split) else {
-                    // SAFETY: we already checked the type
-                    unreachable!()
-                };
-
-                let split = dest_str
-                    .split(split_str)
-                    .map(|i| i.into())
-                    .collect::<Vec<Value>>();
-
-                self.stack.push(allocate(Value::Array(split)));
+                _ => {}
             },
 
             Print => unsafe {
@@ -1332,6 +1298,18 @@ impl VM {
             .rev()
             .map(|i| (i, &self.instructions[i]))
             .find(|&(_, (instr, _))| matches!(instr.0, Bytecode::While))
+    }
+
+    fn check_type(&self, fn_name: &str, types: Vec<Type>, value: &Value, span: Range<usize>) {
+        if types.into_iter().find(|i| i.is_same_type(value)).is_none() {
+            self.runtime_error(
+                &format!(
+                    "No method named '{fn_name}' found on the type '{}'",
+                    value.get_type(),
+                ),
+                span,
+            );
+        }
     }
 }
 

@@ -3,6 +3,39 @@ use rug::{Float, Integer};
 use std::borrow::Cow;
 use std::ops::*;
 
+#[derive(Clone, Debug, Eq, PartialEq, Hash)]
+pub enum Type {
+    Integer,
+    Float,
+    String,
+    Bool,
+    Array,
+    Nil,
+}
+
+impl Type {
+    pub fn is_same_type(&self, value: &Value) -> bool {
+        value.get_type() == self.get_type()
+    }
+
+    pub fn get_type(&self) -> &'static str {
+        match self {
+            Self::Integer => "int",
+            Self::Float => "float",
+            Self::String => "str",
+            Self::Array => "array",
+            Self::Bool => "bool",
+            Self::Nil => "nil",
+        }
+    }
+}
+
+impl std::fmt::Display for Type {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.get_type())
+    }
+}
+
 #[derive(Clone, Debug, Default, PartialEq)]
 pub enum Value {
     Int(Integer),

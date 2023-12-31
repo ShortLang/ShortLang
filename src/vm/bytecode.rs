@@ -1,5 +1,7 @@
+use super::value::Type;
+
 #[allow(non_camel_case_types)]
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum Bytecode {
     // Completely shutdowns the program.
     Halt,
@@ -36,10 +38,12 @@ pub enum Bytecode {
     ToFloat,
 
     // Method functions
-    Push,
-    Split,
-    Clear,
-    Join,
+    Method(MethodFunction),
+
+    // Push,
+    // Split,
+    // Clear,
+    // Join,
 
     // FUNCTION,
     Function,
@@ -68,6 +72,13 @@ pub enum Bytecode {
     SubEq,
     MulEq,
     DivEq,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct MethodFunction {
+    pub(crate) name: String,
+    pub(crate) on_types: Vec<Type>,
+    pub(crate) num_args: usize,
 }
 
 #[derive(Clone, Debug)]

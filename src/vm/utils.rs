@@ -5,6 +5,10 @@ use super::{memory::alloc_new_value, value::Value, vm::VarId};
 
 #[macro_export]
 macro_rules! for_each_arg {
+    { $arg:ident, 0, Some($e:ident) => { $($some:tt)* }, None => { $($none:tt)* } } => {
+        println!("doin' nothin'");
+    };
+
     { $arg:ident, $n:expr, Some($e:ident) => { $($some:tt)* }, None => { $($none:tt)* } } => {
         $arg.as_ref()
             .unwrap_or(&vec![])
