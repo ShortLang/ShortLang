@@ -75,10 +75,10 @@ pub enum Bytecode {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub(crate) struct MethodFunction {
-    pub(crate) name: String,
-    pub(crate) on_types: Vec<Type>,
-    pub(crate) num_args: usize,
+pub struct MethodFunction {
+    pub name: String,
+    pub on_types: Vec<Type>,
+    pub num_args: usize,
 }
 
 #[derive(Clone, Debug)]
