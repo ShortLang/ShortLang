@@ -64,7 +64,7 @@ For the sake of readability, we'll use `print` and `println` in the examples.
 | `<=`     | Less than or equal to    |
 | `>=`     | Greater than or equal to |
 | `&&`     | And                      |
-| `||`     | Or                       |
+| `\|\|`     | Or                       |
 
 ## Variables
 
