@@ -435,7 +435,6 @@ impl<'a> PParser<'a> {
             let (token, _) = self.current.clone();
             exprs.push(self.declaration(token));
             let (token, span) = self.current.clone();
-            println!("{:?}", token);
             if &token != &LogosToken::Newline
                 && &token != &LogosToken::Semi
                 && &token != &LogosToken::Error
@@ -681,7 +680,6 @@ impl<'a> PParser<'a> {
                     break;
                 }
                 self.proceed();
-                println!("X{:?}", self.current());
                 if op == LogosToken::Question {
                     let mhs = self.block();
                     if self.current() == &LogosToken::Colon {
@@ -819,8 +817,8 @@ impl<'a> PParser<'a> {
             }
             LogosToken::LParen => {
                 self.proceed();
-                let expr = self.expr(0);
-                println!("{:?}", self.current());
+                let expr = self.expr(5);
+                self.back();
                 self.expect(LogosToken::RParen);
                 expr.inner
             }
@@ -830,7 +828,6 @@ impl<'a> PParser<'a> {
                 ExprKind::Unary(token.to_unary_op(), Box::new(expr))
             }
             _ => {
-                println!("{:?}", self.current());
                 let report = miette!(
                     labels = vec![LabeledSpan::at(span.clone(), "this is not a value")],
                     help = "Expected a value like integers, strings, etc.",
