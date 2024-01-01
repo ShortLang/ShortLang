@@ -74,6 +74,11 @@ pub enum Bytecode {
     DivEq,
     Not,
     Neg,
+    Every,
+    Pop,
+    Push,
+    Dup,
+    Sqrt,
 }
 
 #[derive(Debug, Clone, PartialEq)]

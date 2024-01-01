@@ -262,9 +262,9 @@ impl<'a> Analyzer<'a> {
         expr: &Expr,
         curr_expr: &Vec<Expr>,
     ) {
-        let use_me;
+        let use_me: Option<&std::string::String>;
         if let Some(name) = name.0 {
-            use_me = name.clone();
+            use_me = Some(name);
             let expr_index = self.ast.iter().position(|e| e == expr).unwrap();
             self.scopes.last_mut().unwrap().insert(
                 name.clone(),
@@ -274,8 +274,10 @@ impl<'a> Analyzer<'a> {
                     expr_index,
                 },
             );
+        } else if let Some(name) = name.1 {
+            use_me = Some(name);
         } else {
-            use_me = name.1.unwrap().clone();
+            use_me = None;
         }
 
         self.scopes.push(HashMap::new());
@@ -304,7 +306,7 @@ impl<'a> Analyzer<'a> {
         }
 
         for expr in curr_expr {
-            self.analyze_expr(expr, Some(&use_me));
+            self.analyze_expr(expr, use_me);
         }
 
         self.check_unused_variables();

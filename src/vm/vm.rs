@@ -529,6 +529,27 @@ impl VM {
                         .push((Instr(Bytecode::TypeOf, vec![]), expr.span));
                 }
 
+                "sqrt" => {
+                    let args = args.clone().unwrap();
+                    let num_args = args.len();
+                    if num_args < 1 || num_args > 2 {
+                        self.runtime_error(
+                            &format!("Expected 1 or 2 arguments, found {}", args.len()),
+                            expr.span,
+                        );
+                    }
+
+                    self.compile_expr(args[0].clone());
+                    if num_args == 2 {
+                        self.compile_expr(args[1].clone());
+                    } else {
+                        self.push_data(Value::Int(Integer::from(2)), expr.span.clone());
+                    }
+
+                    self.instructions
+                        .push((Instr(Bytecode::Sqrt, vec![]), expr.span));
+                }
+
                 _ => {
                     for_each_arg!(args, arg => { self.compile_expr(arg) });
 
@@ -630,6 +651,47 @@ impl VM {
                 }
             }
 
+            ExprKind::Every(list, body) => {
+                self.compile_expr(*list); // Step 1
+                self.instructions
+                    .push((Instr(Bytecode::Push, vec![0]), expr.span.clone())); // Step 2
+
+                let loop_start = self.instructions.len();
+                self.instructions
+                    .push((Instr(Bytecode::Dup, vec![1]), expr.span.clone())); // Duplicate the array
+                self.instructions
+                    .push((Instr(Bytecode::Dup, vec![1]), expr.span.clone())); // Duplicate the index
+                self.instructions
+                    .push((Instr(Bytecode::Index, vec![]), expr.span.clone())); // Get the current element
+
+                // Step 5: Create a new variable `i` and set it to the current element
+                self.variables_id
+                    .insert("i".to_string(), self.var_id_count as u32);
+                self.instructions
+                    .push((Instr(Bytecode::MakeVar, vec![]), expr.span.clone()));
+                self.instructions.push((
+                    Instr(Bytecode::Replace, vec![self.var_id_count]),
+                    expr.span.clone(),
+                ));
+                self.var_id_count += 1;
+
+                // Step 6: Compile the body of the `Every` expression
+                for expr in body {
+                    self.compile_expr(expr);
+                }
+
+                // Step 7: Increment the index and repeat the loop
+                self.instructions
+                    .push((Instr(Bytecode::Inc, vec![]), expr.span.clone()));
+                self.instructions
+                    .push((Instr(Bytecode::Jmp, vec![loop_start]), expr.span.clone()));
+
+                let loop_end = self.instructions.len();
+                self.instructions
+                    .push((Instr(Bytecode::Pop, vec![2]), expr.span.clone())); // Pop the array and index
+                self.instructions[loop_start - 1].0 .1.push(loop_end);
+            }
+
             _ => {}
         }
     }
@@ -682,6 +744,28 @@ impl VM {
                 return true;
             }
 
+            Push => {
+                let value = self.stack.last().cloned();
+                match value {
+                    Some(val) => self.stack.push(val),
+                    None => self.runtime_error("Stack underflow", span),
+                }
+            }
+
+            Dup => {
+                let value = self.stack.last().cloned();
+                match value {
+                    Some(val) => self.stack.push(val),
+                    None => self.runtime_error("Stack underflow", span),
+                }
+            }
+
+            Pop => {
+                if self.stack.pop().is_none() {
+                    self.runtime_error("Stack underflow", span);
+                }
+            }
+
             TypeOf => unsafe {
                 let value = self.stack.pop().unwrap();
                 let ty = value.as_ref().get_type();
@@ -689,6 +773,24 @@ impl VM {
                     .push(NonNull::new_unchecked(alloc_new_value(Value::String(
                         ty.to_owned(),
                     ))));
+            },
+
+            Sqrt => unsafe {
+                let sqrt_to = self.stack.pop().unwrap().as_ref();
+                let value = self.stack.pop().unwrap().as_ref();
+                let sqrt_to = match sqrt_to {
+                    Value::Int(i) => i.to_u32().unwrap(),
+                    Value::Float(f) => f.to_u32_saturating().unwrap(),
+                    _ => self.runtime_error("Expected a number", span),
+                };
+                let value = match value {
+                    Value::Int(i) => Float::with_val(54, i).root(sqrt_to),
+                    Value::Float(f) => f.clone().root(sqrt_to),
+                    _ => self.runtime_error("Expected a number", span),
+                };
+
+                self.stack
+                    .push(NonNull::new_unchecked(alloc_new_value(Value::Float(value))));
             },
 
             MakeVar => {
@@ -699,7 +801,6 @@ impl VM {
             }
 
             Replace => {
-                let id = args[0];
                 let value = self
                     .stack
                     .pop()
@@ -709,7 +810,7 @@ impl VM {
                 self.variables
                     .last_mut()
                     .unwrap()
-                    .insert(id as u32, Some(allocate(value)));
+                    .insert(args[0] as u32, Some(allocate(value)));
             }
 
             GetVar => {
@@ -723,9 +824,7 @@ impl VM {
             }
 
             LoadConst => unsafe {
-                let constant_index = args[0] as usize;
-                let constant = self.constants.get(constant_index);
-
+                let constant = self.constants.get(args[0]);
                 match constant {
                     Some(c) => self
                         .stack
@@ -774,6 +873,10 @@ impl VM {
                 if !condition {
                     self.pc = loop_end - 1;
                 }
+            },
+
+            Every => unsafe {
+                println!("{:?}", args);
             },
 
             FnCall => unsafe {
