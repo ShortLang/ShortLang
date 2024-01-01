@@ -681,7 +681,7 @@ impl<'a> PParser<'a> {
                     break;
                 }
                 self.proceed();
-
+                println!("X{:?}", self.current());
                 if op == LogosToken::Question {
                     let mhs = self.block();
                     if self.current() == &LogosToken::Colon {
@@ -821,13 +821,12 @@ impl<'a> PParser<'a> {
                 self.proceed();
                 let expr = self.expr(0);
                 println!("{:?}", self.current());
-                self.back();
                 self.expect(LogosToken::RParen);
                 expr.inner
             }
             LogosToken::Plus | LogosToken::Minus | LogosToken::Bang => {
                 self.proceed();
-                let expr = self.term(self.current.clone());
+                let expr = self.expr(0);
                 ExprKind::Unary(token.to_unary_op(), Box::new(expr))
             }
             _ => {

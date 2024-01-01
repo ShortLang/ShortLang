@@ -72,6 +72,8 @@ pub enum Bytecode {
     SubEq,
     MulEq,
     DivEq,
+    Not,
+    Neg,
 }
 
 #[derive(Debug, Clone, PartialEq)]

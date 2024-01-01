@@ -6,7 +6,7 @@ use std::ptr::NonNull;
 
 use super::value::{Type, Value};
 use crate::for_each_arg;
-use crate::parser::PostfixOp;
+use crate::parser::{PostfixOp, UnaryOp};
 use crate::vm::bytecode::MethodFunction;
 use crate::vm::memory;
 use crate::{
@@ -616,6 +616,20 @@ impl VM {
                 ));
             }
 
+            ExprKind::Unary(op, expr) => {
+                self.compile_expr(*expr.clone());
+
+                match op {
+                    UnaryOp::Not => self
+                        .instructions
+                        .push((Instr(Bytecode::Not, vec![]), expr.span)),
+                    UnaryOp::Neg => self
+                        .instructions
+                        .push((Instr(Bytecode::Neg, vec![]), expr.span)),
+                    _ => {}
+                }
+            }
+
             _ => {}
         }
     }
@@ -718,6 +732,27 @@ impl VM {
                         .push(NonNull::new_unchecked(alloc_new_value(c.to_owned()))),
                     None => self.runtime_error("Stack overflow", span),
                 }
+            },
+
+            Not => unsafe {
+                let value = self.stack.pop().unwrap().as_ref();
+                self.stack
+                    .push(NonNull::new_unchecked(alloc_new_value(Value::Bool(
+                        !value.bool_eval(),
+                    ))));
+            },
+
+            Neg => unsafe {
+                let value = self.stack.pop().unwrap().as_ref();
+                self.stack
+                    .push(NonNull::new_unchecked(alloc_new_value(match value {
+                        Value::Int(i) => Value::Int(Integer::from(-i)),
+                        Value::Float(f) => Value::Float(Float::with_val(53, -f)),
+                        _ => self.runtime_error(
+                            &format!("Cannot negate the value of type {}", value.get_type()),
+                            span,
+                        ),
+                    })));
             },
 
             Function => unsafe {
