@@ -5,7 +5,7 @@ use logos::Logos;
 use rug::{Float, Integer};
 
 #[derive(Logos, Debug, Clone, PartialEq)]
-#[logos(skip r"[ \r\n\f\t]+")]
+#[logos(skip r"[ \r\f\t]+")]
 // skip comments
 #[logos(skip r"//.*")]
 pub enum LogosToken<'a> {
@@ -65,8 +65,6 @@ pub enum LogosToken<'a> {
     Leq,
     #[token(">=")]
     Geq,
-    #[token("_")]
-    Under,
     #[token("<")]
     LAngle,
     #[token(">")]
@@ -122,11 +120,14 @@ pub enum LogosToken<'a> {
     Match,
     #[token("impl")]
     Impl,
+    #[token("\n")]
+    Newline,
     Error,
 }
 impl<'a> fmt::Display for LogosToken<'a> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
+            LogosToken::Newline => write!(f, "<newline>"),
             LogosToken::And => write!(f, "&&"),
             LogosToken::Or => write!(f, "||"),
             LogosToken::True => write!(f, "true"),
@@ -163,7 +164,6 @@ impl<'a> fmt::Display for LogosToken<'a> {
             LogosToken::Neq => write!(f, "!="),
             LogosToken::Leq => write!(f, "<="),
             LogosToken::Geq => write!(f, ">="),
-            LogosToken::Under => write!(f, "_"),
             LogosToken::LSquare => write!(f, "["),
             LogosToken::RSquare => write!(f, "]"),
             LogosToken::LBrace => write!(f, "{{"),
@@ -348,7 +348,14 @@ impl<'a> PParser<'a> {
         x.proceed();
         x
     }
-
+    fn back(&mut self) -> Option<(LogosToken<'a>, Range<usize>)> {
+        let token = self.tokens.get(self.position - 2).cloned();
+        if token.is_some() {
+            self.current = token.clone().unwrap();
+        }
+        self.position -= 1;
+        token
+    }
     fn proceed(&mut self) -> Option<(LogosToken<'a>, Range<usize>)> {
         let token = self.tokens.get(self.position).cloned();
         // Try to get the last token's span if no last token then just 0..0
@@ -378,6 +385,7 @@ impl<'a> PParser<'a> {
         let mut exprs: Vec<Expr> = Vec::new();
         if self.current() == &LogosToken::LBrace {
             self.proceed();
+            self.skip_separator();
             loop {
                 if self.current() == &LogosToken::RBrace {
                     self.proceed();
@@ -386,6 +394,24 @@ impl<'a> PParser<'a> {
                 let current = self.current.0.to_owned();
                 let expr = self.declaration(current);
                 exprs.push(expr);
+                let (token, span) = self.current.clone();
+                if &token != &LogosToken::Newline
+                    && &token != &LogosToken::Semi
+                    && &token != &LogosToken::Error
+                {
+                    let report = miette!(
+                        labels = vec![LabeledSpan::at(
+                            span.clone(),
+                            format!("expected newline or semicolon")
+                        )],
+                        "Expected semicolon or newline found {token}"
+                    )
+                    .with_source_code(self.source.to_string());
+                    self.errored = true;
+                    println!("{:?}", report);
+                } else {
+                    self.skip_separator();
+                }
             }
         } else {
             let expr = self.expr(0);
@@ -393,18 +419,40 @@ impl<'a> PParser<'a> {
         }
         (exprs.clone(), exprs.len() == 1)
     }
+    fn skip_separator(&mut self) {
+        while self.current() == &LogosToken::Newline || self.current() == &LogosToken::Semi {
+            self.proceed();
+        }
+    }
     pub fn parse(&mut self) -> Vec<Expr> {
         let mut exprs: Vec<Expr> = Vec::new();
+        self.skip_separator();
         loop {
             if self.position >= self.tokens.len() + 1 {
                 break;
             }
 
             let (token, _) = self.current.clone();
-            exprs.push(self.declaration(token))
-        }
-        if self.errored {
-            std::process::exit(1);
+            exprs.push(self.declaration(token));
+            let (token, span) = self.current.clone();
+            println!("{:?}", token);
+            if &token != &LogosToken::Newline
+                && &token != &LogosToken::Semi
+                && &token != &LogosToken::Error
+            {
+                let report = miette!(
+                    labels = vec![LabeledSpan::at(
+                        span.clone(),
+                        format!("expected newline or semicolon")
+                    )],
+                    "Expected semicolon or newline found {token}"
+                )
+                .with_source_code(self.source.to_string());
+                self.errored = true;
+                println!("{:?}", report);
+            } else {
+                self.skip_separator();
+            }
         }
         exprs
     }
@@ -436,6 +484,7 @@ impl<'a> PParser<'a> {
                 self.expect(LogosToken::LBrace);
                 self.proceed();
                 let mut exprs: Vec<(Expr, Vec<Expr>)> = Vec::new();
+                self.skip_separator();
                 loop {
                     if self.current() == &LogosToken::RBrace {
                         self.proceed();
@@ -461,7 +510,26 @@ impl<'a> PParser<'a> {
                     self.expect(LogosToken::Colon);
                     self.proceed();
                     let (expr, _) = self.block();
-                    exprs.push((val, expr))
+                    exprs.push((val, expr));
+
+                    let (token, span) = self.current.clone();
+                    if &token != &LogosToken::Newline
+                        && &token != &LogosToken::Semi
+                        && &token != &LogosToken::Error
+                    {
+                        let report = miette!(
+                            labels = vec![LabeledSpan::at(
+                                span.clone(),
+                                format!("expected newline or semicolon")
+                            )],
+                            "Expected semicolon or newline found {token}"
+                        )
+                        .with_source_code(self.source.to_string());
+                        self.errored = true;
+                        println!("{:?}", report);
+                    } else {
+                        self.skip_separator();
+                    }
                 }
                 Expr::new(
                     start..self.current.1.end,
@@ -752,12 +820,14 @@ impl<'a> PParser<'a> {
             LogosToken::LParen => {
                 self.proceed();
                 let expr = self.expr(0);
+                println!("{:?}", self.current());
+                self.back();
                 self.expect(LogosToken::RParen);
                 expr.inner
             }
             LogosToken::Plus | LogosToken::Minus | LogosToken::Bang => {
                 self.proceed();
-                let expr = self.expr(0);
+                let expr = self.term(self.current.clone());
                 ExprKind::Unary(token.to_unary_op(), Box::new(expr))
             }
             _ => {
