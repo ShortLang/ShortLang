@@ -33,6 +33,13 @@ macro_rules! for_each_arg {
     };
 }
 
+#[macro_export]
+macro_rules! float {
+    ($val:expr) => {
+        rug::Float::with_val(53, $val)
+    };
+}
+
 #[derive(Debug, Clone)]
 pub(crate) struct FunctionData {
     pub name: String,

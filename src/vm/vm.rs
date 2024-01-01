@@ -5,6 +5,7 @@ use std::ops::Range;
 use std::ptr::NonNull;
 
 use super::value::{Type, Value};
+use crate::float;
 use crate::for_each_arg;
 use crate::parser::{PostfixOp, UnaryOp};
 use crate::vm::bytecode::MethodFunction;
@@ -784,8 +785,16 @@ impl VM {
                     _ => self.runtime_error("Expected a number", span),
                 };
                 let value = match value {
-                    Value::Int(i) => Float::with_val(54, i).root(sqrt_to),
-                    Value::Float(f) => f.clone().root(sqrt_to),
+                    Value::Int(i) => match sqrt_to {
+                        2 => float!(i).sqrt(),
+                        3 => float!(i).cbrt(),
+                        _ => float!(i).root(sqrt_to),
+                    },
+                    Value::Float(f) => match sqrt_to {
+                        2 => f.clone().sqrt(),
+                        3 => f.clone().cbrt(),
+                        _ => f.clone().root(sqrt_to),
+                    },
                     _ => self.runtime_error("Expected a number", span),
                 };
 
@@ -846,7 +855,7 @@ impl VM {
                 self.stack
                     .push(NonNull::new_unchecked(alloc_new_value(match value {
                         Value::Int(i) => Value::Int(Integer::from(-i)),
-                        Value::Float(f) => Value::Float(Float::with_val(53, -f)),
+                        Value::Float(f) => Value::Float(float!(-f)),
                         _ => self.runtime_error(
                             &format!("Cannot negate the value of type {}", value.get_type()),
                             span,
@@ -1019,18 +1028,10 @@ impl VM {
                 self.stack
                     .push(NonNull::new_unchecked(alloc_new_value(match val {
                         Value::Int(i) => {
-                            let mut result = Integer::from(1);
-                            for j in 1..=i.to_u32().unwrap() {
-                                result.assign(&result * Integer::from(j));
-                            }
-                            Value::Int(result)
+                            Value::Int(Integer::from(Integer::factorial(i.to_u32().unwrap())))
                         }
                         Value::Float(f) => {
-                            let mut result = Float::with_val(53, 1.0);
-                            for j in 1..=f.to_i32_saturating().unwrap() {
-                                result.assign(&result * Float::with_val(53, j));
-                            }
-                            Value::Float(result)
+                            Value::Float(float!(Float::factorial(f.to_u32_saturating().unwrap())))
                         }
                         _ => self.runtime_error(
                             &format!(
@@ -1219,12 +1220,12 @@ impl VM {
 
             ToInt => unsafe {
                 let val = self.stack.pop().unwrap().as_ref();
-                self.stack.push(allocate(match val {
-                    Value::Int(i) => Value::Int(i.clone()),
-                    Value::Float(f) => Value::Int(f.to_integer().unwrap()),
-                    Value::Bool(b) => Value::Int(Integer::from(*b as i32)),
+                self.stack.push(allocate(Value::Int(match val {
+                    Value::Int(i) => i.clone(),
+                    Value::Float(f) => f.to_integer().unwrap(),
+                    Value::Bool(b) => Integer::from(*b as i32),
                     Value::String(s) => match s.parse::<i64>() {
-                        Ok(i) => Value::Int(Integer::from(i)),
+                        Ok(i) => Integer::from(i),
                         Err(e) => {
                             self.runtime_error(
                                 &format!("cannot parse the string to int value, {e:?}"),
@@ -1233,19 +1234,19 @@ impl VM {
                         }
                     },
 
-                    Value::Nil => Value::Int(Integer::from(0)),
+                    Value::Nil => Integer::from(0),
                     Value::Array(_) => self.runtime_error("cannot convert array type to int", span),
-                }));
+                })));
             },
 
             ToFloat => unsafe {
                 let val = self.stack.pop().unwrap().as_ref();
                 self.stack.push(allocate(Value::Float(match val {
-                    Value::Int(i) => Float::with_val(53, i),
-                    Value::Float(f) => Float::with_val(53, f),
-                    Value::Bool(b) => Float::with_val(53, *b as i32),
+                    Value::Int(i) => float!(i),
+                    Value::Float(f) => f.clone(),
+                    Value::Bool(b) => float!(*b as i32),
                     Value::String(s) => match s.parse::<f64>() {
-                        Ok(i) => Float::with_val(53, i),
+                        Ok(i) => float!(i),
                         Err(e) => {
                             self.runtime_error(
                                 &format!("cannot parse the string to float value, {e:?}"),
@@ -1254,8 +1255,10 @@ impl VM {
                         }
                     },
 
-                    Value::Nil => Float::with_val(53, 0.0),
-                    Value::Array(_) => self.runtime_error("cannot convert array type to int", span),
+                    Value::Nil => float!(0.0),
+                    Value::Array(_) => {
+                        self.runtime_error("cannot convert array type to float", span)
+                    }
                 })));
             },
         }
@@ -1479,11 +1482,11 @@ mod tests {
         let mut vm = VM::new("", vec![]);
         vm.compile_expr(Expr {
             span: 0..0,
-            inner: ExprKind::Float(Float::with_val(53, 5.0)),
+            inner: ExprKind::Float(float!(5.0)),
         });
         assert_eq!(vm.instructions.len(), 1);
         assert_eq!(vm.instructions[0].0 .0, Bytecode::LoadConst);
-        assert_eq!(vm.constants[0], Value::Float(Float::with_val(53, 5.0)));
+        assert_eq!(vm.constants[0], Value::Float(float!(5.0)));
     }
 
     #[test]

@@ -3,7 +3,7 @@
 use clap::Parser;
 use std::fs;
 
-use crate::analyzer::Analyzer;
+use analyzer::Analyzer;
 use logos::Logos;
 use miette::{miette, Severity};
 use parser::{LogosToken, PParser};
@@ -55,13 +55,17 @@ fn main() {
 
     let mut parser = PParser::new(&src, tokens);
     let mut ast = parser.parse();
-    Analyzer::new(&src, &args, &mut ast).analyze();
+    // Analyzer::new(&src, &args, &mut ast).analyze();
     if args.ast {
         println!(
             "{:?}",
             miette!(severity = Severity::Advice, "AST: {:?}", ast,)
         );
     }
+    if args.format {
+        todo!()
+    }
+
     let mut vm = VM::new(&src, ast);
     vm.compile();
     vm.run();
