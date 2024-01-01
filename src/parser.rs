@@ -702,7 +702,6 @@ impl<'a> PParser<'a> {
                     start..rhs.span.end,
                     ExprKind::Binary(Box::new(lhs), op.to_binary_op(), Box::new(rhs)),
                 );
-
                 continue;
             }
             break;
@@ -821,9 +820,16 @@ impl<'a> PParser<'a> {
                 self.expect(LogosToken::RParen);
                 expr.inner
             }
-            LogosToken::Plus | LogosToken::Minus | LogosToken::Bang => {
+            LogosToken::Minus | LogosToken::Plus => {
+                self.proceed();
+                let expr = self.term(self.current.clone());
+                self.back();
+                ExprKind::Unary(token.to_unary_op(), Box::new(expr))
+            }
+            LogosToken::Bang => {
                 self.proceed();
                 let expr = self.expr(0);
+                self.back();
                 ExprKind::Unary(token.to_unary_op(), Box::new(expr))
             }
             _ => {
