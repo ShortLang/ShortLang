@@ -54,7 +54,7 @@ fn main() {
 
     let mut parser = PParser::new(&src, tokens);
     let mut ast = parser.parse();
-    Analyzer::new(&src, &args, &mut ast).analyze();
+//    Analyzer::new(&src, &args, &mut ast).analyze();
     if args.ast {
         println!("{:?}", &ast);
     }

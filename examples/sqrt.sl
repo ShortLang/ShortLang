@@ -1,0 +1,16 @@
+//calculate square root using the babylonian algoritm
+sqrt i : {
+        precision = 25
+        x = i/2
+        >. precision > 0 {
+                x = 0.5 * ( x + i / x )
+                precision --
+        }
+        &x
+}
+
+a = 2
+>. a <= 1000 {
+	$sqrt(a)
+	a = a + 1
+}
