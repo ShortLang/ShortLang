@@ -1,2 +1,1 @@
-$"hello world".split(" ")
-$["wizard", "hamza", "fireplank"].join("      ")
+$(!10<0))?_hi:_lo
