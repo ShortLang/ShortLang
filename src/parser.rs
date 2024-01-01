@@ -818,7 +818,6 @@ impl<'a> PParser<'a> {
             LogosToken::LParen => {
                 self.proceed();
                 let expr = self.expr(5);
-                self.back();
                 self.expect(LogosToken::RParen);
                 expr.inner
             }
