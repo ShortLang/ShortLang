@@ -2,7 +2,7 @@ use super::value::Type;
 use std::sync::Mutex;
 
 #[allow(non_camel_case_types)]
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum Bytecode {
     // Completely shutdowns the program.
     Halt,
@@ -86,36 +86,6 @@ pub enum Bytecode {
     Push,
     Dup,
     Sqrt,
-}
-
-impl PartialEq for Bytecode {
-    fn eq(&self, other: &Self) -> bool {
-        if let Bytecode::Every { loop_end, .. } = self {
-            let a = loop_end;
-            if let Bytecode::Every { loop_end, .. } = other {
-                let b = loop_end;
-                *a == *b
-            } else {
-                false
-            }
-        } else {
-            matches!(self, other)
-        }
-    }
-
-    fn ne(&self, other: &Self) -> bool {
-        if let Bytecode::Every { loop_end, .. } = self {
-            let a = loop_end;
-            if let Bytecode::Every { loop_end, .. } = other {
-                let b = loop_end;
-                *a != *b
-            } else {
-                true
-            }
-        } else {
-            !matches!(self, other)
-        }
-    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
