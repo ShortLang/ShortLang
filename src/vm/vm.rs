@@ -3,6 +3,7 @@ use rug::{Assign, Float, Integer};
 use std::collections::HashMap;
 use std::ops::Range;
 use std::ptr::NonNull;
+use std::sync::Mutex;
 
 use super::value::{Type, Value};
 use crate::float;
@@ -653,19 +654,6 @@ impl VM {
             }
 
             ExprKind::Every(list, body) => {
-                self.compile_expr(*list); // Step 1
-                self.instructions
-                    .push((Instr(Bytecode::Push, vec![0]), expr.span.clone())); // Step 2
-
-                let loop_start = self.instructions.len();
-                self.instructions
-                    .push((Instr(Bytecode::Dup, vec![1]), expr.span.clone())); // Duplicate the array
-                self.instructions
-                    .push((Instr(Bytecode::Dup, vec![1]), expr.span.clone())); // Duplicate the index
-                self.instructions
-                    .push((Instr(Bytecode::Index, vec![]), expr.span.clone())); // Get the current element
-
-                // Step 5: Create a new variable `i` and set it to the current element
                 self.variables_id
                     .insert("i".to_string(), self.var_id_count as u32);
                 self.instructions
@@ -674,23 +662,84 @@ impl VM {
                     Instr(Bytecode::Replace, vec![self.var_id_count]),
                     expr.span.clone(),
                 ));
+
+                let var_ptr = self.var_id_count;
                 self.var_id_count += 1;
 
-                // Step 6: Compile the body of the `Every` expression
+                let loop_start = self.instructions.len();
+                self.compile_expr(*list);
+
+                let instr_ptr = self.instructions.len();
+                let ran_once = Box::leak(Box::new(false));
+
+                self.instructions.push((
+                    Instr(
+                        Bytecode::Every {
+                            loop_end: 0, // will be changed later
+                            index: Box::leak(Box::new(0usize)),
+                            ran_once,
+                            var_ptr,
+                        },
+                        vec![],
+                    ),
+                    expr.span,
+                ));
+
                 for expr in body {
                     self.compile_expr(expr);
                 }
 
-                // Step 7: Increment the index and repeat the loop
-                self.instructions
-                    .push((Instr(Bytecode::Inc, vec![]), expr.span.clone()));
-                self.instructions
-                    .push((Instr(Bytecode::Jmp, vec![loop_start]), expr.span.clone()));
+                self.instructions.push((
+                    Instr(Bytecode::ForLoopJmp { ran_once }, vec![loop_start]),
+                    0..0,
+                ));
 
-                let loop_end = self.instructions.len();
-                self.instructions
-                    .push((Instr(Bytecode::Pop, vec![2]), expr.span.clone())); // Pop the array and index
-                self.instructions[loop_start - 1].0 .1.push(loop_end);
+                let end = self.instructions.len();
+                let Bytecode::Every { loop_end, .. } = &mut self.instructions[instr_ptr].0 .0
+                else {
+                    unreachable!()
+                };
+
+                *loop_end = end;
+
+                // self.compile_expr(*list); // Step 1
+                // self.instructions
+                //     .push((Instr(Bytecode::Push, vec![0]), expr.span.clone())); // Step 2
+
+                // let loop_start = self.instructions.len();
+                // self.instructions
+                //     .push((Instr(Bytecode::Dup, vec![1]), expr.span.clone())); // Duplicate the array
+                // self.instructions
+                //     .push((Instr(Bytecode::Dup, vec![1]), expr.span.clone())); // Duplicate the index
+                // self.instructions
+                //     .push((Instr(Bytecode::Index, vec![]), expr.span.clone())); // Get the current element
+
+                // // Step 5: Create a new variable `i` and set it to the current element
+                // self.variables_id
+                //     .insert("i".to_string(), self.var_id_count as u32);
+                // self.instructions
+                //     .push((Instr(Bytecode::MakeVar, vec![]), expr.span.clone()));
+                // self.instructions.push((
+                //     Instr(Bytecode::Replace, vec![self.var_id_count]),
+                //     expr.span.clone(),
+                // ));
+                // self.var_id_count += 1;
+
+                // // Step 6: Compile the body of the `Every` expression
+                // for expr in body {
+                //     self.compile_expr(expr);
+                // }
+
+                // // Step 7: Increment the index and repeat the loop
+                // self.instructions
+                //     .push((Instr(Bytecode::Inc, vec![]), expr.span.clone()));
+                // self.instructions
+                //     .push((Instr(Bytecode::Jmp, vec![loop_start]), expr.span.clone()));
+
+                // let loop_end = self.instructions.len();
+                // self.instructions
+                //     .push((Instr(Bytecode::Pop, vec![2]), expr.span.clone())); // Pop the array and index
+                // self.instructions[loop_start - 1].0 .1.push(loop_end);
             }
 
             _ => {}
@@ -884,8 +933,31 @@ impl VM {
                 }
             },
 
-            Every => unsafe {
-                println!("{:?}", args);
+            Every {
+                loop_end,
+                index,
+                ran_once,
+                var_ptr,
+            } => unsafe {
+                let array = self.stack.pop().unwrap().as_ref().as_array();
+
+                if *ran_once {
+                    *index += 1;
+                }
+
+                if *index < array.len() {
+                    // load the value into the variable
+                    *self
+                        .variables
+                        .last_mut()
+                        .unwrap()
+                        .get_mut(&(var_ptr as u32))
+                        .unwrap() = array.get(*index).map(|i| allocate(i.clone()));
+                } else {
+                    self.pc = loop_end - 1;
+                    *index = 0;
+                    *ran_once = false;
+                }
             },
 
             FnCall => unsafe {
@@ -1044,6 +1116,10 @@ impl VM {
             },
 
             Jmp => self.pc = args[0] - 1,
+            ForLoopJmp { ran_once } => {
+                self.pc = args[0] - 1;
+                *unsafe { &mut *ran_once } = true;
+            }
 
             Break => {
                 let while_instr_ptr = args[0];

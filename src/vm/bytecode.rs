@@ -1,7 +1,8 @@
 use super::value::Type;
+use std::sync::Mutex;
 
 #[allow(non_camel_case_types)]
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug)]
 pub enum Bytecode {
     // Completely shutdowns the program.
     Halt,
@@ -62,6 +63,7 @@ pub enum Bytecode {
     While,
 
     Jmp,
+    ForLoopJmp { ran_once: *mut bool }, // I hate myself for doing this.
     Break,
     Continue,
 
@@ -74,11 +76,46 @@ pub enum Bytecode {
     DivEq,
     Not,
     Neg,
-    Every,
+    Every {
+        loop_end: usize,
+        index: *mut usize,
+        ran_once: *mut bool,
+        var_ptr: usize,
+    },
     Pop,
     Push,
     Dup,
     Sqrt,
+}
+
+impl PartialEq for Bytecode {
+    fn eq(&self, other: &Self) -> bool {
+        if let Bytecode::Every { loop_end, .. } = self {
+            let a = loop_end;
+            if let Bytecode::Every { loop_end, .. } = other {
+                let b = loop_end;
+                *a == *b
+            } else {
+                false
+            }
+        } else {
+            matches!(self, other)
+        }
+    }
+
+    fn ne(&self, other: &Self) -> bool {
+        if let Bytecode::Every { loop_end, .. } = self {
+            let a = loop_end;
+            if let Bytecode::Every { loop_end, .. } = other {
+                let b = loop_end;
+                *a != *b
+            } else {
+                true
+            }
+        } else {
+            !matches!(self, other)
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
