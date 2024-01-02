@@ -30,9 +30,40 @@ pub struct Args {
     #[clap(short, long)]
     silent: bool,
 
+    /// Benchmarks the duration it takes for the program to run
+    #[clap(short, long)]
+    benchmark: bool,
+
     /// Formats the input file to be as short as possible
     #[clap(short, long)]
     format: bool,
+}
+
+fn format_duration(duration: std::time::Duration) -> String {
+    let total_secs = duration.as_secs();
+    let nano_secs = duration.subsec_nanos() as f64 / 1_000_000_000.0;
+
+    if total_secs > 0 {
+        if total_secs >= 60 {
+            let mins = total_secs / 60;
+            let secs = total_secs % 60;
+            format!("{}m {}s", mins, secs)
+        } else {
+            format!("{:.2}s", total_secs as f64 + nano_secs)
+        }
+    } else if duration.subsec_millis() > 0 {
+        format!(
+            "{:.2}ms",
+            duration.subsec_millis() as f64 + nano_secs * 1_000.0
+        )
+    } else if duration.subsec_micros() > 0 {
+        format!(
+            "{:.2}μs",
+            duration.subsec_micros() as f64 + nano_secs * 1_000_000.0
+        )
+    } else {
+        format!("{}ns", duration.subsec_nanos())
+    }
 }
 
 fn main() {
@@ -62,11 +93,23 @@ fn main() {
             miette!(severity = Severity::Advice, "AST: {:?}", ast,)
         );
     }
-    if args.format {
-        todo!()
-    }
 
     let mut vm = VM::new(&src, ast);
-    vm.compile();
-    vm.run();
+    if args.benchmark {
+        let start = std::time::Instant::now();
+        vm.compile();
+        vm.run();
+        let run_time = format_duration(start.elapsed());
+        println!(
+            "\n{:?}",
+            miette!(
+                severity = Severity::Advice,
+                "Program finished in {}",
+                run_time
+            )
+        );
+    } else {
+        vm.compile();
+        vm.run();
+    }
 }

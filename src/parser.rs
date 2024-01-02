@@ -1,8 +1,10 @@
 use miette::{miette, LabeledSpan};
 use std::{fmt, ops::Range};
 
+use crate::float;
 use logos::Logos;
-use rug::{Float, Integer};
+use rug::ops::CompleteRound;
+use rug::{Complete, Float, Integer};
 
 #[derive(Logos, Debug, Clone, PartialEq)]
 #[logos(skip r"[ \r\f\t]+")]
@@ -759,14 +761,12 @@ impl<'a> PParser<'a> {
                 }
                 ExprKind::Array(values)
             }
-            LogosToken::Int(value) => ExprKind::Int(Integer::from(Integer::parse(value).unwrap())),
-            LogosToken::Float(value) => {
-                ExprKind::Float(Float::with_val(53, Float::parse(value).unwrap()))
-            }
+            LogosToken::Int(value) => ExprKind::Int(Integer::parse(value).unwrap().complete()),
+            LogosToken::Float(value) => ExprKind::Float(Float::parse(value).unwrap().complete(53)),
             LogosToken::True => ExprKind::Bool(true),
             LogosToken::False => ExprKind::Bool(false),
             LogosToken::Nil => ExprKind::Nil,
-            LogosToken::Inf => ExprKind::Float(Float::with_val(53, Float::parse("inf").unwrap())),
+            LogosToken::Inf => ExprKind::Float(float!(rug::float::Special::Infinity)),
             LogosToken::Break => ExprKind::Break,
             LogosToken::Continue => ExprKind::Continue,
             LogosToken::String(value) => {

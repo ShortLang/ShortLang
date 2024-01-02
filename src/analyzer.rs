@@ -1,4 +1,4 @@
-use super::Args;
+use super::{float, Args};
 use crate::parser::ExprKind::*;
 use crate::parser::{BinaryOp, Expr};
 use miette::{miette, Diagnostic, LabeledSpan, Severity};
@@ -114,10 +114,7 @@ impl<'a> Analyzer<'a> {
                             BinaryOp::Mul => left * right,
                             BinaryOp::Div => left / right,
                             BinaryOp::Mod => left % right,
-                            BinaryOp::Pow => rug::Float::with_val(53, left)
-                                .pow(right)
-                                .to_integer()
-                                .unwrap(),
+                            BinaryOp::Pow => float!(left).pow(right).to_integer().unwrap(),
                             _ => return,
                         };
                         let expr_index = self.ast.iter().position(|e| *e == *expr).unwrap();

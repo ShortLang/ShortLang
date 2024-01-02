@@ -1,5 +1,4 @@
 use super::value::Type;
-use std::sync::Mutex;
 
 #[allow(non_camel_case_types)]
 #[derive(Clone, Debug, PartialEq)]
@@ -63,11 +62,13 @@ pub enum Bytecode {
     While,
 
     Jmp,
-    ForLoopJmp { ran_once: *mut bool }, // I hate myself for doing this.
+    ForLoopJmp {
+        ran_once: *mut bool,
+    },
     Break,
     Continue,
 
-    // Array
+    // Array,
     Array,
     Index,
     AddEq,

@@ -1,9 +1,9 @@
 use miette::{miette, LabeledSpan};
-use rug::{Assign, Float, Integer};
+use rug::ops::CompleteRound;
+use rug::{Complete, Float, Integer};
 use std::collections::HashMap;
 use std::ops::Range;
 use std::ptr::NonNull;
-use std::sync::Mutex;
 
 use super::value::{Type, Value};
 use crate::float;
@@ -900,11 +900,11 @@ impl VM {
             },
 
             Neg => unsafe {
-                let value = self.stack.pop().unwrap().as_ref();
+                let value = std::ptr::replace(self.stack.pop().unwrap().as_ptr(), Value::Nil);
                 self.stack
                     .push(NonNull::new_unchecked(alloc_new_value(match value {
-                        Value::Int(i) => Value::Int(Integer::from(-i)),
-                        Value::Float(f) => Value::Float(float!(-f)),
+                        Value::Int(i) => Value::Int(-i),
+                        Value::Float(f) => Value::Float(-f),
                         _ => self.runtime_error(
                             &format!("Cannot negate the value of type {}", value.get_type()),
                             span,
@@ -983,7 +983,7 @@ impl VM {
                     .map(|_| {
                         self.stack
                             .pop()
-                            .unwrap_or_else(|| memory::mark(allocate(Value::Nil)))
+                            .unwrap_or_else(|| mark(allocate(Value::Nil)))
                     })
                     .collect::<Vec<_>>();
 
@@ -991,7 +991,6 @@ impl VM {
 
                 let variables = self.variables[*scope_idx].clone();
 
-                // setup the variables
                 for (idx, param_var_idx) in fn_obj.get_var_ids().into_iter().enumerate() {
                     *self.variables[*scope_idx].get_mut(&param_var_idx).unwrap() =
                         Some(fn_args[idx]);
@@ -1041,15 +1040,7 @@ impl VM {
             BinaryPow => self.perform_bin_op(byte, span, |_, a, b| a.binary_bitwise_xor(b)),
             Pow => self.perform_bin_op(byte, span, |_, a, b| a.binary_pow(b)),
             Sub => self.perform_bin_op(byte, span, |_, a, b| a.binary_sub(b)),
-            Add => self.perform_bin_op(byte, span, |_, a, b| {
-                if let Some(result) = a.binary_add(b) {
-                    Some(result)
-                } else if let (Value::String(_), _) | (_, Value::String(_)) = (a, b) {
-                    Some(Value::String(format!("{a}{b}")))
-                } else {
-                    None
-                }
-            }),
+            Add => self.perform_bin_op(byte, span, |_, a, b| a.binary_add(b)),
             AddEq => self.perform_bin_op_in_place(byte, span, |_, a, b| a.binary_add(b)),
             SubEq => self.perform_bin_op_in_place(byte, span, |_, a, b| a.binary_sub(b)),
             MulEq => self.perform_bin_op_in_place(byte, span, |_, a, b| a.binary_mul(b)),
@@ -1100,11 +1091,11 @@ impl VM {
                 self.stack
                     .push(NonNull::new_unchecked(alloc_new_value(match val {
                         Value::Int(i) => {
-                            Value::Int(Integer::from(Integer::factorial(i.to_u32().unwrap())))
+                            Value::Int(Integer::factorial(i.to_u32().unwrap()).complete())
                         }
-                        Value::Float(f) => {
-                            Value::Float(float!(Float::factorial(f.to_u32_saturating().unwrap())))
-                        }
+                        Value::Float(f) => Value::Float(
+                            Float::factorial(f.to_u32_saturating().unwrap()).complete(53),
+                        ),
                         _ => self.runtime_error(
                             &format!(
                                 "Cannot perform factorial on value of type {:?}",
@@ -1153,13 +1144,14 @@ impl VM {
 
             Method(MethodFunction { name, on_types, .. }) => match name.as_str() {
                 "push" => unsafe {
-                    let src = self.stack.pop().unwrap().as_ref();
-                    let dest = self.stack.pop().unwrap().as_mut();
+                    let src = std::ptr::replace(self.stack.pop().unwrap().as_ptr(), Value::Nil);
+                    let dest_ptr = self.stack.pop().unwrap().as_ptr();
+                    let dest = std::ptr::replace(dest_ptr, Value::Nil);
 
-                    self.check_type(&name, on_types, dest, span);
+                    self.check_type(&name, on_types, &dest, span);
 
-                    *dest = dest.binary_add(src).unwrap();
-                    self.stack.push(NonNull::new_unchecked(dest as *mut Value));
+                    std::ptr::write(dest_ptr, dest.binary_add(src).unwrap());
+                    self.stack.push(NonNull::new_unchecked(dest_ptr));
                 },
 
                 "clear" => unsafe {
@@ -1300,8 +1292,8 @@ impl VM {
                     Value::Int(i) => i.clone(),
                     Value::Float(f) => f.to_integer().unwrap(),
                     Value::Bool(b) => Integer::from(*b as i32),
-                    Value::String(s) => match s.parse::<i64>() {
-                        Ok(i) => Integer::from(i),
+                    Value::String(s) => match Integer::parse(s) {
+                        Ok(i) => i.complete(),
                         Err(e) => {
                             self.runtime_error(
                                 &format!("cannot parse the string to int value, {e:?}"),
@@ -1310,7 +1302,7 @@ impl VM {
                         }
                     },
 
-                    Value::Nil => Integer::from(0),
+                    Value::Nil => Integer::new(),
                     Value::Array(_) => self.runtime_error("cannot convert array type to int", span),
                 })));
             },
@@ -1321,8 +1313,8 @@ impl VM {
                     Value::Int(i) => float!(i),
                     Value::Float(f) => f.clone(),
                     Value::Bool(b) => float!(*b as i32),
-                    Value::String(s) => match s.parse::<f64>() {
-                        Ok(i) => float!(i),
+                    Value::String(s) => match Float::parse(s) {
+                        Ok(i) => i.complete(53),
                         Err(e) => {
                             self.runtime_error(
                                 &format!("cannot parse the string to float value, {e:?}"),
@@ -1331,7 +1323,7 @@ impl VM {
                         }
                     },
 
-                    Value::Nil => float!(0.0),
+                    Value::Nil => Float::new(53),
                     Value::Array(_) => {
                         self.runtime_error("cannot convert array type to float", span)
                     }
@@ -1404,23 +1396,16 @@ impl VM {
 
     fn perform_bin_op<F>(&mut self, op: Bytecode, span: Range<usize>, binary_op: F)
     where
-        F: FnOnce(&Self, &Value, &Value) -> Option<Value>,
+        F: FnOnce(&Self, Value, Value) -> Option<Value>,
     {
         unsafe {
-            let b = self.stack.pop().unwrap().as_ref();
-            let a = self.stack.pop().unwrap().as_ref();
+            let b = std::ptr::replace(self.stack.pop().unwrap().as_ptr(), Value::Nil);
+            let a = std::ptr::replace(self.stack.pop().unwrap().as_ptr(), Value::Nil);
 
-            let result = binary_op(self, a, b);
-
-            match result {
+            match binary_op(self, a, b) {
                 Some(r) => self.stack.push(NonNull::new_unchecked(alloc_new_value(r))),
                 None => self.runtime_error(
-                    format!(
-                        "Cannot perform {op} operation on values of type {:?} and {:?}",
-                        a.get_type(),
-                        b.get_type()
-                    )
-                    .as_str(),
+                    format!("Cannot perform {op} operation on incompatible values",).as_str(),
                     span,
                 ),
             }
@@ -1429,23 +1414,17 @@ impl VM {
 
     fn perform_bin_op_in_place<F>(&mut self, op: Bytecode, span: Range<usize>, binary_op: F)
     where
-        F: FnOnce(&Self, &Value, &Value) -> Option<Value>,
+        F: FnOnce(&Self, Value, Value) -> Option<Value>,
     {
         unsafe {
-            let b = self.stack.pop().unwrap().as_ref();
-            let a = self.stack.pop().unwrap().as_mut();
+            let b = std::ptr::replace(self.stack.pop().unwrap().as_ptr(), Value::Nil);
+            let a = self.stack.pop().unwrap().as_ptr();
+            let value = std::ptr::replace(a, Value::Nil);
 
-            let result = binary_op(self, a, b);
-
-            match result {
-                Some(r) => *a = r,
+            match binary_op(self, value, b) {
+                Some(r) => std::ptr::write(a, r),
                 None => self.runtime_error(
-                    format!(
-                        "Cannot perform {op} operation on values of type {:?} and {:?}",
-                        a.get_type(),
-                        b.get_type()
-                    )
-                    .as_str(),
+                    format!("Cannot perform {op} operation on incompatible values",).as_str(),
                     span,
                 ),
             }

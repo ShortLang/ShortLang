@@ -1,5 +1,3 @@
-arr = [1, 2, 3, 4, 5]
-
-print_all arr: {
-	ev arr { $i }
-}
+a = [1,2,3]
+a.push(4)
+$a
