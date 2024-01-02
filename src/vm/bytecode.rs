@@ -87,6 +87,10 @@ pub enum Bytecode {
     Push,
     Dup,
     Sqrt,
+    Gcd,
+    Lcm,
+    Fib,
+    Abs,
 }
 
 #[derive(Debug, Clone, PartialEq)]

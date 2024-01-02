@@ -1,6 +1,6 @@
 use crate::float;
-use rug::ops::{CompleteRound, Pow};
-use rug::{Complete, Float, Integer};
+use rug::ops::Pow;
+use rug::{Float, Integer};
 use std::borrow::Cow;
 use std::ops::*;
 

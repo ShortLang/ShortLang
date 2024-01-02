@@ -15,7 +15,7 @@ macro_rules! for_each_arg {
             .into_iter()
             .cloned()
             .map(|i| Some(i))
-            .chain([None; $n])
+            .chain(std::iter::repeat(None))
             .take($n)
             .for_each(|i| match i {
                 Some($e) => $($some)*,
