@@ -1,3 +1,4 @@
+use logos::Logos;
 use miette::{miette, LabeledSpan};
 use rug::ops::CompleteRound;
 use rug::{Complete, Float, Integer};
@@ -10,7 +11,7 @@ use super::bytecode::Bytecode::*;
 use super::value::{Type, Value};
 use crate::float;
 use crate::for_each_arg;
-use crate::parser::{PostfixOp, UnaryOp};
+use crate::parser::{LogosToken, PParser, PostfixOp, UnaryOp};
 use crate::vm::bytecode::MethodFunction;
 use crate::vm::memory;
 use crate::{
@@ -268,13 +269,52 @@ impl VM {
             ExprKind::String(string) => {
                 let index = self.add_constant(Value::String(string));
                 self.instructions
-                    .push((Instr(LoadConst, vec![index as usize - 1]), expr.span));
+                    .push((Instr(LoadConst, vec![index - 1]), expr.span));
             }
+
+            ExprKind::FString(value) => unsafe {
+                let mut formatted_string = String::new();
+                let mut iter = value.chars().peekable();
+                let mut prev_char = None;
+                while let Some(c) = iter.next() {
+                    if c == '{' && prev_char != Some('\\') {
+                        let mut new_expr_str = String::new();
+                        while let Some(c) = iter.next() {
+                            if c == '}' {
+                                break;
+                            }
+                            new_expr_str.push(c);
+                        }
+                        self.compile_expr(
+                            PParser::new(
+                                &new_expr_str,
+                                LogosToken::lexer(&new_expr_str)
+                                    .spanned()
+                                    .map(|(tok, span)| match tok {
+                                        Ok(tok) => (tok, span.into()),
+                                        Err(()) => (LogosToken::Error, span.into()),
+                                    })
+                                    .collect::<Vec<_>>(),
+                            )
+                            .parse()[0]
+                                .clone(),
+                        );
+                        self.run();
+                        formatted_string.push_str(&self.stack.pop().unwrap().as_ref().to_string());
+                    } else if c != '\\' || prev_char == Some('\\') {
+                        formatted_string.push(c);
+                    }
+                    prev_char = Some(c);
+                }
+                let index = self.add_constant(Value::String(formatted_string));
+                self.instructions
+                    .push((Instr(LoadConst, vec![index - 1]), expr.span));
+            },
 
             ExprKind::Bool(boolean) => {
                 let index = self.add_constant(Value::Bool(boolean));
                 self.instructions
-                    .push((Instr(LoadConst, vec![index as usize - 1]), expr.span));
+                    .push((Instr(LoadConst, vec![index - 1]), expr.span));
             }
 
             ExprKind::Array(val) => {
@@ -709,13 +749,15 @@ impl VM {
             },
 
             Gcd => unsafe {
-                let a = std::ptr::replace(self.stack.pop().unwrap().as_ptr(), Value::Nil);
-                let b = std::ptr::replace(self.stack.pop().unwrap().as_ptr(), Value::Nil);
+                let a = self.stack.pop().unwrap().as_ref();
+                let b = self.stack.pop().unwrap().as_ref();
 
                 let gcd = match (a, b) {
-                    (Value::Int(a), Value::Int(b)) => a.gcd(&b),
-                    (Value::Int(a), Value::Float(b)) => a.gcd(&b.to_integer().unwrap()),
-                    (Value::Float(a), Value::Int(b)) => a.to_integer().unwrap().gcd(&b),
+                    (Value::Int(a), Value::Int(b)) => a.gcd_ref(b).complete(),
+                    (Value::Int(a), Value::Float(b)) => {
+                        a.gcd_ref(&b.to_integer().unwrap()).complete()
+                    }
+                    (Value::Float(a), Value::Int(b)) => a.to_integer().unwrap().gcd(b),
                     (Value::Float(a), Value::Float(b)) => {
                         a.to_integer().unwrap().gcd(&b.to_integer().unwrap())
                     }
@@ -727,13 +769,15 @@ impl VM {
             },
 
             Lcm => unsafe {
-                let a = std::ptr::replace(self.stack.pop().unwrap().as_ptr(), Value::Nil);
-                let b = std::ptr::replace(self.stack.pop().unwrap().as_ptr(), Value::Nil);
+                let a = self.stack.pop().unwrap().as_ref();
+                let b = self.stack.pop().unwrap().as_ref();
 
                 let lcm = match (a, b) {
-                    (Value::Int(a), Value::Int(b)) => a.lcm(&b),
-                    (Value::Int(a), Value::Float(b)) => a.lcm(&b.to_integer().unwrap()),
-                    (Value::Float(a), Value::Int(b)) => a.to_integer().unwrap().lcm(&b),
+                    (Value::Int(a), Value::Int(b)) => a.lcm_ref(b).complete(),
+                    (Value::Int(a), Value::Float(b)) => {
+                        a.lcm_ref(&b.to_integer().unwrap()).complete()
+                    }
+                    (Value::Float(a), Value::Int(b)) => a.to_integer().unwrap().lcm(b),
                     (Value::Float(a), Value::Float(b)) => {
                         a.to_integer().unwrap().lcm(&b.to_integer().unwrap())
                     }
@@ -766,17 +810,19 @@ impl VM {
             },
 
             Abs => unsafe {
-                let n = std::ptr::replace(self.stack.pop().unwrap().as_ptr(), Value::Nil);
+                let n = self.stack.pop().unwrap().as_ref();
                 match n {
                     Value::Int(n) => {
                         self.stack
-                            .push(NonNull::new_unchecked(alloc_new_value(Value::Int(n.abs()))));
+                            .push(NonNull::new_unchecked(alloc_new_value(Value::Int(
+                                n.abs_ref().complete(),
+                            ))));
                     }
 
                     Value::Float(n) => {
                         self.stack
                             .push(NonNull::new_unchecked(alloc_new_value(Value::Float(
-                                n.abs(),
+                                n.abs_ref().complete(53),
                             ))));
                     }
 
@@ -833,11 +879,11 @@ impl VM {
             },
 
             Neg => unsafe {
-                let value = std::ptr::replace(self.stack.pop().unwrap().as_ptr(), Value::Nil);
+                let value = self.stack.pop().unwrap().as_ref();
                 self.stack
                     .push(NonNull::new_unchecked(alloc_new_value(match value {
-                        Value::Int(i) => Value::Int(-i),
-                        Value::Float(f) => Value::Float(-f),
+                        Value::Int(i) => Value::Int((-i).complete()),
+                        Value::Float(f) => Value::Float((-f).complete(53)),
                         _ => self.runtime_error(
                             &format!("Cannot negate the value of type {}", value.get_type()),
                             span,
@@ -1077,14 +1123,13 @@ impl VM {
 
             Method(MethodFunction { name, on_types, .. }) => match name.as_str() {
                 "push" => unsafe {
-                    let src = std::ptr::replace(self.stack.pop().unwrap().as_ptr(), Value::Nil);
-                    let dest_ptr = self.stack.pop().unwrap().as_ptr();
-                    let dest = std::ptr::replace(dest_ptr, Value::Nil);
+                    let src = self.stack.pop().unwrap().as_ref();
+                    let dest = self.stack.pop().unwrap().as_mut();
 
-                    self.check_type(&name, on_types, &dest, span);
+                    self.check_type(&name, on_types, dest, span);
 
-                    std::ptr::write(dest_ptr, dest.binary_add(src).unwrap());
-                    self.stack.push(NonNull::new_unchecked(dest_ptr));
+                    *dest = dest.binary_add(src).unwrap();
+                    self.stack.push(NonNull::new_unchecked(dest as *mut Value));
                 },
 
                 "clear" => unsafe {
@@ -1325,17 +1370,21 @@ impl VM {
 
     fn perform_bin_op<F>(&mut self, op: Bytecode, span: Range<usize>, binary_op: F)
     where
-        F: FnOnce(&Self, Value, Value) -> Option<Value>,
+        F: FnOnce(&Self, &Value, &Value) -> Option<Value>,
     {
         unsafe {
-            let b = std::ptr::replace(self.stack.pop().unwrap().as_ptr(), Value::Nil);
-            let a = std::ptr::replace(self.stack.pop().unwrap().as_ptr(), Value::Nil);
-            println!("a = {}, b = {}", a.get_type(), b.get_type());
+            let b = self.stack.pop().unwrap().as_ref();
+            let a = self.stack.pop().unwrap().as_ref();
 
             match binary_op(self, a, b) {
                 Some(r) => self.stack.push(NonNull::new_unchecked(alloc_new_value(r))),
                 None => self.runtime_error(
-                    format!("Cannot perform {op} operation on incompatible types",).as_str(),
+                    format!(
+                        "Cannot perform {op} operation on values of type {:?} and {:?}",
+                        a.get_type(),
+                        b.get_type()
+                    )
+                    .as_str(),
                     span,
                 ),
             }
@@ -1344,17 +1393,23 @@ impl VM {
 
     fn perform_bin_op_in_place<F>(&mut self, op: Bytecode, span: Range<usize>, binary_op: F)
     where
-        F: FnOnce(&Self, Value, Value) -> Option<Value>,
+        F: FnOnce(&Self, &Value, &Value) -> Option<Value>,
     {
         unsafe {
-            let b = std::ptr::replace(self.stack.pop().unwrap().as_ptr(), Value::Nil);
-            let a = self.stack.pop().unwrap().as_ptr();
-            let value = std::ptr::replace(a, Value::Nil);
+            let b = self.stack.pop().unwrap().as_ref();
+            let a = self.stack.pop().unwrap().as_mut();
 
-            match binary_op(self, value, b) {
-                Some(r) => std::ptr::write(a, r),
+            let result = binary_op(self, a, b);
+
+            match result {
+                Some(r) => *a = r,
                 None => self.runtime_error(
-                    format!("Cannot perform {op} operation on incompatible types",).as_str(),
+                    format!(
+                        "Cannot perform {op} operation on values of type {:?} and {:?}",
+                        a.get_type(),
+                        b.get_type()
+                    )
+                    .as_str(),
                     span,
                 ),
             }

@@ -106,8 +106,8 @@ pub enum LogosToken<'a> {
     // Constructs
     #[regex(r#""([^"\\]|\\[\s\S])*""#)]
     String(&'a str),
-    // #[regex(r#"//[^\n]*\n"#)]
-    // LineComment,
+    #[regex(r#"f"([^"\\]|\\[\s\S])*""#)]
+    FString(&'a str),
     #[regex(r#"[\p{L}a-zA-Z_][\p{L}\p{N}a-zA-Z0-9_]*"#)]
     Ident(&'a str),
     #[token(">.")]
@@ -140,6 +140,7 @@ impl<'a> fmt::Display for LogosToken<'a> {
             LogosToken::FourDots => write!(f, "::"),
             LogosToken::Bang => write!(f, "!"),
             LogosToken::String(_) => write!(f, "string"),
+            LogosToken::FString(_) => write!(f, "fstring"),
             LogosToken::Ident(_) => write!(f, "identifier"),
             LogosToken::Int(_) => write!(f, "integer"),
             LogosToken::Float(_) => write!(f, "float"),
@@ -311,6 +312,7 @@ pub enum ExprKind {
     Call(String, Option<Vec<Expr>>),
     Ternary(Box<Expr>, Vec<Expr>, Option<Vec<Expr>>),
     String(String),
+    FString(String),
     Ident(String),
     Binary(Box<Expr>, BinaryOp, Box<Expr>),
     Set(String, Box<Expr>),
@@ -775,6 +777,13 @@ impl<'a> PParser<'a> {
                 new_str.remove(0);
                 new_str.remove(value.len() - 2);
                 ExprKind::String(new_str)
+            }
+            LogosToken::FString(value) => {
+                let mut new_str = value.to_owned();
+                new_str.remove(0);
+                new_str.remove(0);
+                new_str.remove(new_str.len() - 1);
+                ExprKind::FString(new_str)
             }
             v @ LogosToken::Dollar | v @ LogosToken::DollarDollar => {
                 self.proceed();

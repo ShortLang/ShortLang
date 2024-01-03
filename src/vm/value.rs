@@ -91,19 +91,21 @@ impl Value {
         }
     }
 
-    pub fn binary_add(self, rhs: Value) -> Option<Value> {
+    pub fn binary_add(&self, rhs: &Value) -> Option<Value> {
         match (self, rhs) {
-            (Value::Int(lhs), Value::Int(rhs)) => Some(Value::Int(lhs + rhs)),
-            (Value::Float(lhs), Value::Float(rhs)) => Some(Value::Float(lhs + rhs)),
-            (Value::Int(lhs), Value::Float(rhs)) => Some(Value::Float(lhs + rhs)),
-            (Value::Float(lhs), Value::Int(rhs)) => Some(Value::Float(lhs + rhs)),
-            (Value::Array(mut lhs), Value::Array(rhs)) => {
-                lhs.extend(rhs);
-                Some(Value::Array(lhs))
+            (Value::Int(lhs), Value::Int(rhs)) => Some(Value::Int(Integer::from(lhs + rhs))),
+            (Value::Float(lhs), Value::Float(rhs)) => Some(Value::Float(float!(lhs + rhs))),
+            (Value::Int(lhs), Value::Float(rhs)) => Some(Value::Float(float!(lhs + rhs))),
+            (Value::Float(lhs), Value::Int(rhs)) => Some(Value::Float(float!(lhs + rhs))),
+            (Value::Array(lhs), Value::Array(rhs)) => {
+                let mut arr = lhs.clone();
+                arr.extend(rhs.clone());
+                Some(Value::Array(arr))
             }
-            (Value::Array(mut lhs), rhs) => {
-                lhs.push(rhs);
-                Some(Value::Array(lhs))
+            (Value::Array(lhs), rhs) => {
+                let mut arr = lhs.clone();
+                arr.push(rhs.clone());
+                Some(Value::Array(arr))
             }
             (Value::String(lhs), rhs) => Some(Value::String(format!("{}{}", lhs, rhs))),
             (lhs, Value::String(rhs)) => Some(Value::String(format!("{}{}", lhs, rhs))),
@@ -111,22 +113,51 @@ impl Value {
         }
     }
 
-    pub fn binary_sub(self, rhs: Value) -> Option<Value> {
+    pub fn get_type(&self) -> &str {
+        match self {
+            Value::Int(_) => "int",
+            Value::Float(_) => "float",
+            Value::String(_) => "str",
+            Value::Bool(_) => "bool",
+            Value::Array(_) => "array",
+            Value::Nil => "nil",
+        }
+    }
+
+    pub fn is_zero(&self) -> bool {
+        match self {
+            Value::Int(i) => *i == 0,
+            Value::Float(f) => *f == 0.0,
+            _ => false,
+        }
+    }
+
+    pub fn clear(&mut self) -> bool {
+        match self {
+            Value::String(s) => s.clear(),
+            Value::Array(a) => a.clear(),
+            _ => return false,
+        }
+
+        true
+    }
+
+    pub fn binary_sub(&self, rhs: &Value) -> Option<Value> {
         match (self, rhs) {
-            (Value::Int(lhs), Value::Int(rhs)) => Some(Value::Int(lhs - rhs)),
-            (Value::Float(lhs), Value::Float(rhs)) => Some(Value::Float(lhs - rhs)),
-            (Value::Int(lhs), Value::Float(rhs)) => Some(Value::Float(lhs - rhs)),
-            (Value::Float(lhs), Value::Int(rhs)) => Some(Value::Float(lhs - rhs)),
+            (Value::Int(lhs), Value::Int(rhs)) => Some(Value::Int(Integer::from(lhs - rhs))),
+            (Value::Float(lhs), Value::Float(rhs)) => Some(Value::Float(float!(lhs - rhs))),
+            (Value::Int(lhs), Value::Float(rhs)) => Some(Value::Float(float!(lhs - rhs))),
+            (Value::Float(lhs), Value::Int(rhs)) => Some(Value::Float(float!(lhs - rhs))),
             _ => None,
         }
     }
 
-    pub fn binary_mul(self, rhs: Value) -> Option<Value> {
+    pub fn binary_mul(&self, rhs: &Value) -> Option<Value> {
         match (self, rhs) {
-            (Value::Int(lhs), Value::Int(rhs)) => Some(Value::Int(lhs * rhs)),
-            (Value::Float(lhs), Value::Float(rhs)) => Some(Value::Float(lhs * rhs)),
-            (Value::Int(lhs), Value::Float(rhs)) => Some(Value::Float(lhs * rhs)),
-            (Value::Float(lhs), Value::Int(rhs)) => Some(Value::Float(lhs * rhs)),
+            (Value::Int(lhs), Value::Int(rhs)) => Some(Value::Int(Integer::from(lhs * rhs))),
+            (Value::Float(lhs), Value::Float(rhs)) => Some(Value::Float(float!(lhs * rhs))),
+            (Value::Int(lhs), Value::Float(rhs)) => Some(Value::Float(float!(lhs * rhs))),
+            (Value::Float(lhs), Value::Int(rhs)) => Some(Value::Float(float!(lhs * rhs))),
             (Value::String(lhs), Value::Int(rhs)) => {
                 Some(Value::String(lhs.repeat(rhs.to_usize().unwrap())))
             }
@@ -137,39 +168,39 @@ impl Value {
         }
     }
 
-    pub fn binary_mod(self, rhs: Value) -> Option<Value> {
+    pub fn binary_mod(&self, rhs: &Value) -> Option<Value> {
         match (self, rhs) {
-            (Value::Int(lhs), Value::Int(rhs)) => Some(Value::Int(lhs % rhs)),
-            (Value::Float(lhs), Value::Float(rhs)) => Some(Value::Float(lhs % rhs)),
+            (Value::Int(lhs), Value::Int(rhs)) => Some(Value::Int(Integer::from(lhs % rhs))),
+            (Value::Float(lhs), Value::Float(rhs)) => Some(Value::Float(float!(lhs % rhs))),
             (Value::Int(lhs), Value::Float(rhs)) => Some(Value::Float(float!(lhs) % rhs)),
             (Value::Float(lhs), Value::Int(rhs)) => Some(Value::Float(lhs % float!(rhs))),
             _ => None,
         }
     }
 
-    pub fn binary_bitwise_xor(self, rhs: Value) -> Option<Value> {
+    pub fn binary_bitwise_xor(&self, rhs: &Value) -> Option<Value> {
         match (self, rhs) {
-            (Value::Int(lhs), Value::Int(rhs)) => Some(Value::Int(lhs ^ rhs)),
+            (Value::Int(lhs), Value::Int(rhs)) => Some(Value::Int(Integer::from(lhs ^ rhs))),
             _ => None,
         }
     }
 
-    pub fn binary_pow(self, rhs: Value) -> Option<Value> {
+    pub fn binary_pow(&self, rhs: &Value) -> Option<Value> {
         match (self, rhs) {
             (Value::Int(lhs), Value::Int(rhs)) => Some(Value::Float(float!(lhs).pow(rhs))),
-            (Value::Float(lhs), Value::Float(rhs)) => Some(Value::Float(lhs.pow(rhs))),
+            (Value::Float(lhs), Value::Float(rhs)) => Some(Value::Float(float!(lhs.pow(rhs)))),
             (Value::Int(lhs), Value::Float(rhs)) => Some(Value::Float(float!(lhs).pow(rhs))),
-            (Value::Float(lhs), Value::Int(rhs)) => Some(Value::Float(lhs.pow(rhs))),
+            (Value::Float(lhs), Value::Int(rhs)) => Some(Value::Float(float!(lhs.pow(rhs)))),
             _ => None,
         }
     }
 
-    pub fn binary_div(self, rhs: Value) -> Option<Value> {
+    pub fn binary_div(&self, rhs: &Value) -> Option<Value> {
         match (self, rhs) {
             (Value::Int(lhs), Value::Int(rhs)) => Some(Value::Float(float!(lhs).div(rhs))),
-            (Value::Float(lhs), Value::Float(rhs)) => Some(Value::Float(lhs.div(rhs))),
-            (Value::Int(lhs), Value::Float(rhs)) => Some(Value::Float(lhs.div(rhs))),
-            (Value::Float(lhs), Value::Int(rhs)) => Some(Value::Float(lhs.div(rhs))),
+            (Value::Float(lhs), Value::Float(rhs)) => Some(Value::Float(float!(lhs.div(rhs)))),
+            (Value::Int(lhs), Value::Float(rhs)) => Some(Value::Float(float!(lhs.div(rhs)))),
+            (Value::Float(lhs), Value::Int(rhs)) => Some(Value::Float(float!(lhs.div(rhs)))),
             _ => None,
         }
     }
@@ -223,35 +254,6 @@ impl Value {
 
             _ => return None,
         }))
-    }
-
-    pub fn get_type(&self) -> &str {
-        match self {
-            Value::Int(_) => "int",
-            Value::Float(_) => "float",
-            Value::String(_) => "str",
-            Value::Bool(_) => "bool",
-            Value::Array(_) => "array",
-            Value::Nil => "nil",
-        }
-    }
-
-    pub fn is_zero(&self) -> bool {
-        match self {
-            Value::Int(i) => *i == 0,
-            Value::Float(f) => *f == 0.0,
-            _ => false,
-        }
-    }
-
-    pub fn clear(&mut self) -> bool {
-        match self {
-            Value::String(s) => s.clear(),
-            Value::Array(a) => a.clear(),
-            _ => return false,
-        }
-
-        true
     }
 
     pub fn equal_to(&self, other: &Value) -> Option<Value> {
@@ -392,28 +394,28 @@ impl From<&bool> for Value {
     }
 }
 
-impl Add for Value {
+impl<'a> Add for &'a Value {
     type Output = Value;
     fn add(self, rhs: Self) -> Self::Output {
         self.binary_add(rhs).unwrap()
     }
 }
 
-impl Sub for Value {
+impl<'a> Sub for &'a Value {
     type Output = Value;
     fn sub(self, rhs: Self) -> Self::Output {
         self.binary_sub(rhs).unwrap()
     }
 }
 
-impl Mul for Value {
+impl<'a> Mul for &'a Value {
     type Output = Value;
     fn mul(self, rhs: Self) -> Self::Output {
         self.binary_mul(rhs).unwrap()
     }
 }
 
-impl Div for Value {
+impl<'a> Div for &'a Value {
     type Output = Value;
     fn div(self, rhs: Self) -> Self::Output {
         self.binary_div(rhs).unwrap()
