@@ -91,6 +91,10 @@ pub enum Bytecode {
     Lcm,
     Fib,
     Abs,
+    Round,
+    Floor,
+    Ceil,
+    Rand,
 }
 
 #[derive(Debug, Clone, PartialEq)]

@@ -37,7 +37,7 @@ impl std::fmt::Display for Type {
     }
 }
 
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, PartialOrd)]
 pub enum Value {
     Int(Integer),
     Float(Float),
@@ -429,7 +429,14 @@ impl std::fmt::Display for Value {
             "{}",
             match self {
                 Self::Int(i) => i.to_string(),
-                Self::Float(f) => f.to_string(),
+                Self::Float(f) => {
+                    // a temporary hack to remove trailing zeros that rug adds to floats
+                    let mut s = f.to_string().trim_end_matches('0').to_owned();
+                    if s.ends_with('.') {
+                        s.push('0');
+                    }
+                    s
+                }
                 Self::Bool(b) => b.to_string(),
                 Self::String(s) => s.to_string(),
                 Self::Array(arr) => format!(

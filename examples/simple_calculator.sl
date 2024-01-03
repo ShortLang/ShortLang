@@ -1,9 +1,9 @@
-a = to_f(input("Enter first number: "))
-b = to_f(input("Enter second number: "))
+a = flt(inp("Enter first number: "))
+b = int(inp("Enter second number: "))
 
 $""
 
-$f"{a} + {b} = {a + b}"
+$f"$a + $b = $a+b" // using $ is also valid
 $f"{a} - {b} = {a - b}"
 $f"{a} * {b} = {a * b}"
 $f"{a} / {b} = {a / b}"

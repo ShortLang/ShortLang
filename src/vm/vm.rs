@@ -74,6 +74,8 @@ pub struct VM {
     src: String,
     pc: usize,
 
+    rng: fastrand::Rng,
+
     // Vector of pointers to the values
     // TODO: Make this limited sized using some kind of library
     stack: Vec<NonNull<Value>>,
@@ -99,6 +101,7 @@ impl VM {
         Self {
             pc: 0,
             stack: Vec::with_capacity(1000),
+            rng: fastrand::Rng::new(),
             iteration: 0,
             variables: vec![HashMap::new()],
             // stack_var_names: vec![],
@@ -285,22 +288,75 @@ impl VM {
                             }
                             new_expr_str.push(c);
                         }
-                        self.compile_expr(
-                            PParser::new(
-                                &new_expr_str,
-                                LogosToken::lexer(&new_expr_str)
-                                    .spanned()
-                                    .map(|(tok, span)| match tok {
-                                        Ok(tok) => (tok, span.into()),
-                                        Err(()) => (LogosToken::Error, span.into()),
-                                    })
-                                    .collect::<Vec<_>>(),
-                            )
-                            .parse()[0]
-                                .clone(),
-                        );
+                        let parsed_exprs = PParser::new(
+                            &new_expr_str,
+                            LogosToken::lexer(&new_expr_str)
+                                .spanned()
+                                .map(|(tok, span)| match tok {
+                                    Ok(tok) => (tok, span.into()),
+                                    Err(()) => (LogosToken::Error, span.into()),
+                                })
+                                .collect::<Vec<_>>(),
+                        )
+                        .parse();
+
+                        for expr in parsed_exprs {
+                            self.compile_expr(expr);
+                        }
+
                         self.run();
-                        formatted_string.push_str(&self.stack.pop().unwrap().as_ref().to_string());
+                        formatted_string.push_str(
+                            &self
+                                .stack
+                                .pop()
+                                .unwrap_or(allocate(Value::Nil))
+                                .as_ref()
+                                .to_string(),
+                        );
+                    } else if c == '$' && prev_char != Some('\\') {
+                        let mut ident_str = String::new();
+                        while let Some(c) = iter.peek() {
+                            if c.is_whitespace() {
+                                break;
+                            }
+                            ident_str.push(*c);
+                            iter.next(); // consume the character
+                        }
+                        let parsed_exprs = PParser::new(
+                            &ident_str,
+                            LogosToken::lexer(&ident_str)
+                                .spanned()
+                                .map(|(tok, span)| match tok {
+                                    Ok(tok) => (tok, span.into()),
+                                    Err(()) => (LogosToken::Error, span.into()),
+                                })
+                                .collect::<Vec<_>>(),
+                        )
+                        .parse();
+
+                        for expr in parsed_exprs {
+                            self.compile_expr(expr);
+                        }
+
+                        self.run();
+                        formatted_string.push_str(
+                            &self
+                                .stack
+                                .pop()
+                                .unwrap_or(allocate(Value::Nil))
+                                .as_ref()
+                                .to_string(),
+                        );
+                    } else if c == '\\' && prev_char != Some('\\') {
+                        if let Some(next_char) = iter.next() {
+                            match next_char {
+                                'n' => formatted_string.push_str("\\n"),
+                                't' => formatted_string.push_str("\\t"),
+                                'r' => formatted_string.push_str("\\r"),
+                                'x' => formatted_string.push_str("\\x"),
+                                _ => formatted_string.push(next_char),
+                            }
+                        }
                     } else if c != '\\' || prev_char == Some('\\') {
                         formatted_string.push(c);
                     }
@@ -475,34 +531,20 @@ impl VM {
             ExprKind::Call(ref name, ref args) => match name.as_str() {
                 "$" => compile_call!(self, name, args, Println, expr.span),
                 "$$" => compile_call!(self, name, args, Print, expr.span),
-                "to_i" => compile_call!(self, name, args, ToInt, expr.span),
-                "to_f" => compile_call!(self, name, args, ToFloat, expr.span),
-                "input" => compile_call!(self, name, args, Input, expr.span),
+                "int" => compile_call!(self, name, args, ToInt, expr.span),
+                "flt" => compile_call!(self, name, args, ToFloat, expr.span),
+                "inp" => compile_call!(self, name, args, Input, expr.span),
                 "len" => compile_call!(self, name, args, Len, expr.span),
                 "type" => compile_call!(self, name, args, TypeOf, expr.span),
                 "gcd" => compile_call!(self, name, args, Gcd, expr.span, 2),
                 "lcm" => compile_call!(self, name, args, Lcm, expr.span, 2),
                 "fib" => compile_call!(self, name, args, Fib, expr.span),
                 "abs" => compile_call!(self, name, args, Abs, expr.span),
-                "sqrt" => {
-                    let args = args.clone().unwrap();
-                    let num_args = args.len();
-                    if num_args < 1 || num_args > 2 {
-                        self.runtime_error(
-                            &format!("Expected 1 or 2 arguments, found {}", args.len()),
-                            expr.span,
-                        );
-                    }
-
-                    self.compile_expr(args[0].clone());
-                    if num_args == 2 {
-                        self.compile_expr(args[1].clone());
-                    } else {
-                        self.push_data(Value::Int(Integer::from(2)), expr.span.clone());
-                    }
-
-                    self.instructions.push((Instr(Sqrt, vec![]), expr.span));
-                }
+                "floor" => compile_call!(self, name, args, Floor, expr.span),
+                "ceil" => compile_call!(self, name, args, Ceil, expr.span),
+                "rnd" => self.handle_optional_args(args, Integer::from(0), Rand, expr.span),
+                "sqrt" => self.handle_optional_args(args, Integer::from(2), Sqrt, expr.span),
+                "round" => self.handle_optional_args(args, Integer::from(0), Round, expr.span),
 
                 _ => {
                     for_each_arg!(args, arg => { self.compile_expr(arg) });
@@ -823,6 +865,103 @@ impl VM {
                         self.stack
                             .push(NonNull::new_unchecked(alloc_new_value(Value::Float(
                                 n.abs_ref().complete(53),
+                            ))));
+                    }
+
+                    _ => self.runtime_error("Expected a number", span),
+                }
+            },
+
+            Round => unsafe {
+                let precision = self.stack.pop().unwrap().as_ref();
+                let n = self.stack.pop().unwrap().as_ref();
+                match (n, precision) {
+                    (Value::Int(n), Value::Int(_)) => {
+                        self.stack
+                            .push(NonNull::new_unchecked(alloc_new_value(Value::Int(
+                                Integer::from(n),
+                            ))));
+                    }
+
+                    (Value::Float(n), Value::Int(precision)) => {
+                        self.stack
+                            .push(NonNull::new_unchecked(alloc_new_value(Value::Float(
+                                Float::parse(format!("{:.1$}", n, precision.to_usize().unwrap()))
+                                    .unwrap()
+                                    .complete(53),
+                            ))));
+                    }
+
+                    _ => self.runtime_error("Expected a number", span),
+                }
+            },
+
+            Floor => unsafe {
+                let n = self.stack.pop().unwrap().as_ref();
+                match n {
+                    Value::Int(n) => {
+                        self.stack
+                            .push(NonNull::new_unchecked(alloc_new_value(Value::Int(
+                                Integer::from(n),
+                            ))));
+                    }
+
+                    Value::Float(n) => {
+                        self.stack
+                            .push(NonNull::new_unchecked(alloc_new_value(Value::Float(
+                                n.floor_ref().complete(53),
+                            ))));
+                    }
+
+                    _ => self.runtime_error("Expected a number", span),
+                }
+            },
+
+            Ceil => unsafe {
+                let n = self.stack.pop().unwrap().as_ref();
+                match n {
+                    Value::Int(n) => {
+                        self.stack
+                            .push(NonNull::new_unchecked(alloc_new_value(Value::Int(
+                                Integer::from(n),
+                            ))));
+                    }
+
+                    Value::Float(n) => {
+                        self.stack
+                            .push(NonNull::new_unchecked(alloc_new_value(Value::Float(
+                                n.ceil_ref().complete(53),
+                            ))));
+                    }
+
+                    _ => self.runtime_error("Expected a number", span),
+                }
+            },
+
+            Rand => unsafe {
+                let mut start = self.stack.pop().unwrap().as_ref();
+                let mut end = self.stack.pop().unwrap().as_ref();
+                if start > end {
+                    std::mem::swap(&mut start, &mut end);
+                }
+                match (start, end) {
+                    (Value::Int(start), Value::Int(end)) => {
+                        self.stack
+                            .push(NonNull::new_unchecked(alloc_new_value(Value::Int(
+                                Integer::from(
+                                    self.rng
+                                        .i128(start.to_i128().unwrap()..end.to_i128().unwrap()),
+                                ),
+                            ))));
+                    }
+
+                    (Value::Float(start), Value::Float(end)) => {
+                        self.stack
+                            .push(NonNull::new_unchecked(alloc_new_value(Value::Float(
+                                float!(self.rng.i128(
+                                    start.to_integer().unwrap().to_i128().unwrap()
+                                        ..end.to_integer().unwrap().to_i128().unwrap()
+                                )),
                             ))));
                     }
 
@@ -1491,6 +1630,32 @@ impl VM {
                 span,
             );
         }
+    }
+
+    fn handle_optional_args(
+        &mut self,
+        args: &Option<Vec<Expr>>,
+        default_arg: Integer,
+        bytecode: Bytecode,
+        span: Range<usize>,
+    ) {
+        let args = args.clone().unwrap();
+        let num_args = args.len();
+        if num_args < 1 || num_args > 2 {
+            self.runtime_error(
+                &format!("Expected 1 or 2 arguments, found {}", args.len()),
+                span,
+            );
+        }
+
+        self.compile_expr(args[0].clone());
+        if num_args == 2 {
+            self.compile_expr(args[1].clone());
+        } else {
+            self.push_data(Value::Int(default_arg), span.clone());
+        }
+
+        self.instructions.push((Instr(bytecode, vec![]), span));
     }
 }
 

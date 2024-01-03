@@ -747,6 +747,42 @@ impl<'a> PParser<'a> {
             println!("{:?}", report);
         }
     }
+
+    fn process_string(mut value: String, fstring: bool) -> String {
+        value.remove(0);
+        if fstring {
+            value.remove(0);
+        }
+        value.remove(value.len() - 1);
+
+        let mut chars = value.chars();
+        let mut processed_str = String::new();
+
+        while let Some(c) = chars.next() {
+            if c == '\\' {
+                let next = chars.next().unwrap();
+                match next {
+                    'n' => processed_str.push('\n'),
+                    't' => processed_str.push('\t'),
+                    'r' => processed_str.push('\r'),
+                    'x' => {
+                        let mut hex = String::new();
+                        hex.push(chars.next().unwrap());
+                        hex.push(chars.next().unwrap());
+                        let hex = u32::from_str_radix(&hex, 16).unwrap();
+                        processed_str.push(hex as u8 as char);
+                    }
+                    '$' => processed_str.push_str("\\$"),
+                    '{' => processed_str.push_str("\\{"),
+                    _ => processed_str.push(next),
+                }
+            } else {
+                processed_str.push(c);
+            }
+        }
+        processed_str
+    }
+
     fn term(&mut self, token: (LogosToken, Range<usize>)) -> Expr {
         let (token, span) = token;
         let kind = match token {
@@ -772,18 +808,10 @@ impl<'a> PParser<'a> {
             LogosToken::Break => ExprKind::Break,
             LogosToken::Continue => ExprKind::Continue,
             LogosToken::String(value) => {
-                // remove the first quote and last quote
-                let mut new_str = value.to_owned();
-                new_str.remove(0);
-                new_str.remove(value.len() - 2);
-                ExprKind::String(new_str)
+                ExprKind::String(Self::process_string(value.to_owned(), false))
             }
             LogosToken::FString(value) => {
-                let mut new_str = value.to_owned();
-                new_str.remove(0);
-                new_str.remove(0);
-                new_str.remove(new_str.len() - 1);
-                ExprKind::FString(new_str)
+                ExprKind::FString(Self::process_string(value.to_owned(), true))
             }
             v @ LogosToken::Dollar | v @ LogosToken::DollarDollar => {
                 self.proceed();
