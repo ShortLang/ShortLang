@@ -5,14 +5,12 @@ use optimizer::Optimizer;
 use std::fs;
 
 mod optimizer;
-use analyzer::Analyzer;
 use logos::Logos;
 use miette::{miette, Severity};
 use parser::{LogosToken, PParser};
 
 use crate::vm::VM;
 
-mod analyzer;
 mod parser;
 mod vm;
 
@@ -27,10 +25,6 @@ pub struct Args {
     /// Prints the AST of the input file
     #[clap(short, long)]
     ast: bool,
-
-    /// Silences the analyzer warnings
-    #[clap(short, long)]
-    silent: bool,
 
     /// Benchmarks the duration it takes for the program to run
     #[clap(short, long)]
@@ -88,7 +82,6 @@ fn main() {
 
     let mut parser = PParser::new(&src, tokens);
     let mut ast = parser.parse();
-    Analyzer::new(&src, &args, &mut ast).analyze();
     ast = Optimizer::new(ast.clone()).optimize_all();
     if args.ast {
         println!(

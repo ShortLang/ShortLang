@@ -427,7 +427,7 @@ impl VM {
                             )
                         }
 
-                        _ => unreachable!(),
+                        _ => self.runtime_error("Expected a function call", expr.span),
                     },
                 }
             }
@@ -544,9 +544,13 @@ impl VM {
                 "abs" => compile_call!(self, name, args, Abs, expr.span),
                 "floor" => compile_call!(self, name, args, Floor, expr.span),
                 "ceil" => compile_call!(self, name, args, Ceil, expr.span),
-                "rnd" => self.handle_optional_args(args, Integer::from(0), Rand, expr.span),
-                "sqrt" => self.handle_optional_args(args, Integer::from(2), Sqrt, expr.span),
-                "round" => self.handle_optional_args(args, Integer::from(0), Round, expr.span),
+                "exit" => compile_call!(self, name, args, Exit, expr.span),
+                "rnd" => self.handle_optional_args(args, None, Rand, expr.span),
+                "rng" => self.handle_optional_args(args, None, Range, expr.span),
+                "sqrt" => self.handle_optional_args(args, Some(Integer::from(2)), Sqrt, expr.span),
+                "round" => {
+                    self.handle_optional_args(args, Some(Integer::from(1)), Round, expr.span)
+                }
 
                 _ => {
                     for_each_arg!(args, arg => { self.compile_expr(arg) });
@@ -768,7 +772,11 @@ impl VM {
 
             Sqrt => unsafe {
                 let sqrt_to = self.stack.pop().unwrap().as_ref();
-                let value = self.stack.pop().unwrap().as_ref();
+                let value = self
+                    .stack
+                    .pop()
+                    .unwrap_or_else(|| allocate(Value::Int(Integer::from(2))))
+                    .as_ref();
                 let sqrt_to = match sqrt_to {
                     Value::Int(i) => i.saturating_cast(),
                     Value::Float(f) => f.to_u32_saturating().unwrap(),
@@ -952,10 +960,45 @@ impl VM {
                     _ => self.runtime_error("Expected a number", span),
                 }
             },
+            Exit => std::process::exit(0),
+            Range => unsafe {
+                let end = self.stack.pop().unwrap().as_ref();
+                let start = self
+                    .stack
+                    .pop()
+                    .unwrap_or_else(|| allocate(Value::Int(Integer::from(0))))
+                    .as_ref();
+
+                match (start, end) {
+                    (Value::Int(start), Value::Int(end)) => {
+                        let mut start_value: i128 = start.saturating_cast();
+                        let mut end_value: i128 = end.saturating_cast();
+
+                        let mut array = vec![];
+                        if start_value > end_value {
+                            for i in (end_value..=start_value).rev() {
+                                array.push(Value::Int(Integer::from(i)));
+                            }
+                        } else {
+                            for i in start_value..end_value {
+                                array.push(Value::Int(Integer::from(i)));
+                            }
+                        }
+
+                        self.stack
+                            .push(NonNull::new_unchecked(alloc_new_value(Value::Array(array))));
+                    }
+                    _ => self.runtime_error("Expected an integer", span),
+                }
+            },
 
             Rand => unsafe {
-                let start = self.stack.pop().unwrap().as_ref();
                 let end = self.stack.pop().unwrap().as_ref();
+                let start = self
+                    .stack
+                    .pop()
+                    .unwrap_or_else(|| allocate(Value::Int(Integer::from(0))))
+                    .as_ref();
                 let mut start_val = self.convert_to_i128(start, span.clone());
                 let mut end_val = self.convert_to_i128(end, span);
 
@@ -1056,7 +1099,9 @@ impl VM {
             },
 
             While => unsafe {
-                let loop_end = args[0];
+                let loop_end = args.get(0).unwrap_or_else(|| {
+                    self.runtime_error("Expected a loop end instruction pointer", span)
+                });
                 let condition = self.stack.pop().unwrap().as_ref().bool_eval();
 
                 if !condition {
@@ -1684,7 +1729,7 @@ impl VM {
     fn handle_optional_args(
         &mut self,
         args: &Option<Vec<Expr>>,
-        default_arg: Integer,
+        default_arg: Option<Integer>,
         bytecode: Bytecode,
         span: Range<usize>,
     ) {
@@ -1700,7 +1745,7 @@ impl VM {
         self.compile_expr(args[0].clone());
         if num_args == 2 {
             self.compile_expr(args[1].clone());
-        } else {
+        } else if let Some(default_arg) = default_arg {
             self.push_data(Value::Int(default_arg), span.clone());
         }
 

@@ -95,6 +95,8 @@ pub enum Bytecode {
     Floor,
     Ceil,
     Rand,
+    Range,
+    Exit,
 }
 
 #[derive(Debug, Clone, PartialEq)]

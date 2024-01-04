@@ -618,17 +618,20 @@ impl<'a> PParser<'a> {
     fn infix_binding_power(&mut self, op: &LogosToken) -> Option<(u8, u8)> {
         use LogosToken::*;
         Some(match op {
-            Plus | Minus => (6, 7),
-            Eqq | Neq | Leq | Geq | RAngle | LAngle | Or | And => (18, 19),
-            AddEq | SubEq | MulEq | DivEq => (1, 2),
-            Times | Slash => (8, 9),
-            Percent => (10, 11),
-            BinaryPow => (12, 13),
-            Pow => (14, 15),
-            Question => (4, 3),
+            Plus | Minus => (10, 11),
+            Times | Slash => (20, 21),
+            Percent => (30, 31),
+            BinaryPow => (40, 41),
+            Pow => (50, 51),
 
             // For attributes and methods
-            Dot => (16, 17),
+            Dot => (60, 61),
+
+            // Comparison and equality operators have lower binding power
+            Eqq | Neq | Leq | Geq | RAngle | LAngle | Or | And => (5, 6),
+            AddEq | SubEq | MulEq | DivEq => (1, 2),
+            Question => (4, 3),
+
             _ => return None,
         })
     }
