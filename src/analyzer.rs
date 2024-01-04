@@ -73,76 +73,23 @@ impl<'a> Analyzer<'a> {
 
     fn check_unused_variables(&mut self) {
         if let Some(scope) = self.scopes.last() {
-            let mut to_remove = Vec::new();
             for (name, var_info) in scope {
                 if !var_info.is_used {
-                    to_remove.push((var_info.expr_index, name));
+                    self.warnings.push(Box::from(
+                        miette!(
+                            severity = Severity::Warning,
+                            help = "Use the variable or remove it",
+                            labels = vec![LabeledSpan::at(
+                                self.ast[var_info.expr_index].span.clone(),
+                                "unused variable"
+                            )],
+                            "Variable `{}` is unused",
+                            var_info.expr_index
+                        )
+                        .with_source_code(self.src.clone()),
+                    ));
                 }
             }
-            to_remove.sort_unstable();
-            to_remove.dedup();
-            for index in to_remove.into_iter().rev() {
-                self.warnings.push(Box::from(
-                    miette!(
-                        severity = Severity::Warning,
-                        help = "Use the variable or remove it",
-                        labels = vec![LabeledSpan::at(
-                            self.ast[index.0].span.clone(),
-                            "unused variable"
-                        )],
-                        "Variable `{}` is unused",
-                        index.1
-                    )
-                    .with_source_code(self.src.clone()),
-                ));
-                self.ast.remove(index.0);
-            }
-        }
-    }
-
-    fn constant_fold(&mut self, expr: &Expr) {
-        match &expr.inner {
-            Binary(left, op, right) => {
-                self.constant_fold(&left);
-                self.constant_fold(&right);
-
-                match (left.inner.clone(), right.inner.clone()) {
-                    (Int(left), Int(right)) => {
-                        let result = match op {
-                            BinaryOp::Add => left + right,
-                            BinaryOp::Sub => left - right,
-                            BinaryOp::Mul => left * right,
-                            BinaryOp::Div => left / right,
-                            BinaryOp::Mod => left % right,
-                            BinaryOp::Pow => float!(left).pow(right).to_integer().unwrap(),
-                            _ => return,
-                        };
-                        let expr_index = self.ast.iter().position(|e| *e == *expr).unwrap();
-                        self.ast[expr_index] = Expr {
-                            inner: Int(result),
-                            span: expr.span.clone(),
-                        };
-                    }
-                    (Float(left), Float(right)) => {
-                        let result = match op {
-                            BinaryOp::Add => left + right,
-                            BinaryOp::Sub => left - right,
-                            BinaryOp::Mul => left * right,
-                            BinaryOp::Div => left / right,
-                            BinaryOp::Mod => left % right,
-                            BinaryOp::Pow => left.pow(right),
-                            _ => return,
-                        };
-                        let expr_index = self.ast.iter().position(|e| *e == *expr).unwrap();
-                        self.ast[expr_index] = Expr {
-                            inner: Float(result),
-                            span: expr.span.clone(),
-                        };
-                    }
-                    _ => {}
-                }
-            }
-            _ => {}
         }
     }
 
@@ -187,7 +134,6 @@ impl<'a> Analyzer<'a> {
             }
 
             Binary(left, _, right) => {
-                self.constant_fold(expr);
                 self.analyze_expr(left, current_function);
                 self.analyze_expr(right, current_function);
             }

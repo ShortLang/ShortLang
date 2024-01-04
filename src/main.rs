@@ -1,8 +1,10 @@
 #![allow(non_snake_case, dead_code)]
 
 use clap::Parser;
+use optimizer::Optimizer;
 use std::fs;
 
+mod optimizer;
 use analyzer::Analyzer;
 use logos::Logos;
 use miette::{miette, Severity};
@@ -86,7 +88,8 @@ fn main() {
 
     let mut parser = PParser::new(&src, tokens);
     let mut ast = parser.parse();
-    // Analyzer::new(&src, &args, &mut ast).analyze();
+    Analyzer::new(&src, &args, &mut ast).analyze();
+    ast = Optimizer::new(ast.clone()).optimize_all();
     if args.ast {
         println!(
             "{:?}",
