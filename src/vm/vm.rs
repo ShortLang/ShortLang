@@ -1,8 +1,10 @@
+use az::SaturatingCast;
 use logos::Logos;
 use miette::{miette, LabeledSpan};
 use rug::ops::CompleteRound;
 use rug::{Complete, Float, Integer};
 use std::collections::HashMap;
+use std::hint::unreachable_unchecked;
 use std::io::*;
 use std::ops::Range;
 use std::ptr::NonNull;
@@ -768,7 +770,7 @@ impl VM {
                 let sqrt_to = self.stack.pop().unwrap().as_ref();
                 let value = self.stack.pop().unwrap().as_ref();
                 let sqrt_to = match sqrt_to {
-                    Value::Int(i) => i.to_u32().unwrap(),
+                    Value::Int(i) => i.saturating_cast(),
                     Value::Float(f) => f.to_u32_saturating().unwrap(),
                     _ => self.runtime_error("Expected a number", span),
                 };
@@ -796,13 +798,16 @@ impl VM {
 
                 let gcd = match (a, b) {
                     (Value::Int(a), Value::Int(b)) => a.gcd_ref(b).complete(),
-                    (Value::Int(a), Value::Float(b)) => {
-                        a.gcd_ref(&b.to_integer().unwrap()).complete()
+                    (Value::Int(a), Value::Float(b)) => a
+                        .gcd_ref(&b.to_integer().unwrap_or(Integer::from(0)))
+                        .complete(),
+                    (Value::Float(a), Value::Int(b)) => {
+                        a.to_integer().unwrap_or(Integer::from(0)).gcd(b)
                     }
-                    (Value::Float(a), Value::Int(b)) => a.to_integer().unwrap().gcd(b),
-                    (Value::Float(a), Value::Float(b)) => {
-                        a.to_integer().unwrap().gcd(&b.to_integer().unwrap())
-                    }
+                    (Value::Float(a), Value::Float(b)) => a
+                        .to_integer()
+                        .unwrap_or(Integer::from(0))
+                        .gcd(&b.to_integer().unwrap_or(Integer::from(0))),
                     _ => self.runtime_error("Expected a number", span),
                 };
 
@@ -816,13 +821,16 @@ impl VM {
 
                 let lcm = match (a, b) {
                     (Value::Int(a), Value::Int(b)) => a.lcm_ref(b).complete(),
-                    (Value::Int(a), Value::Float(b)) => {
-                        a.lcm_ref(&b.to_integer().unwrap()).complete()
+                    (Value::Int(a), Value::Float(b)) => a
+                        .lcm_ref(&b.to_integer().unwrap_or(Integer::from(0)))
+                        .complete(),
+                    (Value::Float(a), Value::Int(b)) => {
+                        a.to_integer().unwrap_or(Integer::from(0)).lcm(b)
                     }
-                    (Value::Float(a), Value::Int(b)) => a.to_integer().unwrap().lcm(b),
-                    (Value::Float(a), Value::Float(b)) => {
-                        a.to_integer().unwrap().lcm(&b.to_integer().unwrap())
-                    }
+                    (Value::Float(a), Value::Float(b)) => a
+                        .to_integer()
+                        .unwrap_or(Integer::from(0))
+                        .lcm(&b.to_integer().unwrap_or(Integer::from(0))),
                     _ => self.runtime_error("Expected a number", span),
                 };
 
@@ -836,7 +844,7 @@ impl VM {
                     Value::Int(n) => {
                         self.stack
                             .push(NonNull::new_unchecked(alloc_new_value(Value::Int(
-                                Integer::from(Integer::fibonacci(n.to_u32().unwrap())),
+                                Integer::from(Integer::fibonacci(n.saturating_cast())),
                             ))));
                     }
 
@@ -886,9 +894,16 @@ impl VM {
                     (Value::Float(n), Value::Int(precision)) => {
                         self.stack
                             .push(NonNull::new_unchecked(alloc_new_value(Value::Float(
-                                Float::parse(format!("{:.1$}", n, precision.to_usize().unwrap()))
-                                    .unwrap()
-                                    .complete(53),
+                                Float::parse(format!(
+                                    "{:.1$}",
+                                    n,
+                                    precision.to_usize().unwrap_or_else(|| self.runtime_error(
+                                        "Precision must be a positive integer",
+                                        span
+                                    ))
+                                ))
+                                .unwrap()
+                                .complete(53),
                             ))));
                     }
 
@@ -939,33 +954,31 @@ impl VM {
             },
 
             Rand => unsafe {
-                let mut start = self.stack.pop().unwrap().as_ref();
-                let mut end = self.stack.pop().unwrap().as_ref();
-                if start > end {
-                    std::mem::swap(&mut start, &mut end);
+                let start = self.stack.pop().unwrap().as_ref();
+                let end = self.stack.pop().unwrap().as_ref();
+                let mut start_val = self.convert_to_i128(start, span.clone());
+                let mut end_val = self.convert_to_i128(end, span);
+
+                if start_val > end_val {
+                    std::mem::swap(&mut start_val, &mut end_val);
                 }
+
                 match (start, end) {
-                    (Value::Int(start), Value::Int(end)) => {
+                    (Value::Int(_), Value::Int(_)) => {
                         self.stack
                             .push(NonNull::new_unchecked(alloc_new_value(Value::Int(
-                                Integer::from(
-                                    self.rng
-                                        .i128(start.to_i128().unwrap()..end.to_i128().unwrap()),
-                                ),
+                                Integer::from(self.rng.i128(start_val..end_val)),
                             ))));
                     }
-
-                    (Value::Float(start), Value::Float(end)) => {
+                    (Value::Float(_), Value::Float(_))
+                    | (Value::Int(_), Value::Float(_))
+                    | (Value::Float(_), Value::Int(_)) => {
                         self.stack
                             .push(NonNull::new_unchecked(alloc_new_value(Value::Float(
-                                float!(self.rng.i128(
-                                    start.to_integer().unwrap().to_i128().unwrap()
-                                        ..end.to_integer().unwrap().to_i128().unwrap()
-                                )),
+                                float!(self.rng.i128(start_val..end_val)),
                             ))));
                     }
-
-                    _ => self.runtime_error("Expected a number", span),
+                    _ => unreachable_unchecked(),
                 }
             },
 
@@ -1209,7 +1222,7 @@ impl VM {
                 self.stack
                     .push(NonNull::new_unchecked(alloc_new_value(match val {
                         Value::Int(i) => {
-                            Value::Int(Integer::factorial(i.to_u32().unwrap()).complete())
+                            Value::Int(Integer::factorial(i.saturating_cast()).complete())
                         }
                         Value::Float(f) => Value::Float(
                             Float::factorial(f.to_u32_saturating().unwrap()).complete(53),
@@ -1488,8 +1501,16 @@ impl VM {
         F: FnOnce(&Value, &Value) -> Option<Value>,
     {
         unsafe {
-            let b = self.stack.pop().unwrap().as_ref();
-            let a = self.stack.pop().unwrap().as_ref();
+            let b = self
+                .stack
+                .pop()
+                .unwrap_or_else(|| self.runtime_error("Stack underflow", span.clone()))
+                .as_ref();
+            let a = self
+                .stack
+                .pop()
+                .unwrap_or_else(|| self.runtime_error("Stack underflow", span.clone()))
+                .as_ref();
 
             let result = compare_fn(a, b);
             match result {
@@ -1512,8 +1533,16 @@ impl VM {
         F: FnOnce(&Self, &Value, &Value) -> Option<Value>,
     {
         unsafe {
-            let b = self.stack.pop().unwrap().as_ref();
-            let a = self.stack.pop().unwrap().as_ref();
+            let b = self
+                .stack
+                .pop()
+                .unwrap_or_else(|| self.runtime_error("Stack underflow", span.clone()))
+                .as_ref();
+            let a = self
+                .stack
+                .pop()
+                .unwrap_or_else(|| self.runtime_error("Stack underflow", span.clone()))
+                .as_ref();
 
             match binary_op(self, a, b) {
                 Some(r) => self.stack.push(NonNull::new_unchecked(alloc_new_value(r))),
@@ -1535,8 +1564,28 @@ impl VM {
         F: FnOnce(&Self, &Value, &Value) -> Option<Value>,
     {
         unsafe {
-            let b = self.stack.pop().unwrap().as_ref();
-            let a = self.stack.pop().unwrap().as_mut();
+            let b = self
+                .stack
+                .pop()
+                .unwrap_or_else(|| {
+                    self.runtime_error(
+                        format!("Stack underflow while performing {op} operation", op = op)
+                            .as_str(),
+                        span.clone(),
+                    )
+                })
+                .as_ref();
+            let a = self
+                .stack
+                .pop()
+                .unwrap_or_else(|| {
+                    self.runtime_error(
+                        format!("Stack underflow while performing {op} operation", op = op)
+                            .as_str(),
+                        span.clone(),
+                    )
+                })
+                .as_mut();
 
             let result = binary_op(self, a, b);
 
@@ -1656,6 +1705,24 @@ impl VM {
         }
 
         self.instructions.push((Instr(bytecode, vec![]), span));
+    }
+
+    fn convert_to_i128(&self, value: &Value, span: Range<usize>) -> i128 {
+        match value {
+            Value::Int(i) => i.saturating_cast(),
+            Value::Float(f) => f
+                .to_integer()
+                .unwrap_or_else(|| {
+                    // Only way for the unwrap to fail is if the float is infinity
+                    if f.is_sign_negative() {
+                        Integer::from(i128::MIN)
+                    } else {
+                        Integer::from(i128::MAX)
+                    }
+                })
+                .saturating_cast(),
+            _ => self.runtime_error("Expected a number", span),
+        }
     }
 }
 

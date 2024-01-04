@@ -1,4 +1,5 @@
 use miette::{miette, LabeledSpan};
+use std::hint::unreachable_unchecked;
 use std::{fmt, ops::Range};
 
 use crate::float;
@@ -196,7 +197,7 @@ impl<'a> LogosToken<'a> {
             Self::PAdd => PostfixOp::Increase,
             Self::PSub => PostfixOp::Decrease,
             Self::Bang => PostfixOp::Factorial,
-            _ => unreachable!(),
+            _ => unsafe { unreachable_unchecked() },
         }
     }
     pub fn to_unary_op(&self) -> UnaryOp {
@@ -204,7 +205,7 @@ impl<'a> LogosToken<'a> {
             Self::Minus => UnaryOp::Neg,
             Self::Plus => UnaryOp::Plus,
             Self::Bang => UnaryOp::Not,
-            _ => unreachable!(),
+            _ => unsafe { unreachable_unchecked() },
         }
     }
     pub fn to_binary_op(&self) -> BinaryOp {
@@ -230,7 +231,7 @@ impl<'a> LogosToken<'a> {
             Self::And => BinaryOp::And,
             Self::Dot => BinaryOp::Attr,
 
-            _ => unreachable!(),
+            _ => unsafe { unreachable_unchecked() },
         }
     }
 }
@@ -406,7 +407,7 @@ impl<'a> PParser<'a> {
                     let report = miette!(
                         labels = vec![LabeledSpan::at(
                             span.clone(),
-                            format!("expected newline or semicolon")
+                            "expected newline or semicolon".to_string()
                         )],
                         "Expected semicolon or newline found {token}"
                     )
@@ -446,7 +447,7 @@ impl<'a> PParser<'a> {
                 let report = miette!(
                     labels = vec![LabeledSpan::at(
                         span.clone(),
-                        format!("expected newline or semicolon")
+                        "expected newline or semicolon".to_string()
                     )],
                     "Expected semicolon or newline found {token}"
                 )
@@ -523,7 +524,7 @@ impl<'a> PParser<'a> {
                         let report = miette!(
                             labels = vec![LabeledSpan::at(
                                 span.clone(),
-                                format!("expected newline or semicolon")
+                                "expected newline or semicolon".to_string()
                             )],
                             "Expected semicolon or newline found {token}"
                         )
@@ -556,45 +557,38 @@ impl<'a> PParser<'a> {
                 return Expr::new(start..self.current.1.end, ExprKind::Return(Box::new(expr)));
             }
             LogosToken::Ident(x) => {
-                let span = self.current.1.clone();
+                let start = self.current.1.start;
                 if self.peek(0) == Some(LogosToken::Eq) {
                     self.proceed();
                     self.proceed();
                     let expr = self.expr(0);
                     Expr::new(
-                        span.start..self.current.1.end,
+                        start..self.current.1.end,
                         ExprKind::Set(x.to_string(), Box::new(expr)),
                     )
                 } else if self.check_fun() {
                     let mut params: Vec<String> = Vec::new();
-                    let name = if let LogosToken::Ident(x) = self.current() {
-                        x.to_string()
-                    } else {
-                        unreachable!()
-                    };
                     self.proceed();
-                    loop {
-                        if &LogosToken::Colon == self.current() {
-                            self.proceed();
-                            break;
-                        }
-                        let ident = self.expect_ident();
-                        params.push(ident.clone());
+                    while self.current() != &LogosToken::Colon {
+                        params.push(self.expect_ident());
                         self.proceed();
                     }
+                    self.proceed();
                     let (exprs, is_inline) = self.block();
                     if is_inline {
-                        let inline_expr = Expr::new(
-                            span.start..exprs.last().unwrap().span.end,
-                            ExprKind::InlineFunction(name, params, Box::new(exprs[0].clone())),
-                        );
-                        inline_expr
+                        Expr::new(
+                            start..exprs.last().unwrap().span.end,
+                            ExprKind::InlineFunction(
+                                x.to_string(),
+                                params,
+                                Box::new(exprs[0].clone()),
+                            ),
+                        )
                     } else {
-                        let multiline_expr = Expr::new(
-                            span.start..exprs.last().unwrap().span.end,
-                            ExprKind::MultilineFunction(name, params, exprs),
-                        );
-                        multiline_expr
+                        Expr::new(
+                            start..exprs.last().unwrap().span.end,
+                            ExprKind::MultilineFunction(x.to_string(), params, exprs),
+                        )
                     }
                 } else {
                     self.expr(0)
