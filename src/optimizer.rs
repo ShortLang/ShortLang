@@ -48,6 +48,13 @@ impl Optimizer {
     fn optimize(&mut self, expr: Expr) -> Expr {
         match expr.inner {
             ExprKind::Binary(_, _, _) => self.constant_fold(expr.clone()),
+            ExprKind::MultilineFunction(n, p, es) => {
+                let mut exprs: Vec<Expr> = Vec::new();
+                for e in es {
+                    exprs.push(self.optimize(e))
+                }
+                Expr::new(expr.span, ExprKind::MultilineFunction(n, p, exprs))
+            }
             _ => expr,
         }
     }
