@@ -336,7 +336,6 @@ pub enum ExprKind {
 pub struct PParser<'a> {
     source: &'a str,
     position: usize,
-    errored: bool,
     current: (LogosToken<'a>, Range<usize>),
     tokens: Vec<(LogosToken<'a>, Range<usize>)>,
 }
@@ -347,12 +346,36 @@ impl<'a> PParser<'a> {
             tokens,
             source,
             position: 0,
-            errored: false,
             current: (LogosToken::Error, 0..0),
         };
         x.proceed();
         x
     }
+
+    fn report_error(
+        &mut self,
+        span: Range<usize>,
+        label: String,
+        message: String,
+        help: Option<String>,
+    ) {
+        let report;
+        if let Some(help) = help {
+            report = miette!(
+                labels = vec![LabeledSpan::at(span, label)],
+                help = help,
+                "{}",
+                message
+            )
+            .with_source_code(self.source.to_string());
+        } else {
+            report = miette!(labels = vec![LabeledSpan::at(span, label)], "{}", message)
+                .with_source_code(self.source.to_string());
+        }
+        println!("{:?}", report);
+        std::process::exit(1);
+    }
+
     fn back(&mut self) -> Option<(LogosToken<'a>, Range<usize>)> {
         let token = self.tokens.get(self.position - 2).cloned();
         if token.is_some() {
@@ -363,13 +386,12 @@ impl<'a> PParser<'a> {
     }
     fn proceed(&mut self) -> Option<(LogosToken<'a>, Range<usize>)> {
         let token = self.tokens.get(self.position).cloned();
-        // Try to get the last token's span if no last token then just 0..0
         let span = if let Some((_, span)) = self.tokens.last() {
             span.clone()
         } else {
             0..0
         };
-        // LogosToken::Error can mean it's EOF as well
+
         self.current = (LogosToken::Error, span);
         if token.is_some() {
             self.current = token.clone().unwrap();
@@ -378,15 +400,12 @@ impl<'a> PParser<'a> {
         token
     }
     fn check_fun(&self) -> bool {
-        if let Some(LogosToken::Ident(_)) = self.peek(0) {
-            return true;
-        } else if let Some(LogosToken::Colon) = self.peek(0) {
-            return true;
-        }
-        return false;
+        matches!(
+            self.peek(0),
+            Some(LogosToken::Ident(_)) | Some(LogosToken::Colon)
+        )
     }
     pub fn block(&mut self) -> (Vec<Expr>, bool) {
-        // Returns the vector of exprs and if it's a one line block
         let mut exprs: Vec<Expr> = Vec::new();
         if self.current() == &LogosToken::LBrace {
             self.proceed();
@@ -404,16 +423,12 @@ impl<'a> PParser<'a> {
                     && &token != &LogosToken::Semi
                     && &token != &LogosToken::Error
                 {
-                    let report = miette!(
-                        labels = vec![LabeledSpan::at(
-                            span.clone(),
-                            "expected newline or semicolon".to_string()
-                        )],
-                        "Expected semicolon or newline found {token}"
-                    )
-                    .with_source_code(self.source.to_string());
-                    self.errored = true;
-                    println!("{:?}", report);
+                    self.report_error(
+                        span.clone(),
+                        "expected newline or semicolon".to_string(),
+                        format!("Expected semicolon or newline found {}", token),
+                        None,
+                    );
                 } else {
                     self.skip_separator();
                 }
@@ -444,16 +459,12 @@ impl<'a> PParser<'a> {
                 && &token != &LogosToken::Semi
                 && &token != &LogosToken::Error
             {
-                let report = miette!(
-                    labels = vec![LabeledSpan::at(
-                        span.clone(),
-                        "expected newline or semicolon".to_string()
-                    )],
-                    "Expected semicolon or newline found {token}"
-                )
-                .with_source_code(self.source.to_string());
-                self.errored = true;
-                println!("{:?}", report);
+                self.report_error(
+                    span.clone(),
+                    "expected newline or semicolon".to_string(),
+                    format!("Expected semicolon or newline found {}", token),
+                    None,
+                );
             } else {
                 self.skip_separator();
             }
@@ -521,16 +532,12 @@ impl<'a> PParser<'a> {
                         && &token != &LogosToken::Semi
                         && &token != &LogosToken::Error
                     {
-                        let report = miette!(
-                            labels = vec![LabeledSpan::at(
-                                span.clone(),
-                                "expected newline or semicolon".to_string()
-                            )],
-                            "Expected semicolon or newline found {token}"
-                        )
-                        .with_source_code(self.source.to_string());
-                        self.errored = true;
-                        println!("{:?}", report);
+                        self.report_error(
+                            span.clone(),
+                            "expected newline or semicolon".to_string(),
+                            format!("Expected semicolon or newline found {}", token),
+                            None,
+                        );
                     } else {
                         self.skip_separator();
                     }
@@ -597,18 +604,7 @@ impl<'a> PParser<'a> {
             _ => self.expr(0),
         }
     }
-    // fn lbp(&self, op: &LogosToken) -> i32 {
-    //     match op {
-    //         LogosToken::Plus | LogosToken::Minus => 10,
-    //         LogosToken::Times | LogosToken::Slash => 15,
 
-    //         LogosToken::RAngle | LogosToken::Leq | LogosToken::Geq | LogosToken::LAngle => 5,
-    //         LogosToken::Neq | LogosToken::Eqq => 3,
-    //         LogosToken::And => 2,
-    //         LogosToken::Or => 1,
-    //         _ => -1, // In another words stop the expr parsing
-    //     }
-    // }
     fn check_eof(&self, token: &LogosToken) -> bool {
         match token {
             LogosToken::Error => true,
@@ -718,30 +714,24 @@ impl<'a> PParser<'a> {
         if let LogosToken::Ident(ident) = self.current.0 {
             return ident.to_string();
         }
-        let report = miette!(
-            labels = vec![LabeledSpan::at(
-                span.clone(),
-                "expected identifier".to_string()
-            )],
-            "Expected identifier found {token}"
-        )
-        .with_source_code(self.source.to_string());
-        self.errored = true;
-        println!("{:?}", report);
-        "".to_string()
+
+        self.report_error(
+            span.clone(),
+            "expected identifier".to_string(),
+            format!("Expected identifier found {}", token),
+            None,
+        );
+        unreachable!()
     }
     fn expect(&mut self, token: LogosToken) {
         let (tok, span) = &self.current;
         if tok != &token {
-            let report = miette!(
-                labels = vec![LabeledSpan::at(span.clone(), format!("expected {}", token))],
-                help = format!("Replace it with {token}"),
-                "Expected {token} found {tok}"
-            )
-            .with_source_code(self.source.to_string());
-            self.errored = true;
-            self.proceed();
-            println!("{:?}", report);
+            self.report_error(
+                span.clone(),
+                format!("expected {}", token),
+                format!("Expected {} found {}", token, tok),
+                Some(format!("Replace it with {token}")),
+            );
         }
     }
 
@@ -867,15 +857,13 @@ impl<'a> PParser<'a> {
                 ExprKind::Unary(token.to_unary_op(), Box::new(expr))
             }
             _ => {
-                let report = miette!(
-                    labels = vec![LabeledSpan::at(span.clone(), "this is not a value")],
-                    help = "Expected a value like integers, strings, etc.",
-                    "Expected expression"
-                )
-                .with_source_code(self.source.to_string());
-                println!("{:?}", report);
-                self.errored = true;
-                ExprKind::Error
+                self.report_error(
+                    span.clone(),
+                    "this is not a value".to_string(),
+                    "Expected expression".to_string(),
+                    Some("Expected a value like integers, strings, etc.".to_string()),
+                );
+                unreachable!()
             }
         };
         let current = self.current.clone();

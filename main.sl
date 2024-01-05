@@ -1,3 +1,1 @@
->.1 {
-    a // intentionally causing an error to showcase spans
-}
+$rnd(5,5)

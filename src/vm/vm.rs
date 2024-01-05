@@ -965,12 +965,12 @@ impl VM {
 
                 match (start, end) {
                     (Value::Int(start), Value::Int(end)) => {
-                        let start_value: i128 = start.saturating_cast();
-                        let end_value: i128 = end.saturating_cast();
+                        let start_value: i64 = start.saturating_cast();
+                        let end_value: i64 = end.saturating_cast();
 
                         let mut array = vec![];
                         if start_value > end_value {
-                            for i in (end_value..=start_value).rev() {
+                            for i in (end_value + 1..=start_value).rev() {
                                 array.push(Value::Int(Integer::from(i)));
                             }
                         } else {
@@ -996,12 +996,17 @@ impl VM {
                 let mut start = self.convert_to_i128(popped2.as_ref(), span);
                 if start > end {
                     std::mem::swap(&mut start, &mut end);
+                } else if start == end {
+                    self.stack
+                        .push(NonNull::new_unchecked(alloc_new_value(Value::Int(
+                            Integer::from(start),
+                        ))));
+                } else {
+                    self.stack
+                        .push(NonNull::new_unchecked(alloc_new_value(Value::Int(
+                            Integer::from(self.rng.i128(start..end)),
+                        ))));
                 }
-
-                self.stack
-                    .push(NonNull::new_unchecked(alloc_new_value(Value::Int(
-                        Integer::from(self.rng.i128(start..end)),
-                    ))));
             },
 
             MakeVar => {
