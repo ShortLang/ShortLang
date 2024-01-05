@@ -1,3 +1,3 @@
-name = "wizard"
-$f"Hello, {name}!"
-$f"1 + 1 = $1+1"
+>.1 {
+    a // intentionally causing an error to showcase spans
+}

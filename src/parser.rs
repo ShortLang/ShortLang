@@ -721,7 +721,7 @@ impl<'a> PParser<'a> {
         let report = miette!(
             labels = vec![LabeledSpan::at(
                 span.clone(),
-                format!("expected identifier")
+                "expected identifier".to_string()
             )],
             "Expected identifier found {token}"
         )

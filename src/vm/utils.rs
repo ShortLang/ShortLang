@@ -40,6 +40,33 @@ macro_rules! float {
     };
 }
 
+#[macro_export]
+macro_rules! process_placeholder {
+    { $self:ident, $placeholder:expr, $span:expr } => {
+        let parsed_exprs = PParser::new(
+            $placeholder,
+            LogosToken::lexer($placeholder)
+                .spanned()
+                .map(|(tok, span)| match tok {
+                    Ok(tok) => (tok, span.into()),
+                    Err(()) => (LogosToken::Error, span.into()),
+                })
+                .collect::<Vec<_>>(),
+        )
+        .parse()
+        .into_iter()
+        .map(|mut i| {
+            i.span = $span.clone();
+            i
+        })
+        .collect::<Vec<_>>();
+
+        for expr in parsed_exprs {
+            $self.compile_expr(expr);
+        }
+    };
+}
+
 #[derive(Debug, Clone)]
 pub(crate) struct FunctionData {
     pub name: String,

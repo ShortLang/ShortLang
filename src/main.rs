@@ -62,27 +62,29 @@ fn format_duration(duration: std::time::Duration) -> String {
     }
 }
 
-fn main() {
-    let args = Args::parse();
-    let std_lib = include_str!("../std/std.sl").to_owned();
-    let src = std_lib
-        + "\n"
-        + &fs::read_to_string(&args.file).unwrap_or_else(|_| {
-            println!("Error: Input file could not be read");
-            std::process::exit(1);
-        });
-
-    let tokens = LogosToken::lexer(&src)
+fn tokenize(input: &str) -> Vec<(LogosToken, std::ops::Range<usize>)> {
+    LogosToken::lexer(input)
         .spanned()
         .map(|(tok, span)| match tok {
             Ok(tok) => (tok, span.into()),
             Err(()) => (LogosToken::Error, span.into()),
         })
-        .collect::<Vec<_>>();
+        .collect::<Vec<_>>()
+}
 
-    let mut parser = PParser::new(&src, tokens);
-    let mut ast = parser.parse();
-    ast = Optimizer::new(ast.clone()).optimize_all();
+fn main() {
+    let args = Args::parse();
+    let std_lib = include_str!("../std/std.sl").to_owned();
+    let src = fs::read_to_string(&args.file).unwrap_or_else(|_| {
+        println!("Error: Input file could not be read");
+        std::process::exit(1);
+    });
+
+    let mut ast_std = PParser::new(&std_lib, tokenize(&std_lib)).parse();
+    let mut ast_src = PParser::new(&src, tokenize(&src)).parse();
+    ast_std.append(&mut ast_src);
+
+    let ast = Optimizer::new(ast_std).optimize_all();
     if args.ast {
         println!(
             "{:?}",

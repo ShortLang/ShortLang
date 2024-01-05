@@ -11,11 +11,11 @@ use std::string::ToString;
 
 use super::bytecode::Bytecode::*;
 use super::value::{Type, Value};
-use crate::float;
 use crate::for_each_arg;
 use crate::parser::{LogosToken, PParser, PostfixOp, UnaryOp};
 use crate::vm::bytecode::MethodFunction;
 use crate::vm::memory;
+use crate::{float, process_placeholder};
 use crate::{
     parser::{BinaryOp, Expr, ExprKind},
     vm::memory::alloc_new_value,
@@ -276,32 +276,6 @@ impl VM {
             }
 
             ExprKind::FString(value) => {
-                macro_rules! process_placeholder {
-        { $self:ident, $placeholder:expr } => {
-            let parsed_exprs = PParser::new(
-                $placeholder,
-                LogosToken::lexer($placeholder)
-                    .spanned()
-                    .map(|(tok, span)| match tok {
-                        Ok(tok) => (tok, span.into()),
-                        Err(()) => (LogosToken::Error, span.into()),
-                    })
-                    .collect::<Vec<_>>(),
-            )
-            .parse()
-            .into_iter()
-            .map(|mut i| {
-                i.span = expr.span.clone();
-                i
-            })
-            .collect::<Vec<_>>();
-
-            for expr in parsed_exprs {
-                $self.compile_expr(expr);
-            }
-        };
-    }
-
                 let mut iter = value.chars();
 
                 let mut buffer = String::with_capacity(50);
@@ -323,7 +297,7 @@ impl VM {
                             }
                         }
                     } else if !escaped && !dollar_placeholder && ch == '}' && placeholder_start {
-                        process_placeholder!(self, &buffer);
+                        process_placeholder!(self, &buffer, expr.span);
 
                         buffer.clear();
                         placeholder_start = false;
@@ -344,7 +318,7 @@ impl VM {
 
                         len += 1;
                     } else if dollar_placeholder && ch == ' ' {
-                        process_placeholder!(self, &buffer);
+                        process_placeholder!(self, &buffer, expr.span);
 
                         buffer.clear();
                         buffer.push(' ');
@@ -357,14 +331,12 @@ impl VM {
                     }
                 }
 
-                if dollar_placeholder && buffer.is_empty() {
-                    // ERROR: where's the expressions?
-                } else if dollar_placeholder {
-                    process_placeholder!(self, &buffer);
-
-                    len += 1;
-                } else if !buffer.is_empty() {
-                    self.push_data(Value::String(buffer.clone()), expr.span.clone());
+                if !buffer.is_empty() {
+                    if dollar_placeholder {
+                        process_placeholder!(self, &buffer, expr.span);
+                    } else {
+                        self.push_data(Value::String(buffer.clone()), expr.span.clone());
+                    }
                     len += 1;
                 }
 
@@ -1706,7 +1678,7 @@ impl VM {
 
         // Remove any extra variables that has been pushed onto the
         // stack except the return value
-        if previous_stack_len < self.stack.len() - 1 {
+        if previous_stack_len < self.stack.len().saturating_sub(1) {
             while previous_stack_len < self.stack.len() - 1 {
                 self.stack.remove(self.stack.len() - 2);
             }
