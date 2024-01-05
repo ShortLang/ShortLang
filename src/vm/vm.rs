@@ -148,12 +148,9 @@ impl VM {
         // for (idx, (Instr(bytecode, args), _)) in self.instructions.iter().enumerate() {
         //     println!("instr[{idx}] = ({bytecode}, {args:?})");
         // }
-
-        // self.run();
     }
 
     fn compile_expr(&mut self, expr: Expr) {
-        // println!("compiling: {expr:?}");
         match expr.inner {
             ExprKind::Int(integer) => {
                 let index = self.add_constant(Value::Int(integer));
@@ -282,25 +279,11 @@ impl VM {
             }
 
             ExprKind::FString(value) => {
-                let rgx = Regex::new(r#"\{[^\{\}]*\}"#).unwrap();
-
-                let mut previous = 0;
-
-                let mut len = 0;
-                for m in rgx.find_iter(&value) {
-                    let normal_str = &value[previous..m.start()];
-                    let placeholder = value[m.start()..m.end()].trim_matches(&['{', '}']);
-
-                    if !normal_str.is_empty() {
-                        len += 1;
-                        self.push_data(Value::String(normal_str.to_owned()), expr.span.clone());
-                    }
-
-                    if !placeholder.is_empty() {
-                        len += 1;
+                macro_rules! process_placeholder {
+                    { $self:ident, $placeholder:expr } => {
                         let parsed_exprs = PParser::new(
-                            placeholder,
-                            LogosToken::lexer(placeholder)
+                            $placeholder,
+                            LogosToken::lexer($placeholder)
                                 .spanned()
                                 .map(|(tok, span)| match tok {
                                     Ok(tok) => (tok, span.into()),
@@ -317,21 +300,69 @@ impl VM {
                         .collect::<Vec<_>>();
 
                         for expr in parsed_exprs {
-                            self.compile_expr(expr);
+                            $self.compile_expr(expr);
                         }
+                    };
+                }
+
+                let mut iter = value.chars();
+
+                let mut buffer = String::with_capacity(50);
+                let mut escaped = false;
+                let mut placeholder_start = false;
+                let mut dollar_placeholder = false;
+                let mut len = 0;
+
+                while let Some(ch) = iter.next() {
+                    if ch == '\\' {
+                        escaped = true;
+                    } else if !escaped && !dollar_placeholder && ch == '}' && placeholder_start {
+                        process_placeholder!(self, &buffer);
+
+                        buffer.clear();
+                        placeholder_start = false;
+
+                        len += 1;
+                    } else if !escaped && !dollar_placeholder && ch == '{' {
+                        self.push_data(Value::String(buffer.clone()), expr.span.clone());
+
+                        buffer.clear();
+                        placeholder_start = true;
+
+                        len += 1;
+                    } else if !escaped && !placeholder_start && !dollar_placeholder && ch == '$' {
+                        self.push_data(Value::String(buffer.clone()), expr.span.clone());
+
+                        buffer.clear();
+                        dollar_placeholder = true;
+
+                        len += 1;
+                    } else if dollar_placeholder && ch == ' ' {
+                        process_placeholder!(self, &buffer);
+
+                        buffer.clear();
+                        buffer.push(' ');
+                        dollar_placeholder = false;
+
+                        len += 1;
+                    } else {
+                        buffer.push(ch);
+                        escaped = false;
                     }
-
-                    previous = m.end();
                 }
 
-                let v = &value[previous..];
-                if !v.is_empty() {
+                if dollar_placeholder && buffer.is_empty() {
+                    // ERROR: where's the expressions?
+                } else if dollar_placeholder {
+                    process_placeholder!(self, &buffer);
+
                     len += 1;
-                    self.push_data(Value::String(v.to_owned()), expr.span.clone());
+                } else if !buffer.is_empty() {
+                    self.push_data(Value::String(buffer.clone()), expr.span.clone());
+                    len += 1;
                 }
 
-                self.instructions
-                    .push((Instr(Bytecode::ConcatUpTo, vec![len]), expr.span));
+                self.instructions.push((Instr(Bytecode::ConcatUpTo, vec![len]), expr.span));
             }
 
             ExprKind::Bool(boolean) => {
@@ -555,7 +586,6 @@ impl VM {
             }
 
             ExprKind::While(condition, body) => {
-                println!("ello!");
                 let body_start = self.instructions.len();
                 self.compile_expr(*condition);
 
@@ -575,7 +605,6 @@ impl VM {
                     .0
                      .1
                     .extend_from_slice(&[body_end, body_start]);
-                println!("ello!");
             }
 
             ExprKind::Break => {

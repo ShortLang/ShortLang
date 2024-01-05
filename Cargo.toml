@@ -19,7 +19,6 @@ logos = "0.13.0"
 miette = { version = "5.10.0", features = ["fancy"] }
 fastrand = "2.0.1"
 az = "1.2.1"
-regex = "1.10.2"
 
 [dependencies.rug]
 version = "1.22.0"
