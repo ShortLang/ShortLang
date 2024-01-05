@@ -1,19 +1,16 @@
 use az::SaturatingCast;
-use clap::parser;
 use logos::Logos;
 use miette::{miette, LabeledSpan};
-use regex::Regex;
 use rug::ops::CompleteRound;
 use rug::{Complete, Float, Integer};
 use std::collections::HashMap;
-use std::hint::unreachable_unchecked;
 use std::io::*;
 use std::ops::Range;
-use std::process::exit;
 use std::ptr::NonNull;
+use std::string::ToString;
 
 use super::bytecode::Bytecode::*;
-use super::value::{self, Type, Value};
+use super::value::{Type, Value};
 use crate::float;
 use crate::for_each_arg;
 use crate::parser::{LogosToken, PParser, PostfixOp, UnaryOp};
@@ -280,30 +277,30 @@ impl VM {
 
             ExprKind::FString(value) => {
                 macro_rules! process_placeholder {
-                    { $self:ident, $placeholder:expr } => {
-                        let parsed_exprs = PParser::new(
-                            $placeholder,
-                            LogosToken::lexer($placeholder)
-                                .spanned()
-                                .map(|(tok, span)| match tok {
-                                    Ok(tok) => (tok, span.into()),
-                                    Err(()) => (LogosToken::Error, span.into()),
-                                })
-                                .collect::<Vec<_>>(),
-                        )
-                        .parse()
-                        .into_iter()
-                        .map(|mut i| {
-                            i.span = expr.span.clone();
-                            i
-                        })
-                        .collect::<Vec<_>>();
+        { $self:ident, $placeholder:expr } => {
+            let parsed_exprs = PParser::new(
+                $placeholder,
+                LogosToken::lexer($placeholder)
+                    .spanned()
+                    .map(|(tok, span)| match tok {
+                        Ok(tok) => (tok, span.into()),
+                        Err(()) => (LogosToken::Error, span.into()),
+                    })
+                    .collect::<Vec<_>>(),
+            )
+            .parse()
+            .into_iter()
+            .map(|mut i| {
+                i.span = expr.span.clone();
+                i
+            })
+            .collect::<Vec<_>>();
 
-                        for expr in parsed_exprs {
-                            $self.compile_expr(expr);
-                        }
-                    };
-                }
+            for expr in parsed_exprs {
+                $self.compile_expr(expr);
+            }
+        };
+    }
 
                 let mut iter = value.chars();
 
@@ -316,6 +313,15 @@ impl VM {
                 while let Some(ch) = iter.next() {
                     if ch == '\\' {
                         escaped = true;
+                        if let Some(next_ch) = iter.next() {
+                            match next_ch {
+                                'n' => buffer.push_str("\\n"),
+                                't' => buffer.push_str("\\t"),
+                                'r' => buffer.push_str("\\r"),
+                                'x' => buffer.push_str("\\x"),
+                                _ => buffer.push(next_ch),
+                            }
+                        }
                     } else if !escaped && !dollar_placeholder && ch == '}' && placeholder_start {
                         process_placeholder!(self, &buffer);
 
@@ -362,7 +368,8 @@ impl VM {
                     len += 1;
                 }
 
-                self.instructions.push((Instr(Bytecode::ConcatUpTo, vec![len]), expr.span));
+                self.instructions
+                    .push((Instr(ConcatUpTo, vec![len]), expr.span));
             }
 
             ExprKind::Bool(boolean) => {
@@ -1008,36 +1015,21 @@ impl VM {
             },
 
             Rand => unsafe {
-                let end = self.stack.pop().unwrap().as_ref();
-                let start = self
+                let popped1 = self.stack.pop().unwrap();
+                let popped2 = self
                     .stack
                     .pop()
-                    .unwrap_or_else(|| allocate(Value::Int(Integer::from(0))))
-                    .as_ref();
-                let mut start_val = self.convert_to_i128(start, span.clone());
-                let mut end_val = self.convert_to_i128(end, span);
-
-                if start_val > end_val {
-                    std::mem::swap(&mut start_val, &mut end_val);
+                    .unwrap_or_else(|| allocate(Value::Int(Integer::from(0))));
+                let mut end = self.convert_to_i128(popped1.as_ref(), span.clone());
+                let mut start = self.convert_to_i128(popped2.as_ref(), span);
+                if start > end {
+                    std::mem::swap(&mut start, &mut end);
                 }
 
-                match (start, end) {
-                    (Value::Int(_), Value::Int(_)) => {
-                        self.stack
-                            .push(NonNull::new_unchecked(alloc_new_value(Value::Int(
-                                Integer::from(self.rng.i128(start_val..end_val)),
-                            ))));
-                    }
-                    (Value::Float(_), Value::Float(_))
-                    | (Value::Int(_), Value::Float(_))
-                    | (Value::Float(_), Value::Int(_)) => {
-                        self.stack
-                            .push(NonNull::new_unchecked(alloc_new_value(Value::Float(
-                                float!(self.rng.i128(start_val..end_val)),
-                            ))));
-                    }
-                    _ => unreachable_unchecked(),
-                }
+                self.stack
+                    .push(NonNull::new_unchecked(alloc_new_value(Value::Int(
+                        Integer::from(self.rng.i128(start..end)),
+                    ))));
             },
 
             MakeVar => {
