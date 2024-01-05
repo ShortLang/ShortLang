@@ -994,14 +994,15 @@ impl VM {
                     .unwrap_or_else(|| allocate(Value::Int(Integer::from(0))));
                 let mut end = self.convert_to_i128(popped1.as_ref(), span.clone());
                 let mut start = self.convert_to_i128(popped2.as_ref(), span);
-                if start > end {
-                    std::mem::swap(&mut start, &mut end);
-                } else if start == end {
+                if start == end {
                     self.stack
                         .push(NonNull::new_unchecked(alloc_new_value(Value::Int(
                             Integer::from(start),
                         ))));
                 } else {
+                    if start > end {
+                        std::mem::swap(&mut start, &mut end);
+                    }
                     self.stack
                         .push(NonNull::new_unchecked(alloc_new_value(Value::Int(
                             Integer::from(self.rng.i128(start..end)),
