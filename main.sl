@@ -1,3 +1,2 @@
->.1 {
-    1+1
-}
+name = "wizard"
+$f"Hello, {name}!"

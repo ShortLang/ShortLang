@@ -96,7 +96,11 @@ pub enum Bytecode {
     Ceil,
     Rand,
     Range,
+    ToString,
     Exit,
+
+    // Misc
+    ConcatUpTo,
 }
 
 #[derive(Debug, Clone, PartialEq)]

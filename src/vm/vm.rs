@@ -1,16 +1,19 @@
 use az::SaturatingCast;
+use clap::parser;
 use logos::Logos;
 use miette::{miette, LabeledSpan};
+use regex::Regex;
 use rug::ops::CompleteRound;
 use rug::{Complete, Float, Integer};
 use std::collections::HashMap;
 use std::hint::unreachable_unchecked;
 use std::io::*;
 use std::ops::Range;
+use std::process::exit;
 use std::ptr::NonNull;
 
 use super::bytecode::Bytecode::*;
-use super::value::{Type, Value};
+use super::value::{self, Type, Value};
 use crate::float;
 use crate::for_each_arg;
 use crate::parser::{LogosToken, PParser, PostfixOp, UnaryOp};
@@ -146,10 +149,11 @@ impl VM {
         //     println!("instr[{idx}] = ({bytecode}, {args:?})");
         // }
 
-        self.run();
+        // self.run();
     }
 
     fn compile_expr(&mut self, expr: Expr) {
+        // println!("compiling: {expr:?}");
         match expr.inner {
             ExprKind::Int(integer) => {
                 let index = self.add_constant(Value::Int(integer));
@@ -277,97 +281,58 @@ impl VM {
                     .push((Instr(LoadConst, vec![index - 1]), expr.span));
             }
 
-            ExprKind::FString(value) => unsafe {
-                let mut formatted_string = String::new();
-                let mut iter = value.chars().peekable();
-                let mut prev_char = None;
-                while let Some(c) = iter.next() {
-                    if c == '{' && prev_char != Some('\\') {
-                        let mut new_expr_str = String::new();
-                        while let Some(c) = iter.next() {
-                            if c == '}' {
-                                break;
-                            }
-                            new_expr_str.push(c);
-                        }
-                        let parsed_exprs = PParser::new(
-                            &new_expr_str,
-                            LogosToken::lexer(&new_expr_str)
-                                .spanned()
-                                .map(|(tok, span)| match tok {
-                                    Ok(tok) => (tok, span.into()),
-                                    Err(()) => (LogosToken::Error, span.into()),
-                                })
-                                .collect::<Vec<_>>(),
-                        )
-                        .parse();
+            ExprKind::FString(value) => {
+                let rgx = Regex::new(r#"\{[^\{\}]*\}"#).unwrap();
 
-                        for expr in parsed_exprs {
-                            self.compile_expr(expr);
-                        }
+                let mut previous = 0;
 
-                        self.run();
-                        formatted_string.push_str(
-                            &self
-                                .stack
-                                .pop()
-                                .unwrap_or(allocate(Value::Nil))
-                                .as_ref()
-                                .to_string(),
-                        );
-                    } else if c == '$' && prev_char != Some('\\') {
-                        let mut ident_str = String::new();
-                        while let Some(c) = iter.peek() {
-                            if c.is_whitespace() {
-                                break;
-                            }
-                            ident_str.push(*c);
-                            iter.next(); // consume the character
-                        }
-                        let parsed_exprs = PParser::new(
-                            &ident_str,
-                            LogosToken::lexer(&ident_str)
-                                .spanned()
-                                .map(|(tok, span)| match tok {
-                                    Ok(tok) => (tok, span.into()),
-                                    Err(()) => (LogosToken::Error, span.into()),
-                                })
-                                .collect::<Vec<_>>(),
-                        )
-                        .parse();
+                let mut len = 0;
+                for m in rgx.find_iter(&value) {
+                    let normal_str = &value[previous..m.start()];
+                    let placeholder = value[m.start()..m.end()].trim_matches(&['{', '}']);
 
-                        for expr in parsed_exprs {
-                            self.compile_expr(expr);
-                        }
-
-                        self.run();
-                        formatted_string.push_str(
-                            &self
-                                .stack
-                                .pop()
-                                .unwrap_or(allocate(Value::Nil))
-                                .as_ref()
-                                .to_string(),
-                        );
-                    } else if c == '\\' && prev_char != Some('\\') {
-                        if let Some(next_char) = iter.next() {
-                            match next_char {
-                                'n' => formatted_string.push_str("\\n"),
-                                't' => formatted_string.push_str("\\t"),
-                                'r' => formatted_string.push_str("\\r"),
-                                'x' => formatted_string.push_str("\\x"),
-                                _ => formatted_string.push(next_char),
-                            }
-                        }
-                    } else if c != '\\' || prev_char == Some('\\') {
-                        formatted_string.push(c);
+                    if !normal_str.is_empty() {
+                        len += 1;
+                        self.push_data(Value::String(normal_str.to_owned()), expr.span.clone());
                     }
-                    prev_char = Some(c);
+
+                    if !placeholder.is_empty() {
+                        len += 1;
+                        let parsed_exprs = PParser::new(
+                            placeholder,
+                            LogosToken::lexer(placeholder)
+                                .spanned()
+                                .map(|(tok, span)| match tok {
+                                    Ok(tok) => (tok, span.into()),
+                                    Err(()) => (LogosToken::Error, span.into()),
+                                })
+                                .collect::<Vec<_>>(),
+                        )
+                        .parse()
+                        .into_iter()
+                        .map(|mut i| {
+                            i.span = expr.span.clone();
+                            i
+                        })
+                        .collect::<Vec<_>>();
+
+                        for expr in parsed_exprs {
+                            self.compile_expr(expr);
+                        }
+                    }
+
+                    previous = m.end();
                 }
-                let index = self.add_constant(Value::String(formatted_string));
+
+                let v = &value[previous..];
+                if !v.is_empty() {
+                    len += 1;
+                    self.push_data(Value::String(v.to_owned()), expr.span.clone());
+                }
+
                 self.instructions
-                    .push((Instr(LoadConst, vec![index - 1]), expr.span));
-            },
+                    .push((Instr(Bytecode::ConcatUpTo, vec![len]), expr.span));
+            }
 
             ExprKind::Bool(boolean) => {
                 let index = self.add_constant(Value::Bool(boolean));
@@ -590,6 +555,7 @@ impl VM {
             }
 
             ExprKind::While(condition, body) => {
+                println!("ello!");
                 let body_start = self.instructions.len();
                 self.compile_expr(*condition);
 
@@ -609,6 +575,7 @@ impl VM {
                     .0
                      .1
                     .extend_from_slice(&[body_end, body_start]);
+                println!("ello!");
             }
 
             ExprKind::Break => {
@@ -768,6 +735,11 @@ impl VM {
                     .push(NonNull::new_unchecked(alloc_new_value(Value::String(
                         ty.to_owned(),
                     ))));
+            },
+
+            ToString => unsafe {
+                let s = self.stack.pop().unwrap().as_ref().to_string();
+                self.stack.push(allocate(Value::String(s)));
             },
 
             Sqrt => unsafe {
@@ -960,6 +932,20 @@ impl VM {
                     _ => self.runtime_error("Expected a number", span),
                 }
             },
+
+            ConcatUpTo => unsafe {
+                let num_vals = args[0];
+                let mut v = vec![];
+
+                for _ in 0..num_vals {
+                    v.push(self.stack.pop().unwrap().as_ref().to_string());
+                }
+
+                v.reverse();
+
+                self.stack.push(allocate(Value::String(v.join(""))));
+            },
+
             Exit => std::process::exit(0),
             Range => unsafe {
                 let end = self.stack.pop().unwrap().as_ref();
@@ -971,8 +957,8 @@ impl VM {
 
                 match (start, end) {
                     (Value::Int(start), Value::Int(end)) => {
-                        let mut start_value: i128 = start.saturating_cast();
-                        let mut end_value: i128 = end.saturating_cast();
+                        let start_value: i128 = start.saturating_cast();
+                        let end_value: i128 = end.saturating_cast();
 
                         let mut array = vec![];
                         if start_value > end_value {
@@ -1095,17 +1081,20 @@ impl VM {
                     .as_str();
                 let fn_obj = &self.functions[fn_name];
 
-                self.pc = fn_obj.instruction_range.end - 1;
+                self.pc = fn_obj.instruction_range.end;
+                return false;
             },
 
             While => unsafe {
                 let loop_end = args.get(0).unwrap_or_else(|| {
                     self.runtime_error("Expected a loop end instruction pointer", span)
                 });
+
                 let condition = self.stack.pop().unwrap().as_ref().bool_eval();
 
                 if !condition {
-                    self.pc = loop_end - 1;
+                    self.pc = *loop_end;
+                    return false;
                 }
             },
 
@@ -1130,9 +1119,10 @@ impl VM {
                         .get_mut(&(var_ptr as u32))
                         .unwrap() = array.get(*index).map(|i| allocate(i.clone()));
                 } else {
-                    self.pc = loop_end - 1;
+                    self.pc = loop_end;
                     *index = 0;
                     *ran_once = false;
+                    return false;
                 }
             },
 
@@ -1282,22 +1272,30 @@ impl VM {
                     })));
             },
 
-            Jmp => self.pc = args[0] - 1,
+            Jmp => {
+                self.pc = args[0];
+                return false;
+            }
+
             ForLoopJmp { ran_once } => {
-                self.pc = args[0] - 1;
+                self.pc = args[0];
                 *unsafe { &mut *ran_once } = true;
+
+                return false;
             }
 
             Break => {
                 let while_instr_ptr = args[0];
                 let (Instr(_, loop_args), _) = &self.instructions[while_instr_ptr];
-                self.pc = loop_args[0] - 1;
+                self.pc = loop_args[0];
+                return false;
             }
 
             Continue => {
                 let while_instr_ptr = args[0];
                 let (Instr(_, loop_args), _) = &self.instructions[while_instr_ptr];
-                self.pc = loop_args[1] - 1;
+                self.pc = loop_args[1];
+                return false;
             }
 
             TernaryStart => unsafe {
@@ -1305,7 +1303,8 @@ impl VM {
                 let condition = self.stack.pop().unwrap().as_ref().bool_eval();
 
                 if !condition {
-                    self.pc = ternary_else_start - 1;
+                    self.pc = ternary_else_start;
+                    return false;
                 }
             },
 

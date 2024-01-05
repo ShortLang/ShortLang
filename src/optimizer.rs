@@ -1,6 +1,6 @@
 use crate::float;
-use crate::parser::{BinaryOp, Expr, ExprKind, PostfixOp};
-use rug::Integer;
+use crate::parser::{BinaryOp, Expr, ExprKind};
+
 
 pub struct Optimizer {
     ast: Vec<Expr>,
