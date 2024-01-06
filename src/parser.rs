@@ -422,6 +422,7 @@ impl<'a> PParser<'a> {
                 if &token != &LogosToken::Newline
                     && &token != &LogosToken::Semi
                     && &token != &LogosToken::Error
+                    && &token != &LogosToken::RBrace
                 {
                     self.report_error(
                         span.clone(),
