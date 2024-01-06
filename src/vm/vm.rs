@@ -34,10 +34,12 @@ pub(crate) type CallStack = Vec<FnStackData>;
 const GC_TRIGGER: usize = 1 << 20;
 
 macro_rules! inbuilt_methods {
-    { $self:ident, $names:expr, $args:ident, $({ $fn_name:expr => [$($ty:expr),+ $(,)?], $num_args:expr, $span:expr }),*, _ => { $($tt:tt)* } $(,)? } => {
+    { $self:ident, $names:expr, $args:ident, $([ $fn_name:expr => [$($ty:expr),+ $(,)?], $num_args:expr, $span:expr, { $($preprocess:tt)* } ]),*, _ => { $($tt:tt)* } $(,)? } => {
         match $names {
             $(
                 $fn_name => {
+                    { $($preprocess)* }
+
                     for_each_arg!($args, $num_args,
                         Some(e) => { $self.compile_expr(e) },
                         None => { $self.stack.push(allocate(Value::Nil)) }
@@ -47,6 +49,7 @@ macro_rules! inbuilt_methods {
                         name: $fn_name.to_string(),
                         on_types: vec![$($ty,)*],
                         num_args: $num_args,
+                        in_built: true,
                     }), vec![]), $span));
                 }
             )*
@@ -363,12 +366,11 @@ impl VM {
             }
 
             ExprKind::Binary(a, op, b) => {
-                self.compile_expr(*a);
-
                 if !matches!(
                     (&op, &b.inner),
                     (&BinaryOp::Attr, &ExprKind::Call(..) | &ExprKind::Int(..))
                 ) {
+                    self.compile_expr(*a.clone());
                     self.compile_expr(*b.clone());
                 }
 
@@ -398,12 +400,29 @@ impl VM {
                     BinaryOp::Attr => match b.inner {
                         ExprKind::Call(name, args) => {
                             inbuilt_methods!(self, name.as_str(), args,
-                               { "push"  => [Type::Array, Type::String], 1, expr.span },
-                               { "clear" => [Type::Array, Type::String], 0, expr.span },
-                               { "join"  => [Type::Array],               1, expr.span },
-                               { "split" => [Type::String],              1, expr.span },
-                               _ => {
-                                    println!("member function: {name} not found!!!");
+                                [ "push"  => [Type::Array, Type::String], 1, expr.span, { self.compile_expr(*a); } ],
+                                [ "clear" => [Type::Array, Type::String], 0, expr.span, { self.compile_expr(*a); } ],
+                                [ "join"  => [Type::Array],               1, expr.span, { self.compile_expr(*a); } ],
+                                [ "split" => [Type::String],              1, expr.span, { self.compile_expr(*a); } ],
+                                _ => {
+                                    for arg in args.unwrap_or_else(|| vec![]) {
+                                        self.compile_expr(arg);
+                                    }
+
+                                    self.compile_expr(*a);
+
+                                    self.instructions.push((
+                                        Instr(
+                                            Bytecode::Method(MethodFunction {
+                                                name: name,
+                                                on_types: vec![],
+                                                num_args: 0,
+                                                in_built: false
+                                            }),
+                                            vec![]
+                                        ),
+                                        expr.span
+                                    ));
                                 }
                             )
                         }
@@ -431,8 +450,8 @@ impl VM {
                 let scope_idx = self.variables.len();
                 self.variables.push(scope);
 
-                self.push_data(name.as_str().into(), expr.span.clone());
-                self.instructions.push((Instr(Function, vec![]), expr.span));
+                let jmp_instr_ptr = self.instructions.len();
+                self.instructions.push((Instr(Jmp, vec![]), expr.span));
 
                 let body_start = self.instructions.len();
                 let mut returns = false;
@@ -447,6 +466,7 @@ impl VM {
                 self.instructions.push((Instr(Ret, vec![]), 0..0));
 
                 let body_end = self.instructions.len();
+                self.instructions[jmp_instr_ptr].0 .1.push(body_end);
 
                 self.functions.insert(
                     name.clone(),
@@ -630,25 +650,86 @@ impl VM {
                 *loop_end = end;
             }
 
-            // ExprKind::Impl(tyname, body) => {
-            //     for e in body {
-            //         if !matches!(
-            //             e,
-            //             Expr {
-            //                 inner: ExprKind::MultilineFunction(..) | ExprKind::InlineFunction(..),
-            //                 ..
-            //             }
-            //         ) {
-            //             self.runtime_error("Only function declaration is allowed in impl block", expr.span);
-            //         }
+            ExprKind::Impl(tyname, body) => {
+                let Ok(ty) = Type::try_from(tyname.as_str()) else {
+                    self.runtime_error(&format!("Invalid type name: '{tyname}'"), expr.span);
+                };
 
-            //         match e.inner {
-            //             ExprKind::MultilineFunction(fn_name, params, body) => {
+                for e in body {
+                    // convert inline function to multiline
+                    let e = match e {
+                        Expr {
+                            inner: ExprKind::InlineFunction(name, params, body),
+                            span,
+                        } => {
+                            Expr::new(span, ExprKind::MultilineFunction(name, params, vec![*body]))
+                        }
 
-            //             },
-            //         }
-            //     }
-            // }
+                        _ => e,
+                    };
+
+                    let ExprKind::MultilineFunction(name, param_names, body) = e.inner else {
+                        self.runtime_error(
+                            "Only function declaration is allowed in impl block",
+                            expr.span,
+                        );
+                    };
+
+                    let old_id = self.variables_id.clone();
+                    self.variables_id.clear();
+
+                    let mut scope = HashMap::new();
+                    let mut fn_params: Vec<(String, u32)> = vec![];
+
+                    // add self
+                    fn_params.push(("self".to_owned(), self.var_id_count as u32));
+                    self.variables_id
+                        .insert("self".to_owned(), self.var_id_count as _);
+                    scope.insert(self.var_id_count as _, None);
+                    self.var_id_count += 1;
+
+                    for param_name in param_names.into_iter() {
+                        fn_params.push((param_name.clone(), self.var_id_count as u32));
+                        self.variables_id.insert(param_name, self.var_id_count as _);
+                        scope.insert(self.var_id_count as _, None);
+                        self.var_id_count += 1;
+                    }
+
+                    let scope_idx = self.variables.len();
+                    self.variables.push(scope);
+
+                    let jmp_instr_ptr = self.instructions.len();
+                    self.instructions.push((Instr(Jmp, vec![]), e.span));
+
+                    let body_start = self.instructions.len();
+                    let mut returns = false;
+                    for expr in body {
+                        if matches![expr.inner, ExprKind::Return(..)] {
+                            returns = true;
+                        }
+
+                        self.compile_expr(expr);
+                    }
+
+                    self.instructions.push((Instr(Ret, vec![]), 0..0));
+
+                    let body_end = self.instructions.len();
+                    self.instructions[jmp_instr_ptr].0 .1.push(body_end);
+
+                    self.impl_methods.insert(
+                        (name.clone(), ty),
+                        FunctionData {
+                            name,
+                            parameters: fn_params,
+                            instruction_range: body_start..body_end,
+                            scope_idx,
+                            returns,
+                        },
+                    );
+
+                    self.variables_id = old_id;
+                }
+            }
             _ => {}
         }
     }
@@ -1057,19 +1138,6 @@ impl VM {
                     })));
             },
 
-            Function => unsafe {
-                let fn_name = self
-                    .stack
-                    .pop()
-                    .unwrap_or_else(|| allocate(Value::Nil))
-                    .as_ref()
-                    .as_str();
-                let fn_obj = &self.functions[fn_name];
-
-                self.pc = fn_obj.instruction_range.end;
-                return false;
-            },
-
             While => unsafe {
                 let loop_end = args.get(0).unwrap_or_else(|| {
                     self.runtime_error("Expected a loop end instruction pointer", span)
@@ -1302,8 +1370,13 @@ impl VM {
             And => self.compare_values(span, |a, b| a.and(b)),
             Or => self.compare_values(span, |a, b| a.or(b)),
 
-            Method(MethodFunction { name, on_types, .. }) => match name.as_str() {
-                "push" => unsafe {
+            Method(MethodFunction {
+                name,
+                on_types,
+                in_built,
+                ..
+            }) => match name.as_str() {
+                "push" if in_built => unsafe {
                     let src = self.stack.pop().unwrap().as_ref();
                     let dest = self.stack.pop().unwrap().as_mut();
 
@@ -1313,7 +1386,7 @@ impl VM {
                     self.stack.push(NonNull::new_unchecked(dest as *mut Value));
                 },
 
-                "clear" => unsafe {
+                "clear" if in_built => unsafe {
                     let var = self.stack.pop().unwrap().as_mut();
 
                     self.check_type(&name, on_types, var, span);
@@ -1323,7 +1396,7 @@ impl VM {
                     }
                 },
 
-                "join" => unsafe {
+                "join" if in_built => unsafe {
                     let separator = self.stack.pop().unwrap().as_ref();
                     let dest = self.stack.pop().unwrap().as_ref();
 
@@ -1350,7 +1423,7 @@ impl VM {
                     self.stack.push(allocate(result_string.into()));
                 },
 
-                "split" => unsafe {
+                "split" if in_built => unsafe {
                     let split = self.stack.pop().unwrap().as_ref();
                     let val = self.stack.pop().unwrap().as_ref();
 
@@ -1374,7 +1447,56 @@ impl VM {
                     self.stack.push(allocate(Value::Array(split)));
                 },
 
-                _ => {}
+                _ => unsafe {
+                    let object = self.stack.pop().unwrap();
+                    let object_type = Type::try_from(object.as_ref().get_type()).unwrap();
+
+                    let Some(fn_obj) = self.impl_methods.get(&(name.clone(), object_type)) else {
+                        self.runtime_error(
+                            &format!(
+                                "No method named '{name}' found on the type '{}'",
+                                object_type.get_type()
+                            ),
+                            span,
+                        );
+                    };
+
+                    let FunctionData {
+                        parameters,
+                        scope_idx,
+                        // returns,
+                        ..
+                    } = fn_obj;
+
+                    let mut fn_args = (1..parameters.len())
+                        .map(|_| {
+                            self.stack
+                                .pop()
+                                .unwrap_or_else(|| mark(allocate(Value::Nil)))
+                        })
+                        .collect::<Vec<_>>();
+
+                    fn_args.reverse();
+
+                    let variables = self.variables[*scope_idx].clone();
+
+                    let mut arg_iter = fn_obj.get_var_ids().into_iter().enumerate();
+
+                    let (_, self_var_idx) = arg_iter.next().unwrap();
+                    *self.variables[*scope_idx].get_mut(&self_var_idx).unwrap() = Some(object);
+
+                    for (idx, param_var_idx) in arg_iter {
+                        *self.variables[*scope_idx].get_mut(&param_var_idx).unwrap() =
+                            Some(fn_args[idx - 1]);
+                    }
+
+                    // let returns = *returns;
+                    self.push_call_stack(fn_obj.instruction_range.start, *scope_idx, variables);
+
+                    // if !returns {
+                    // self.stack.push(allocate(Value::Nil));
+                    // }
+                },
             },
 
             Print => unsafe {

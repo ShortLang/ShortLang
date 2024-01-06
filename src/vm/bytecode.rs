@@ -46,7 +46,7 @@ pub enum Bytecode {
     // Join,
 
     // FUNCTION,
-    Function,
+    // Function,
     FnCall,
     Ret,
 
@@ -108,6 +108,7 @@ pub struct MethodFunction {
     pub name: String,
     pub on_types: Vec<Type>,
     pub num_args: usize,
+    pub in_built: bool,
 }
 
 #[derive(Clone, Debug)]

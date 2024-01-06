@@ -4,7 +4,7 @@ use rug::{Float, Integer};
 use std::borrow::Cow;
 use std::ops::*;
 
-#[derive(Clone, Debug, Eq, PartialEq, Hash)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
 pub enum Type {
     Integer,
     Float,
@@ -12,6 +12,22 @@ pub enum Type {
     Bool,
     Array,
     Nil,
+}
+
+impl TryFrom<&str> for Type {
+    type Error = ();
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        Ok(match value {
+            "int" => Type::Integer,
+            "float" => Type::Float,
+            "bool" => Type::Bool,
+            "str" => Type::String,
+            "array" => Type::Array,
+            "nil" => Type::Nil,
+
+            _ => return Err(()),
+        })
+    }
 }
 
 impl Type {
