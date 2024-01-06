@@ -1,35 +1,11 @@
-impl int {
-	square: {
-		self * self
-	}
+input = inp()
 
-	cube: {
-		self * self * self
-	}
-
-	modify: {
-		// this will not work as of now
-		self = 1000
-	}
+mc input {
+	"1": $"one"
+	"2": $"two"
+	"3": $"three"
+	"4": $"four"
+	"5": $"five"
+	"6": $"six"
+	"7": $"seven"
 }
-
-a = 3
-
-$f"suare of a = $a.square()"
-$f" cube of a = $a.cube()"
-
-impl str {
-	slice start end: {
-		slice = ""
-
-		>. start < end {
-			slice += self[start]
-			start ++
-		}
-
-		slice
-	}
-}
-
-msg = "Hello, World!"
-$msg.slice(0, 5)

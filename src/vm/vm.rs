@@ -730,6 +730,53 @@ impl VM {
                     self.variables_id = old_id;
                 }
             }
+
+            ExprKind::Match(lhs, branches) => {
+                let conditionals = branches
+                    .into_iter()
+                    .map(|(rhs, block)| {
+                        Expr::new(
+                            rhs.span.start
+                                ..block.last().map(|i| i.span.end).unwrap_or(rhs.span.end),
+                            ExprKind::Ternary(
+                                Box::new(Expr::new(
+                                    rhs.span.clone(),
+                                    ExprKind::Binary(
+                                        lhs.clone(),
+                                        BinaryOp::Eq,
+                                        Box::new(rhs.clone()),
+                                    ),
+                                )),
+                                block,
+                                None,
+                            ),
+                        )
+                    })
+                    .collect::<Vec<_>>();
+
+                if !conditionals.is_empty() {
+                    let mut iter = conditionals.into_iter();
+                    let mut first = iter.next().unwrap();
+
+                    let mut else_block_ptr = &mut first;
+
+                    for c in iter {
+                        let Expr {
+                            inner: ExprKind::Ternary(_, _, else_block),
+                            ..
+                        } = else_block_ptr
+                        else {
+                            unreachable!();
+                        };
+
+                        *else_block = Some(vec![c]);
+                        else_block_ptr = else_block.as_mut().unwrap().last_mut().unwrap();
+                    }
+
+                    self.compile_expr(first);
+                }
+            }
+
             _ => {}
         }
     }
