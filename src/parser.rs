@@ -322,9 +322,12 @@ pub enum ExprKind {
     While(Box<Expr>, Vec<Expr>),
     Every(Box<Expr>, Vec<Expr>),
     Impl(String, Vec<Expr>),
+
     // used inside the match statement
     HeadTail(String, String),
+    DefaultCase,
     Match(Box<Expr>, Vec<(Expr, Vec<Expr>)>),
+
     Index(Box<Expr>, Box<Expr>),
     Unary(UnaryOp, Box<Expr>),
     Nil,
@@ -517,6 +520,9 @@ impl<'a> PParser<'a> {
 
                             let end = self.current.1.end.clone();
                             Expr::new(start..end, ExprKind::HeadTail(first.to_string(), last))
+                        } else if first == "_" {
+                            self.proceed();
+                            Expr::new(start..self.current.1.end, ExprKind::DefaultCase)
                         } else {
                             self.term(self.current.clone())
                         }

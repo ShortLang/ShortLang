@@ -497,6 +497,7 @@ impl VM {
                 "$$" => compile_call!(self, name, args, Print, expr.span),
                 "int" => compile_call!(self, name, args, ToInt, expr.span),
                 "flt" => compile_call!(self, name, args, ToFloat, expr.span),
+                "str" => compile_call!(self, name, args, ToString, expr.span),
                 "inp" => compile_call!(self, name, args, Input, expr.span),
                 "len" => compile_call!(self, name, args, Len, expr.span),
                 "type" => compile_call!(self, name, args, TypeOf, expr.span),
@@ -732,27 +733,50 @@ impl VM {
             }
 
             ExprKind::Match(lhs, branches) => {
-                let conditionals = branches
+                let mut conditionals = branches
+                    .clone()
                     .into_iter()
-                    .map(|(rhs, block)| {
-                        Expr::new(
-                            rhs.span.start
-                                ..block.last().map(|i| i.span.end).unwrap_or(rhs.span.end),
-                            ExprKind::Ternary(
-                                Box::new(Expr::new(
-                                    rhs.span.clone(),
-                                    ExprKind::Binary(
-                                        lhs.clone(),
-                                        BinaryOp::Eq,
-                                        Box::new(rhs.clone()),
-                                    ),
-                                )),
-                                block,
-                                None,
-                            ),
-                        )
+                    .filter_map(|(rhs, block)| {
+                        if let ExprKind::DefaultCase = rhs.inner {
+                            None
+                        } else {
+                            Some(Expr::new(
+                                rhs.span.start
+                                    ..block.last().map(|i| i.span.end).unwrap_or(rhs.span.end),
+                                ExprKind::Ternary(
+                                    Box::new(Expr::new(
+                                        rhs.span.clone(),
+                                        ExprKind::Binary(
+                                            lhs.clone(),
+                                            BinaryOp::Eq,
+                                            Box::new(rhs.clone()),
+                                        ),
+                                    )),
+                                    block,
+                                    None,
+                                ),
+                            ))
+                        }
                     })
                     .collect::<Vec<_>>();
+
+                if let Some((default_case, block)) = branches
+                    .into_iter()
+                    .find(|(rhs, _)| matches!(rhs.inner, ExprKind::DefaultCase))
+                {
+                    conditionals.push(Expr::new(
+                        default_case.span.start
+                            ..block
+                                .last()
+                                .map(|i| i.span.end)
+                                .unwrap_or(default_case.span.end),
+                        ExprKind::Ternary(
+                            Box::new(Expr::new(default_case.span.clone(), ExprKind::Bool(true))),
+                            block,
+                            None,
+                        ),
+                    ));
+                }
 
                 if !conditionals.is_empty() {
                     let mut iter = conditionals.into_iter();
