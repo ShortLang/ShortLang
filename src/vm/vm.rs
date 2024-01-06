@@ -34,7 +34,7 @@ pub(crate) type CallStack = Vec<FnStackData>;
 const GC_TRIGGER: usize = 1 << 20;
 
 macro_rules! inbuilt_methods {
-    { $self:ident, $names:expr, $args:ident, $({ $fn_name:expr => [$($ty:expr),+ $(,)?], $num_args:expr, $span:expr }),+ $(,)? } => {
+    { $self:ident, $names:expr, $args:ident, $({ $fn_name:expr => [$($ty:expr),+ $(,)?], $num_args:expr, $span:expr }),*, _ => { $($tt:tt)* } $(,)? } => {
         match $names {
             $(
                 $fn_name => {
@@ -51,7 +51,7 @@ macro_rules! inbuilt_methods {
                 }
             )*
 
-            _ => { }
+            _ => { $($tt)* }
         }
     }
 }
@@ -96,6 +96,8 @@ pub struct VM {
     /// ptr to corresponding function bytecode
     functions: HashMap<String, FunctionData>,
     call_stack: CallStack,
+
+    impl_methods: HashMap<(String, Type), FunctionData>,
 }
 
 impl VM {
@@ -115,6 +117,7 @@ impl VM {
             exprs,
             functions: HashMap::new(),
             call_stack: CallStack::new(),
+            impl_methods: HashMap::new(),
             // memory: Memory::new(),
         }
     }
@@ -399,6 +402,9 @@ impl VM {
                                { "clear" => [Type::Array, Type::String], 0, expr.span },
                                { "join"  => [Type::Array],               1, expr.span },
                                { "split" => [Type::String],              1, expr.span },
+                               _ => {
+                                    println!("member function: {name} not found!!!");
+                                }
                             )
                         }
 
@@ -456,49 +462,10 @@ impl VM {
                 self.variables_id = old_id;
             }
 
-            ExprKind::InlineFunction(name, param_names, body) => {
-                let old_id = self.variables_id.clone();
-                self.variables_id.clear();
-
-                let mut scope = HashMap::new();
-
-                let mut fn_params = vec![];
-
-                for param_name in param_names.into_iter() {
-                    fn_params.push((param_name.clone(), self.var_id_count as _));
-                    self.variables_id.insert(param_name, self.var_id_count as _);
-                    scope.insert(self.var_id_count as _, None);
-                    self.var_id_count += 1;
-                }
-
-                let scope_idx = self.variables.len();
-                self.variables.push(scope);
-
-                self.push_data(name.as_str().into(), expr.span.clone());
-                self.instructions
-                    .push((Instr(Function, vec![]), expr.span.clone()));
-
-                let body_start = self.instructions.len();
-                self.compile_expr(Expr {
-                    span: expr.span,
-                    inner: ExprKind::Return(body),
-                });
-
-                let body_end = self.instructions.len();
-
-                self.functions.insert(
-                    name.clone(),
-                    FunctionData {
-                        name: name.clone(),
-                        parameters: fn_params,
-                        instruction_range: body_start..body_end,
-                        scope_idx,
-                        returns: true,
-                    },
-                );
-
-                self.variables_id = old_id;
-            }
+            ExprKind::InlineFunction(name, param_names, body) => self.compile_expr(Expr::new(
+                expr.span,
+                ExprKind::MultilineFunction(name, param_names, vec![*body]),
+            )),
 
             ExprKind::Return(val) => {
                 self.compile_expr(*val);
@@ -663,6 +630,25 @@ impl VM {
                 *loop_end = end;
             }
 
+            // ExprKind::Impl(tyname, body) => {
+            //     for e in body {
+            //         if !matches!(
+            //             e,
+            //             Expr {
+            //                 inner: ExprKind::MultilineFunction(..) | ExprKind::InlineFunction(..),
+            //                 ..
+            //             }
+            //         ) {
+            //             self.runtime_error("Only function declaration is allowed in impl block", expr.span);
+            //         }
+
+            //         match e.inner {
+            //             ExprKind::MultilineFunction(fn_name, params, body) => {
+
+            //             },
+            //         }
+            //     }
+            // }
             _ => {}
         }
     }
@@ -1668,6 +1654,7 @@ impl VM {
             previous_stack_len: self.stack.len(),
             variables_id: self.variables_id.clone(),
             variables,
+            // self_ptr: todo!(),
         });
 
         self.pc = new_pc;
@@ -1680,6 +1667,7 @@ impl VM {
             previous_stack_len,
             variables_id,
             variables,
+            // self_ptr: todo!(),
         } = self.call_stack.pop().unwrap();
 
         // Remove any extra variables that has been pushed onto the

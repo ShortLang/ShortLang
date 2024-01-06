@@ -103,4 +103,5 @@ pub(crate) struct FnStackData {
     pub(crate) previous_stack_len: usize,
     pub(crate) variables_id: HashMap<String, u32>,
     pub(crate) variables: HashMap<u32, Option<NonNull<Value>>>,
+    // pub(crate) self_ptr: Option<NonNull<Value>>,
 }
