@@ -1,4 +1,4 @@
-//calculate square root using the babylonian algoritm
+//calculate square root using the babylonian algorithm
 sqrt i : {
         precision = 25
         x = i/2
