@@ -7,7 +7,7 @@ sqrt i : {
 		}
         >. precision > 0 {
                 x = 0.5 * ( x + i / x )
-                precision--
+                precision --
         }
         &x
 }
@@ -16,5 +16,5 @@ a = 1
 
 >. a <= 1000 {
 	$sqrt(a)
-	a = a++
+	a ++
 }
