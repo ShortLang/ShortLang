@@ -1155,18 +1155,18 @@ impl VM {
                     .insert(self.var_id_count as u32, None);
             }
 
-            Replace => {
+            Replace => unsafe {
                 let value = self
                     .stack
                     .pop()
-                    .map(|i| unsafe { i.as_ref().clone() })
-                    .unwrap_or_else(|| Value::Nil);
+                    .unwrap_or_else(|| allocate(Value::Nil))
+                    .as_mut();
 
                 self.variables
                     .last_mut()
                     .unwrap()
-                    .insert(args[0] as u32, Some(allocate(value)));
-            }
+                    .insert(args[0] as u32, Some(NonNull::from(value)));
+            },
 
             GetVar => {
                 let id = args[0];
@@ -1300,7 +1300,11 @@ impl VM {
                 let items = args[0];
                 let mut array = vec![];
 
-                (0..items).for_each(|_| array.push(self.stack.pop().unwrap().as_ref().clone()));
+                (0..items).for_each(|_| {
+                    let mut placeholder = Value::Nil;
+                    std::mem::swap(&mut placeholder, self.stack.pop().unwrap().as_mut());
+                    array.push(placeholder);
+                });
                 array.reverse();
 
                 self.stack.push(allocate(Value::Array(array)));

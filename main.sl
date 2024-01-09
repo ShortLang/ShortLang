@@ -1,12 +1,6 @@
-input = inp()
-
-mc input {
-	"1": $"one"
-	"2": $"two"
-	_: $"unknown lol"
-	"3": $"three"
-	"4": $"four"
-	"5": $"five"
-	"6": $"six"
-	"7": $"seven"
+range = rng(2, 1001)
+e=2
+ev range {
+    e += 1/i!
 }
+$e

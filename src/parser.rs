@@ -641,8 +641,8 @@ impl<'a> PParser<'a> {
     fn postfix_binding_power(&mut self, op: &LogosToken) -> Option<(u8, ())> {
         use LogosToken::*;
         Some(match op {
-            PAdd | PSub => (6, ()),
-            Bang | LSquare => (7, ()),
+            PAdd | PSub => (70, ()),
+            Bang | LSquare => (80, ()),
             _ => return None,
         })
     }
