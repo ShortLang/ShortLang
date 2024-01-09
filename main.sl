@@ -1,6 +1,6 @@
-range = rng(2, 1001)
-e=2
-ev range lol {
-    e += 1/lol!
-}
-$e
+file = open("test.txt")
+file.w("Lol")
+file.a("Lol")
+$file.r()
+// properties
+$file.type

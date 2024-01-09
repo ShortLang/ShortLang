@@ -98,6 +98,7 @@ pub enum Bytecode {
     Range,
     ToString,
     Exit,
+    Open,
 
     // Misc
     ConcatUpTo,

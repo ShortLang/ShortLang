@@ -4,6 +4,8 @@ use miette::{miette, LabeledSpan};
 use rug::ops::CompleteRound;
 use rug::{Complete, Float, Integer};
 use std::collections::HashMap;
+use std::error::Error;
+use std::fs::OpenOptions;
 use std::io::*;
 use std::ops::Range;
 use std::ptr::NonNull;
@@ -368,7 +370,10 @@ impl VM {
             ExprKind::Binary(a, op, b) => {
                 if !matches!(
                     (&op, &b.inner),
-                    (&BinaryOp::Attr, &ExprKind::Call(..) | &ExprKind::Int(..))
+                    (
+                        &BinaryOp::Attr,
+                        &ExprKind::Call(..) | &ExprKind::Int(..) | &ExprKind::Ident(..)
+                    )
                 ) {
                     self.compile_expr(*a.clone());
                     self.compile_expr(*b.clone());
@@ -404,6 +409,12 @@ impl VM {
                                 [ "clear" => [Type::Array, Type::String], 0, expr.span, { self.compile_expr(*a); } ],
                                 [ "join"  => [Type::Array],               1, expr.span, { self.compile_expr(*a); } ],
                                 [ "split" => [Type::String],              1, expr.span, { self.compile_expr(*a); } ],
+
+                                // File methods
+                                [ "r" => [Type::File], 0, expr.span, { self.compile_expr(*a); } ],
+                                [ "w" => [Type::File], 1, expr.span, { self.compile_expr(*a); } ],
+                                [ "a" => [Type::File], 1, expr.span, { self.compile_expr(*a); } ],
+
                                 _ => {
                                     for arg in args.unwrap_or_else(|| vec![]) {
                                         self.compile_expr(arg);
@@ -413,7 +424,7 @@ impl VM {
 
                                     self.instructions.push((
                                         Instr(
-                                            Bytecode::Method(MethodFunction {
+                                            Method(MethodFunction {
                                                 name: name,
                                                 on_types: vec![],
                                                 num_args: 0,
@@ -426,8 +437,16 @@ impl VM {
                                 }
                             )
                         }
+                        // properties
+                        ExprKind::Ident(name) => match name.as_str() {
+                            "type" => {
+                                self.compile_expr(*a);
+                                self.instructions.push((Instr(TypeOf, vec![]), expr.span));
+                            }
+                            _ => {}
+                        },
 
-                        _ => self.runtime_error("Expected a function call", expr.span),
+                        _ => self.runtime_error("Expected an attribute", expr.span),
                     },
                 }
             }
@@ -501,6 +520,7 @@ impl VM {
                 "inp" => compile_call!(self, name, args, Input, expr.span),
                 "len" => compile_call!(self, name, args, Len, expr.span),
                 "type" => compile_call!(self, name, args, TypeOf, expr.span),
+                "open" => compile_call!(self, name, args, Open, expr.span),
                 "gcd" => compile_call!(self, name, args, Gcd, expr.span, 2),
                 "lcm" => compile_call!(self, name, args, Lcm, expr.span, 2),
                 "fib" => compile_call!(self, name, args, Fib, expr.span),
@@ -874,12 +894,16 @@ impl VM {
             }
 
             TypeOf => unsafe {
-                let value = self.stack.pop().unwrap();
-                let ty = value.as_ref().get_type();
+                let t = self.stack.pop().unwrap().as_ref().get_type();
                 self.stack
                     .push(NonNull::new_unchecked(alloc_new_value(Value::String(
-                        ty.to_owned(),
+                        t.to_owned(),
                     ))));
+            },
+
+            Open => unsafe {
+                let path = self.stack.pop().unwrap().as_ref().to_string();
+                self.stack.push(allocate(Value::File(path)));
             },
 
             ToString => unsafe {
@@ -1521,6 +1545,54 @@ impl VM {
                     self.stack.push(allocate(Value::Array(split)));
                 },
 
+                // File methods
+                "r" if in_built => unsafe {
+                    let val = self.stack.pop().unwrap().as_ref();
+                    self.check_type(&name, on_types, val, span.clone());
+                    self.stack.push(allocate(Value::String(
+                        std::fs::read_to_string(val.to_string()).unwrap_or_else(|e| {
+                            self.runtime_error(
+                                &format!("Failed to read '{}': {}", val.to_string(), e.kind()),
+                                span.clone(),
+                            );
+                        }),
+                    )));
+                },
+                "w" if in_built => unsafe {
+                    let content = self.stack.pop().unwrap().as_ref();
+                    let val = self.stack.pop().unwrap().as_ref();
+                    self.check_type(&name, on_types, val, span.clone());
+                    std::fs::write(val.to_string(), content.to_string()).unwrap_or_else(|e| {
+                        self.runtime_error(
+                            &format!("Failed to write to '{}': {}", val.to_string(), e.kind()),
+                            span.clone(),
+                        );
+                    });
+                },
+                "a" if in_built => unsafe {
+                    let content = self.stack.pop().unwrap().as_ref();
+                    let val = self.stack.pop().unwrap().as_ref();
+                    self.check_type(&name, on_types, val, span.clone());
+                    let mut file = OpenOptions::new()
+                        .write(true)
+                        .append(true)
+                        .open(val.to_string())
+                        .unwrap_or_else(|e| {
+                            self.runtime_error(
+                                &format!("Failed to open '{}': {}", val.to_string(), e.kind()),
+                                span.clone(),
+                            );
+                        });
+
+                    file.write_all(content.to_string().as_bytes())
+                        .unwrap_or_else(|e| {
+                            self.runtime_error(
+                                &format!("Failed to append to '{}': {}", val.to_string(), e.kind()),
+                                span.clone(),
+                            );
+                        })
+                },
+
                 _ => unsafe {
                     let object = self.stack.pop().unwrap();
                     let object_type = Type::try_from(object.as_ref().get_type()).unwrap();
@@ -1655,6 +1727,7 @@ impl VM {
 
                     Value::Nil => Integer::new(),
                     Value::Array(_) => self.runtime_error("cannot convert array type to int", span),
+                    Value::File(_) => self.runtime_error("cannot convert file type to int", span),
                 })));
             },
 
@@ -1678,6 +1751,7 @@ impl VM {
                     Value::Array(_) => {
                         self.runtime_error("cannot convert array type to float", span)
                     }
+                    Value::File(_) => self.runtime_error("cannot convert file type to float", span),
                 })));
             },
         }

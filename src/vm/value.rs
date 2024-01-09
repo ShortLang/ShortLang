@@ -11,6 +11,7 @@ pub enum Type {
     String,
     Bool,
     Array,
+    File,
     Nil,
 }
 
@@ -23,6 +24,7 @@ impl TryFrom<&str> for Type {
             "bool" => Type::Bool,
             "str" => Type::String,
             "array" => Type::Array,
+            "file" => Type::File,
             "nil" => Type::Nil,
 
             _ => return Err(()),
@@ -41,6 +43,7 @@ impl Type {
             Self::Float => "float",
             Self::String => "str",
             Self::Array => "array",
+            Self::File => "file",
             Self::Bool => "bool",
             Self::Nil => "nil",
         }
@@ -60,6 +63,7 @@ pub enum Value {
     String(String),
     Bool(bool),
     Array(Vec<Value>),
+    File(String),
 
     #[default]
     Nil,
@@ -136,6 +140,7 @@ impl Value {
             Value::String(_) => "str",
             Value::Bool(_) => "bool",
             Value::Array(_) => "array",
+            Value::File(_) => "file",
             Value::Nil => "nil",
         }
     }
@@ -462,7 +467,7 @@ impl std::fmt::Display for Value {
                         .collect::<Vec<_>>()
                         .join(", ")
                 ),
-
+                Self::File(s) => s.to_string(),
                 Self::Nil => "nil".to_string(),
             }
         )
