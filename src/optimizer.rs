@@ -88,14 +88,14 @@ impl Optimizer {
                     ExprKind::While(Box::new(self.optimize(*e)), exprs),
                 )
             }
-            ExprKind::Every(e, es) => {
+            ExprKind::Every(e, es, name) => {
                 let mut exprs: Vec<Expr> = Vec::new();
                 for e in es {
                     exprs.push(self.optimize(e))
                 }
                 Expr::new(
                     expr.span,
-                    ExprKind::Every(Box::new(self.optimize(*e)), exprs),
+                    ExprKind::Every(Box::new(self.optimize(*e)), exprs, name),
                 )
             }
             ExprKind::Ternary(e, t, f) => {

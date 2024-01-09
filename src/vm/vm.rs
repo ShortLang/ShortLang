@@ -606,9 +606,8 @@ impl VM {
                 }
             }
 
-            ExprKind::Every(list, body) => {
-                self.variables_id
-                    .insert("i".to_string(), self.var_id_count as u32);
+            ExprKind::Every(list, body, name) => {
+                self.variables_id.insert(name, self.var_id_count as u32);
                 self.instructions
                     .push((Instr(MakeVar, vec![]), expr.span.clone()));
                 self.instructions

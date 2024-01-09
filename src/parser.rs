@@ -320,7 +320,7 @@ pub enum ExprKind {
     Postfix(Box<Expr>, PostfixOp),
     Array(Vec<Expr>),
     While(Box<Expr>, Vec<Expr>),
-    Every(Box<Expr>, Vec<Expr>),
+    Every(Box<Expr>, Vec<Expr>, String),
     Impl(String, Vec<Expr>),
 
     // used inside the match statement
@@ -558,10 +558,17 @@ impl<'a> PParser<'a> {
                 let start = self.current.1.start;
                 self.proceed();
                 let for_el = self.expr(0);
+                let var_name = match self.current.0 {
+                    LogosToken::Ident(ident) => {
+                        self.proceed();
+                        ident.to_string()
+                    }
+                    _ => "i".to_string(),
+                };
                 let (block, _) = self.block();
                 return Expr::new(
                     start..self.current.1.end,
-                    ExprKind::Every(Box::new(for_el), block),
+                    ExprKind::Every(Box::new(for_el), block, var_name),
                 );
             }
             LogosToken::Return => {
@@ -718,7 +725,7 @@ impl<'a> PParser<'a> {
     }
     fn expect_ident(&mut self) -> String {
         let (token, span) = &self.current;
-        if let LogosToken::Ident(ident) = self.current.0 {
+        if let LogosToken::Ident(ident) = token {
             return ident.to_string();
         }
 
@@ -728,7 +735,7 @@ impl<'a> PParser<'a> {
             format!("Expected identifier found {}", token),
             None,
         );
-        unreachable!()
+        unsafe { unreachable_unchecked() }
     }
     fn expect(&mut self, token: LogosToken) {
         let (tok, span) = &self.current;
@@ -870,7 +877,7 @@ impl<'a> PParser<'a> {
                     "Expected expression".to_string(),
                     Some("Expected a value like integers, strings, etc.".to_string()),
                 );
-                unreachable!()
+                unsafe { unreachable_unchecked() }
             }
         };
         let current = self.current.clone();
