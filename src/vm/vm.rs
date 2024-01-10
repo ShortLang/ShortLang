@@ -447,6 +447,13 @@ impl VM {
 
                         _ => self.runtime_error("Expected an attribute", expr.span),
                     },
+
+                    BinaryOp::Range => {
+                        self.compile_expr(*a);
+                        self.compile_expr(*b);
+
+                        self.instructions.push((Instr(Range, vec![]), expr.span));
+                    }
                 }
             }
 
@@ -576,16 +583,12 @@ impl VM {
 
                 self.constants.push(Value::Nil);
 
-                self.instructions.push((
-                    Instr(Bytecode::MakeConst, vec![self.constants.len() - 1]),
-                    0..0,
-                ));
+                self.instructions
+                    .push((Instr(MakeConst, vec![self.constants.len() - 1]), 0..0));
 
                 let body_start = self.instructions.len();
-                self.instructions.push((
-                    Instr(Bytecode::LoadConst, vec![self.constants.len() - 1]),
-                    0..0,
-                ));
+                self.instructions
+                    .push((Instr(LoadConst, vec![self.constants.len() - 1]), 0..0));
 
                 let while_instr_ptr = self.instructions.len();
                 self.instructions
@@ -652,16 +655,12 @@ impl VM {
                 self.compile_expr(*list);
                 self.constants.push(Value::Nil);
 
-                self.instructions.push((
-                    Instr(Bytecode::MakeConst, vec![self.constants.len() - 1]),
-                    0..0,
-                ));
+                self.instructions
+                    .push((Instr(MakeConst, vec![self.constants.len() - 1]), 0..0));
 
                 let loop_start = self.instructions.len();
-                self.instructions.push((
-                    Instr(Bytecode::LoadConst, vec![self.constants.len() - 1]),
-                    0..0,
-                ));
+                self.instructions
+                    .push((Instr(LoadConst, vec![self.constants.len() - 1]), 0..0));
 
                 let instr_ptr = self.instructions.len();
                 let ran_once = Box::leak(Box::new(false));

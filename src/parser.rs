@@ -18,6 +18,10 @@ pub enum LogosToken<'a> {
     Float(&'a str),
     #[token(".")]
     Dot,
+    #[token("..")]
+    Range,
+    #[token("...")]
+    ThreeDots,
     #[token("true")]
     True,
     #[token("false")]
@@ -44,8 +48,6 @@ pub enum LogosToken<'a> {
     Comma,
     #[token(":")]
     Colon,
-    #[token("...")]
-    ThreeDots,
     #[token("::")]
     FourDots,
     #[token("=")]
@@ -149,13 +151,14 @@ impl<'a> fmt::Display for LogosToken<'a> {
             LogosToken::Eq => write!(f, "="),
             LogosToken::Eqq => write!(f, "=="),
             LogosToken::Arrow => write!(f, "->"),
-            LogosToken::ThreeDots => write!(f, "..."),
             LogosToken::Semi => write!(f, ";"),
             LogosToken::LAngle => write!(f, "<"),
             LogosToken::RAngle => write!(f, ">"),
             LogosToken::LParen => write!(f, "("),
             LogosToken::Comma => write!(f, ","),
             LogosToken::Dot => write!(f, "."),
+            LogosToken::Range => write!(f, ".."),
+            LogosToken::ThreeDots => write!(f, "..."),
             LogosToken::RParen => write!(f, ")"),
             LogosToken::Error => write!(f, "unknown character"),
             LogosToken::Plus => write!(f, "+"),
@@ -230,6 +233,7 @@ impl<'a> LogosToken<'a> {
             Self::Or => BinaryOp::Or,
             Self::And => BinaryOp::And,
             Self::Dot => BinaryOp::Attr,
+            Self::Range => BinaryOp::Range,
 
             _ => unsafe { unreachable_unchecked() },
         }
@@ -283,6 +287,7 @@ pub enum BinaryOp {
     Mod,
     BinaryPow,
     Pow,
+    Range,
 }
 
 impl BinaryOp {
@@ -634,10 +639,8 @@ impl<'a> PParser<'a> {
             BinaryPow => (40, 41),
             Pow => (50, 51),
 
-            // For attributes and methods
-            Dot => (60, 61),
+            Dot | Range => (60, 61),
 
-            // Comparison and equality operators have lower binding power
             Eqq | Neq | Leq | Geq | RAngle | LAngle | Or | And => (5, 6),
             AddEq | SubEq | MulEq | DivEq => (1, 2),
             Question => (4, 3),
