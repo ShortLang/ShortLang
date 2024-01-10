@@ -85,6 +85,7 @@ pub enum Bytecode {
     },
     Pop,
     Push,
+    MakeConst, // pop the last constant and make it 
     Dup,
     Sqrt,
     Gcd,

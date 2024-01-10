@@ -4,7 +4,6 @@ use miette::{miette, LabeledSpan};
 use rug::ops::CompleteRound;
 use rug::{Complete, Float, Integer};
 use std::collections::HashMap;
-use std::error::Error;
 use std::fs::OpenOptions;
 use std::io::*;
 use std::ops::Range;
@@ -573,8 +572,20 @@ impl VM {
             }
 
             ExprKind::While(condition, body) => {
-                let body_start = self.instructions.len();
                 self.compile_expr(*condition);
+
+                self.constants.push(Value::Nil);
+
+                self.instructions.push((
+                    Instr(Bytecode::MakeConst, vec![self.constants.len() - 1]),
+                    0..0,
+                ));
+
+                let body_start = self.instructions.len();
+                self.instructions.push((
+                    Instr(Bytecode::LoadConst, vec![self.constants.len() - 1]),
+                    0..0,
+                ));
 
                 let while_instr_ptr = self.instructions.len();
                 self.instructions
@@ -636,8 +647,21 @@ impl VM {
                 let var_ptr = self.var_id_count;
                 self.var_id_count += 1;
 
-                let loop_start = self.instructions.len();
+                // FIXME: what if the loop is inside a function which is being called multiple times?
+
                 self.compile_expr(*list);
+                self.constants.push(Value::Nil);
+
+                self.instructions.push((
+                    Instr(Bytecode::MakeConst, vec![self.constants.len() - 1]),
+                    0..0,
+                ));
+
+                let loop_start = self.instructions.len();
+                self.instructions.push((
+                    Instr(Bytecode::LoadConst, vec![self.constants.len() - 1]),
+                    0..0,
+                ));
 
                 let instr_ptr = self.instructions.len();
                 let ran_once = Box::leak(Box::new(false));
@@ -899,6 +923,13 @@ impl VM {
                     .push(NonNull::new_unchecked(alloc_new_value(Value::String(
                         t.to_owned(),
                     ))));
+            },
+
+            MakeConst => unsafe {
+                let const_ptr = args[0];
+                let val = self.stack.pop().unwrap().as_ref().clone();
+
+                self.constants[const_ptr] = val;
             },
 
             Open => unsafe {

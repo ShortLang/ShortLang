@@ -1,6 +1,3 @@
-file = open("test.txt")
-file.w("Lol")
-file.a("Lol")
-$file.r()
-// properties
-$file.type
+ev [1, 2, 3, 4, 5, 6, 7, 8, 9, 10] {
+	$f"List item: $i"
+}
