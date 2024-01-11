@@ -1,5 +1,6 @@
 #![allow(non_snake_case, dead_code)]
 
+use clap::builder::TypedValueParser;
 use clap::Parser;
 use optimizer::Optimizer;
 use std::fs;
@@ -36,6 +37,18 @@ pub struct Args {
     /// Formats the input file to be as short as possible
     #[clap(short, long)]
     format: bool,
+
+    /// Specifies the format mode, higher means more aggressive
+    #[clap(
+        name = "mode",
+        short,
+        long,
+        requires = "format",
+        default_value = "2",
+        value_parser = clap::builder::PossibleValuesParser::new(&["1", "2", "3"])
+            .map(|s| s.parse::<usize>().unwrap())
+    )]
+    format_mode: usize,
 }
 
 fn format_duration(duration: std::time::Duration) -> String {
@@ -85,43 +98,47 @@ fn main() {
 
     if args.format {
         println!("Formatting: {}", args.file);
-
         fs::File::create(&args.file)
             .unwrap()
-            .write_all(Formatter::new(&src).format_code().unwrap().as_bytes())
+            .write_all(
+                Formatter::new(&src, args.format_mode)
+                    .format_code()
+                    .unwrap()
+                    .as_bytes(),
+            )
             .unwrap();
+        println!("Done!");
+        return;
+    }
 
-        println!("Done");
+    let mut ast_std = PParser::new(&std_lib, tokenize(&std_lib)).parse();
+    let mut ast_src = PParser::new(&src, tokenize(&src)).parse();
+    ast_std.append(&mut ast_src);
+
+    let ast = Optimizer::new(ast_std).optimize_all();
+    if args.ast {
+        println!(
+            "{:?}",
+            miette!(severity = Severity::Advice, "AST: {:?}", ast,)
+        );
+    }
+
+    let mut vm = VM::new(&src, ast);
+    if args.benchmark {
+        let start = std::time::Instant::now();
+        vm.compile();
+        vm.run();
+        let run_time = format_duration(start.elapsed());
+        println!(
+            "\n{:?}",
+            miette!(
+                severity = Severity::Advice,
+                "Program finished in {}",
+                run_time
+            )
+        );
     } else {
-        let mut ast_std = PParser::new(&std_lib, tokenize(&std_lib)).parse();
-        let mut ast_src = PParser::new(&src, tokenize(&src)).parse();
-        ast_std.append(&mut ast_src);
-
-        let ast = Optimizer::new(ast_std).optimize_all();
-        if args.ast {
-            println!(
-                "{:?}",
-                miette!(severity = Severity::Advice, "AST: {:?}", ast,)
-            );
-        }
-
-        let mut vm = VM::new(&src, ast);
-        if args.benchmark {
-            let start = std::time::Instant::now();
-            vm.compile();
-            vm.run();
-            let run_time = format_duration(start.elapsed());
-            println!(
-                "\n{:?}",
-                miette!(
-                    severity = Severity::Advice,
-                    "Program finished in {}",
-                    run_time
-                )
-            );
-        } else {
-            vm.compile();
-            vm.run();
-        }
+        vm.compile();
+        vm.run();
     }
 }

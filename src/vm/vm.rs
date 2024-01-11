@@ -1151,14 +1151,12 @@ impl VM {
                 let start = self
                     .stack
                     .pop()
-                    .unwrap_or_else(|| allocate(Value::Int(Integer::from(0))))
+                    .unwrap_or_else(|| allocate(Value::Int(Integer::new())))
                     .as_ref();
-
                 match (start, end) {
                     (Value::Int(start), Value::Int(end)) => {
                         let start_value: i64 = start.saturating_cast();
                         let end_value: i64 = end.saturating_cast();
-
                         let mut array = vec![];
                         if start_value > end_value {
                             for i in (end_value + 1..=start_value).rev() {
@@ -1169,7 +1167,21 @@ impl VM {
                                 array.push(Value::Int(Integer::from(i)));
                             }
                         }
-
+                        self.stack
+                            .push(NonNull::new_unchecked(alloc_new_value(Value::Array(array))));
+                    }
+                    (Value::Nil, Value::Int(end)) => {
+                        let end_value: i64 = end.saturating_cast();
+                        let mut array = vec![];
+                        if 0 > end_value {
+                            for i in (end_value + 1..=0).rev() {
+                                array.push(Value::Int(Integer::from(i)));
+                            }
+                        } else {
+                            for i in 0..end_value {
+                                array.push(Value::Int(Integer::from(i)));
+                            }
+                        }
                         self.stack
                             .push(NonNull::new_unchecked(alloc_new_value(Value::Array(array))));
                     }
@@ -1749,7 +1761,7 @@ impl VM {
                         Ok(i) => i.complete(),
                         Err(e) => {
                             self.runtime_error(
-                                &format!("cannot parse the string to int value, {e:?}"),
+                                &format!("cannot parse the string to int value, {}", e),
                                 span,
                             );
                         }
@@ -1771,7 +1783,7 @@ impl VM {
                         Ok(i) => i.complete(53),
                         Err(e) => {
                             self.runtime_error(
-                                &format!("cannot parse the string to float value, {e:?}"),
+                                &format!("cannot parse the string to float value, {}", e),
                                 span,
                             );
                         }

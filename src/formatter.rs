@@ -39,13 +39,15 @@ macro_rules! group {
 pub struct Formatter<'a> {
     code: &'a str,
     ast: Vec<Expr>,
+    mode: usize,
     buffer: Vec<u8>,
 }
 
 impl<'a> Formatter<'a> {
-    pub fn new(code: &'a str) -> Self {
+    pub fn new(code: &'a str, mode: usize) -> Self {
         Self {
             code,
+            mode,
             buffer: Vec::with_capacity(code.len()),
             ast: PParser::new(code, tokenize(code)).parse(),
         }

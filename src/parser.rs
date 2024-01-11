@@ -261,11 +261,15 @@ pub enum UnaryOp {
 
 impl std::fmt::Display for UnaryOp {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", match self {
-            Self::Not => '!',
-            Self::Neg => '-',
-            Self::Plus => '+',
-        })
+        write!(
+            f,
+            "{}",
+            match self {
+                Self::Not => '!',
+                Self::Neg => '-',
+                Self::Plus => '+',
+            }
+        )
     }
 }
 
@@ -278,11 +282,15 @@ pub enum PostfixOp {
 
 impl std::fmt::Display for PostfixOp {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", match self {
-            Self::Increase => "++",
-            Self::Decrease => "--",
-            Self::Factorial => "!",
-        })
+        write!(
+            f,
+            "{}",
+            match self {
+                Self::Increase => "++",
+                Self::Decrease => "--",
+                Self::Factorial => "!",
+            }
+        )
     }
 }
 
@@ -686,13 +694,14 @@ impl<'a> PParser<'a> {
     fn infix_binding_power(&mut self, op: &LogosToken) -> Option<(u8, u8)> {
         use LogosToken::*;
         Some(match op {
+            Range => (6, 7),
             Plus | Minus => (10, 11),
             Times | Slash => (20, 21),
             Percent => (30, 31),
             BinaryPow => (40, 41),
             Pow => (50, 51),
 
-            Dot | Range => (60, 61),
+            Dot => (62, 63),
 
             Eqq | Neq | Leq | Geq | RAngle | LAngle | Or | And => (5, 6),
             AddEq | SubEq | MulEq | DivEq => (1, 2),
