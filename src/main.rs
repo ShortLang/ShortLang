@@ -3,14 +3,17 @@
 use clap::Parser;
 use optimizer::Optimizer;
 use std::fs;
+use std::io::Write;
 
 mod optimizer;
+use formatter::Formatter;
 use logos::Logos;
 use miette::{miette, Severity};
 use parser::{LogosToken, PParser};
 
 use crate::vm::VM;
 
+mod formatter;
 mod parser;
 mod vm;
 
@@ -80,34 +83,45 @@ fn main() {
         std::process::exit(1);
     });
 
-    let mut ast_std = PParser::new(&std_lib, tokenize(&std_lib)).parse();
-    let mut ast_src = PParser::new(&src, tokenize(&src)).parse();
-    ast_std.append(&mut ast_src);
+    if args.format {
+        println!("Formatting: {}", args.file);
 
-    let ast = Optimizer::new(ast_std).optimize_all();
-    if args.ast {
-        println!(
-            "{:?}",
-            miette!(severity = Severity::Advice, "AST: {:?}", ast,)
-        );
-    }
+        fs::File::create(&args.file)
+            .unwrap()
+            .write_all(Formatter::new(&src).format_code().unwrap().as_bytes())
+            .unwrap();
 
-    let mut vm = VM::new(&src, ast);
-    if args.benchmark {
-        let start = std::time::Instant::now();
-        vm.compile();
-        vm.run();
-        let run_time = format_duration(start.elapsed());
-        println!(
-            "\n{:?}",
-            miette!(
-                severity = Severity::Advice,
-                "Program finished in {}",
-                run_time
-            )
-        );
+        println!("Done");
     } else {
-        vm.compile();
-        vm.run();
+        let mut ast_std = PParser::new(&std_lib, tokenize(&std_lib)).parse();
+        let mut ast_src = PParser::new(&src, tokenize(&src)).parse();
+        ast_std.append(&mut ast_src);
+
+        let ast = Optimizer::new(ast_std).optimize_all();
+        if args.ast {
+            println!(
+                "{:?}",
+                miette!(severity = Severity::Advice, "AST: {:?}", ast,)
+            );
+        }
+
+        let mut vm = VM::new(&src, ast);
+        if args.benchmark {
+            let start = std::time::Instant::now();
+            vm.compile();
+            vm.run();
+            let run_time = format_duration(start.elapsed());
+            println!(
+                "\n{:?}",
+                miette!(
+                    severity = Severity::Advice,
+                    "Program finished in {}",
+                    run_time
+                )
+            );
+        } else {
+            vm.compile();
+            vm.run();
+        }
     }
 }

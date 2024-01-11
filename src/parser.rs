@@ -259,12 +259,33 @@ pub enum UnaryOp {
     Plus,
 }
 
+impl std::fmt::Display for UnaryOp {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", match self {
+            Self::Not => '!',
+            Self::Neg => '-',
+            Self::Plus => '+',
+        })
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum PostfixOp {
     Increase,
     Decrease,
     Factorial,
 }
+
+impl std::fmt::Display for PostfixOp {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", match self {
+            Self::Increase => "++",
+            Self::Decrease => "--",
+            Self::Factorial => "!",
+        })
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum BinaryOp {
     Mul,
@@ -303,6 +324,38 @@ impl BinaryOp {
             | Self::Or => true,
             _ => false,
         }
+    }
+}
+
+impl std::fmt::Display for BinaryOp {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "{}",
+            match self {
+                Self::Add => "+",
+                Self::Sub => "-",
+                Self::Mul => "*",
+                Self::Div => "/",
+                Self::Less => "<",
+                Self::Greater => ">",
+                Self::LessEq => "<=",
+                Self::GreaterEq => ">=",
+                Self::NotEq => "!=",
+                Self::Eq => "==",
+                Self::Or => "||",
+                Self::And => "&&",
+                Self::AddEq => "+=",
+                Self::SubEq => "-=",
+                Self::MulEq => "*=",
+                Self::DivEq => "/=",
+                Self::Attr => ".",
+                Self::Mod => "%",
+                Self::BinaryPow => "^",
+                Self::Pow => "**",
+                Self::Range => "..",
+            }
+        )
     }
 }
 
