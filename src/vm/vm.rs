@@ -721,6 +721,17 @@ impl VM {
                 }
             }
 
+            ExprKind::SetIndex(index, value) => {
+                if let ExprKind::Index(array, index) = index.inner {
+                    self.compile_expr(*array);
+                    self.compile_expr(*index);
+                    self.compile_expr(*value);
+                    self.instructions.push((Instr(SetIndex, vec![]), expr.span));
+                } else {
+                    self.runtime_error("Expected an index", expr.span);
+                }
+            }
+
             ExprKind::Match(lhs, branches) => {
                 let mut conditionals = branches
                     .clone()
@@ -1341,6 +1352,40 @@ impl VM {
                 ));
             },
 
+            SetIndex => unsafe {
+                let value = self.stack.pop().unwrap().as_ref();
+                let index_usize = self
+                    .stack
+                    .pop()
+                    .unwrap()
+                    .as_ref()
+                    .as_int()
+                    .to_usize()
+                    .unwrap();
+                match self.stack.pop().unwrap().as_mut() {
+                    Value::Array(arr) => {
+                        arr[index_usize] = value.clone();
+                    }
+                    Value::String(s) => {
+                        let mut chars: Vec<char> = s.chars().collect();
+                        if let Value::String(new_char_str) = value {
+                            if new_char_str.len() == 1 {
+                                chars[index_usize] = new_char_str.chars().next().unwrap();
+                                *s = chars.into_iter().collect();
+                            } else {
+                                self.runtime_error(
+                                    "New value for string index must be a single character",
+                                    span,
+                                );
+                            }
+                        } else {
+                            self.runtime_error("New value for string index must be a string", span);
+                        }
+                    }
+                    _ => self.runtime_error("Expected a string or array", span),
+                }
+            },
+
             Mul => self.perform_bin_op(byte, span, |_, a, b| a.binary_mul(b)),
             Mod => self.perform_bin_op(byte, span, |_, a, b| a.binary_mod(b)),
             BinaryPow => self.perform_bin_op(byte, span, |_, a, b| a.binary_bitwise_xor(b)),
@@ -1546,7 +1591,7 @@ impl VM {
                     let val = self.stack.pop().unwrap().as_ref();
                     self.check_type(&name, on_types, val, span.clone());
                     self.stack.push(allocate(Value::String(
-                        std::fs::read_to_string(val.to_string()).unwrap_or_else(|e| {
+                        fs::read_to_string(val.to_string()).unwrap_or_else(|e| {
                             self.runtime_error(
                                 &format!("Failed to read '{}': {}", val.to_string(), e.kind()),
                                 span.clone(),
@@ -1558,7 +1603,7 @@ impl VM {
                     let content = self.stack.pop().unwrap().as_ref();
                     let val = self.stack.pop().unwrap().as_ref();
                     self.check_type(&name, on_types, val, span.clone());
-                    std::fs::write(val.to_string(), content.to_string()).unwrap_or_else(|e| {
+                    fs::write(val.to_string(), content.to_string()).unwrap_or_else(|e| {
                         self.runtime_error(
                             &format!("Failed to write to '{}': {}", val.to_string(), e.kind()),
                             span.clone(),

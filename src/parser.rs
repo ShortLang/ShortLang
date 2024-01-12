@@ -442,6 +442,7 @@ impl<'a> PParser<'a> {
                 .with_source_code(self.source.to_string());
         }
         println!("{:?}", report);
+        std::process::exit(1);
     }
 
     fn back(&mut self) -> Option<(LogosToken<'a>, Range<usize>)> {
@@ -702,8 +703,8 @@ impl<'a> PParser<'a> {
 
             Dot => (62, 63),
 
-            Eqq | Neq | Leq | Geq | RAngle | LAngle | Or | And => (5, 6),
-            AddEq | SubEq | MulEq | DivEq => (1, 2),
+            Eqq | Neq | Leq | Geq | RAngle | LAngle => (5, 6),
+            AddEq | SubEq | MulEq | DivEq | Or | And => (1, 2),
             Question => (4, 3),
 
             _ => return None,

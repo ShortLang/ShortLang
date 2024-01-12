@@ -463,7 +463,10 @@ impl std::fmt::Display for Value {
                 Self::Array(arr) => format!(
                     "[{}]",
                     arr.iter()
-                        .map(|i| i.to_string())
+                        .map(|i| match i {
+                            Value::String(s) => format!("\"{}\"", s),
+                            _ => i.to_string(),
+                        })
                         .collect::<Vec<_>>()
                         .join(", ")
                 ),
