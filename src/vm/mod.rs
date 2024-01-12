@@ -1,9 +1,9 @@
 mod bytecode;
+mod macros;
 mod memory;
 mod utils;
 mod value;
 mod vm;
-mod macros;
 
-pub use vm::VM;
 pub use vm::INBUILT_FUNCTIONS;
+pub use vm::VM;

@@ -1,1 +1,2 @@
-B a b:a+b;sum=B(10,20);sum==B(10,20)?$"obviously":$"wtf???";A:B(10,20);$A()
+a = "this is a string"
+$a.split()

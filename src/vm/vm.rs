@@ -484,7 +484,9 @@ impl VM {
                 "rnd" => self.handle_optional_args(args, None, Rand, expr.span),
                 "rng" => self.handle_optional_args(args, None, Range, expr.span),
                 "sqrt" => self.handle_optional_args(args, Some(Integer::from(2)), Sqrt, expr.span),
-                "round" => self.handle_optional_args(args, Some(Integer::from(1)), Round, expr.span),
+                "round" => {
+                    self.handle_optional_args(args, Some(Integer::from(1)), Round, expr.span)
+                }
 
                 _ => {
                     for_each_arg!(args, arg => { self.compile_expr(arg) });
@@ -1511,23 +1513,30 @@ impl VM {
                 "split" if in_built => unsafe {
                     let split = self.stack.pop().unwrap().as_ref();
                     let val = self.stack.pop().unwrap().as_ref();
-
-                    self.check_type(&name, on_types, val, span.clone());
-
-                    let (Value::String(val_str), Value::String(split_str)) = (val, split) else {
-                        self.runtime_error(
+                    let empty = String::new();
+                    let (val_str, split_str) = match (val, split) {
+                        (Value::String(val_str), Value::String(split_str)) => (val_str, split_str),
+                        (Value::Nil, Value::String(split_str)) => (split_str, &empty),
+                        _ => self.runtime_error(
                             &format!(
                                 "Expected 'str' as argument of split, found '{}'",
-                                split.get_type()
+                                val.get_type()
                             ),
                             span,
-                        );
+                        ),
                     };
 
-                    let split = val_str
-                        .split(split_str)
-                        .map(|i| i.into())
-                        .collect::<Vec<Value>>();
+                    let split = if split_str.is_empty() {
+                        val_str
+                            .chars()
+                            .map(|i| i.to_string().into())
+                            .collect::<Vec<Value>>()
+                    } else {
+                        val_str
+                            .split(split_str)
+                            .map(|i| i.into())
+                            .collect::<Vec<Value>>()
+                    };
 
                     self.stack.push(allocate(Value::Array(split)));
                 },
