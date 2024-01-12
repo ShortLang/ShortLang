@@ -3,7 +3,7 @@ use logos::Logos;
 use miette::{miette, LabeledSpan};
 use rug::ops::CompleteRound;
 use rug::{Complete, Float, Integer};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fs::OpenOptions;
 use std::io::*;
 use std::ops::Range;
@@ -16,7 +16,7 @@ use crate::for_each_arg;
 use crate::parser::{LogosToken, PParser, PostfixOp, UnaryOp};
 use crate::vm::bytecode::MethodFunction;
 use crate::vm::memory;
-use crate::{float, process_placeholder};
+use crate::*; // macros
 use crate::{
     parser::{BinaryOp, Expr, ExprKind},
     vm::memory::alloc_new_value,
@@ -34,46 +34,29 @@ pub(crate) type CallStack = Vec<FnStackData>;
 
 const GC_TRIGGER: usize = 1 << 20;
 
-macro_rules! inbuilt_methods {
-    { $self:ident, $names:expr, $args:ident, $([ $fn_name:expr => [$($ty:expr),+ $(,)?], $num_args:expr, $span:expr, { $($preprocess:tt)* } ]),*, _ => { $($tt:tt)* } $(,)? } => {
-        match $names {
-            $(
-                $fn_name => {
-                    { $($preprocess)* }
-
-                    for_each_arg!($args, $num_args,
-                        Some(e) => { $self.compile_expr(e) },
-                        None => { $self.stack.push(allocate(Value::Nil)) }
-                    );
-
-                    $self.instructions.push((Instr(Method(MethodFunction {
-                        name: $fn_name.to_string(),
-                        on_types: vec![$($ty,)*],
-                        num_args: $num_args,
-                        in_built: true,
-                    }), vec![]), $span));
-                }
-            )*
-
-            _ => { $($tt)* }
-        }
-    }
-}
-
-macro_rules! compile_call {
-    { $self:ident, $name:expr, $args:ident, $instr:expr, $span:expr, $num_args:expr } => {
-        {
-            for_each_arg!($args, $num_args,
-                Some(e) => { $self.compile_expr(e) },
-                None => { $self.stack.push(allocate(Value::Nil)) }
-            );
-
-            $self.instructions.push((Instr($instr, vec![]), $span));
-        }
-    };
-    { $self:ident, $name:expr, $args:ident, $instr:expr, $span:expr } => {
-        compile_call!($self, $name, $args, $instr, $span, 1)
-    };
+lazy_static::lazy_static! {
+    pub static ref INBUILT_FUNCTIONS: HashSet<&'static str> = HashSet::from_iter([
+        "$",
+        "$$",
+        "int",
+        "flt",
+        "str",
+        "inp",
+        "len",
+        "type",
+        "open",
+        "gcd",
+        "lcm",
+        "fib",
+        "abs",
+        "floor",
+        "ceil",
+        "exit",
+        "rnd",
+        "rng",
+        "sqrt",
+        "round",
+    ].into_iter());
 }
 
 pub struct VM {
@@ -193,42 +176,6 @@ impl VM {
                         .push((Instr(Factorial, vec![]), expr.span));
                 }
             },
-
-            ExprKind::EqStmt(name, op, val) => {
-                let id = self.variables_id.clone();
-                let id = id.get(&name);
-                if self.variables_id.get(&name).is_none() {
-                    self.runtime_error("Variable not found", expr.span.clone());
-                }
-
-                let id = id.unwrap();
-                self.instructions
-                    .push((Instr(GetVar, vec![*id as usize]), expr.span.clone()));
-                self.compile_expr(*val);
-                match op {
-                    BinaryOp::AddEq => {
-                        self.instructions
-                            .push((Instr(Add, vec![]), expr.span.clone()));
-                    }
-                    BinaryOp::SubEq => {
-                        self.instructions
-                            .push((Instr(Sub, vec![]), expr.span.clone()));
-                    }
-                    BinaryOp::MulEq => {
-                        self.instructions
-                            .push((Instr(Mul, vec![]), expr.span.clone()));
-                    }
-                    BinaryOp::DivEq => {
-                        self.instructions
-                            .push((Instr(Div, vec![]), expr.span.clone()));
-                    }
-
-                    _ => unreachable!(),
-                }
-
-                self.instructions
-                    .push((Instr(Replace, vec![*id as usize]), expr.span));
-            }
 
             ExprKind::Ident(x) => {
                 let id = self.variables_id.get(&x);
@@ -537,9 +484,7 @@ impl VM {
                 "rnd" => self.handle_optional_args(args, None, Rand, expr.span),
                 "rng" => self.handle_optional_args(args, None, Range, expr.span),
                 "sqrt" => self.handle_optional_args(args, Some(Integer::from(2)), Sqrt, expr.span),
-                "round" => {
-                    self.handle_optional_args(args, Some(Integer::from(1)), Round, expr.span)
-                }
+                "round" => self.handle_optional_args(args, Some(Integer::from(1)), Round, expr.span),
 
                 _ => {
                     for_each_arg!(args, arg => { self.compile_expr(arg) });

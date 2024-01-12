@@ -15,6 +15,7 @@ use parser::{LogosToken, PParser};
 use crate::vm::VM;
 
 mod formatter;
+mod name_generator;
 mod parser;
 mod vm;
 
@@ -98,16 +99,22 @@ fn main() {
 
     if args.format {
         println!("Formatting: {}", args.file);
+        let formatted = Formatter::new(&src, args.format_mode)
+            .format_code()
+            .unwrap();
+
         fs::File::create(&args.file)
             .unwrap()
-            .write_all(
-                Formatter::new(&src, args.format_mode)
-                    .format_code()
-                    .unwrap()
-                    .as_bytes(),
-            )
-            .unwrap();
+            .write_all(formatted.as_bytes())
+            .expect("Cannot write to file");
+
         println!("Done!");
+        println!(
+            "{} chars -> {} chars, {:.2}% decrease",
+            src.len(),
+            formatted.len(),
+            100.0 * ((src.len() - formatted.len()) as f32 / src.len() as f32)
+        );
         return;
     }
 

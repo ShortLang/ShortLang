@@ -1,1 +1,1 @@
-mc 1{1:$"hello";2:{$"msg 1";$"msg 2"};3:$"Nope";}
+B a b:a+b;sum=B(10,20);sum==B(10,20)?$"obviously":$"wtf???";A:B(10,20);$A()

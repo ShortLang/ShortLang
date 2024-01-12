@@ -375,7 +375,6 @@ pub enum ExprKind {
     Return(Box<Expr>),
     InlineFunction(String, Vec<String>, Box<Expr>),
     MultilineFunction(String, Vec<String>, Vec<Expr>),
-    EqStmt(String, BinaryOp, Box<Expr>),
     Call(String, Option<Vec<Expr>>),
     Ternary(Box<Expr>, Vec<Expr>, Option<Vec<Expr>>),
     String(String),
