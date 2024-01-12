@@ -1,2 +1,1 @@
-a = "this is a string"
-$a.split()
+a[1] = 6

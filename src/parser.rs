@@ -395,6 +395,7 @@ pub enum ExprKind {
 
     Index(Box<Expr>, Box<Expr>),
     Unary(UnaryOp, Box<Expr>),
+    SetIndex(Box<Expr>, Box<Expr>),
     Nil,
     Error,
     Break,
@@ -441,7 +442,6 @@ impl<'a> PParser<'a> {
                 .with_source_code(self.source.to_string());
         }
         println!("{:?}", report);
-        std::process::exit(1);
     }
 
     fn back(&mut self) -> Option<(LogosToken<'a>, Range<usize>)> {
@@ -742,6 +742,14 @@ impl<'a> PParser<'a> {
                     );
                     self.expect(LogosToken::RSquare);
                     self.proceed();
+                    if self.current() == &LogosToken::Eq {
+                        self.proceed();
+                        let e = self.expr(0);
+                        lhs = Expr::new(
+                            start..self.current.1.end,
+                            ExprKind::SetIndex(Box::new(lhs), Box::new(e)),
+                        );
+                    }
                     continue;
                 }
                 lhs = Expr::new(
