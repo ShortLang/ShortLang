@@ -352,6 +352,7 @@ impl VM {
                         ExprKind::Call(name, args) => {
                             inbuilt_methods!(self, name.as_str(), args,
                                 [ "push"  => [Type::Array, Type::String], 1, expr.span, { self.compile_expr(*a); } ],
+                                [ "pop"   => [Type::Array, Type::String], 0, expr.span, { self.compile_expr(*a); } ],
                                 [ "clear" => [Type::Array, Type::String], 0, expr.span, { self.compile_expr(*a); } ],
                                 [ "join"  => [Type::Array],               1, expr.span, { self.compile_expr(*a); } ],
                                 [ "split" => [Type::String],              1, expr.span, { self.compile_expr(*a); } ],
@@ -1516,6 +1517,22 @@ impl VM {
 
                     *dest = dest.binary_add(src).unwrap();
                     self.stack.push(NonNull::new_unchecked(dest as *mut Value));
+                },
+
+                "pop" if in_built => unsafe {
+                    let dest = self.stack.pop().unwrap().as_mut();
+
+                    self.check_type(&name, on_types, dest, span.clone());
+
+                    let Some(val) = (match dest {
+                        Value::Array(a) => a.pop(),
+                        Value::String(s) => s.pop().map(|i| Value::String(i.to_string())),
+                        _ => unreachable!(),
+                    }) else {
+                        self.runtime_error("Cannot pop empty array", span);
+                    };
+
+                    self.stack.push(allocate(val));
                 },
 
                 "clear" if in_built => unsafe {

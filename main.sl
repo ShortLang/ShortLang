@@ -1,6 +1,7 @@
-a = [1, 2, 3, 4, 5]
-a[1] = 6
-$a
-b = "lol"
-b[1] = "a"
-$b
+arr = [1, 2, 3, 4]
+$f"last item was: $arr.pop()"
+$arr
+
+s = "hello, world!"
+$f"last item was: $s.pop()"
+$s
