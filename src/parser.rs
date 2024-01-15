@@ -694,7 +694,7 @@ impl<'a> PParser<'a> {
     fn infix_binding_power(&mut self, op: &LogosToken) -> Option<(u8, u8)> {
         use LogosToken::*;
         Some(match op {
-            Range => (6, 7),
+            Range => (7, 8),
             Plus | Minus => (10, 11),
             Times | Slash => (20, 21),
             Percent => (30, 31),
@@ -703,9 +703,10 @@ impl<'a> PParser<'a> {
 
             Dot => (62, 63),
 
-            Eqq | Neq | Leq | Geq | RAngle | LAngle => (5, 6),
-            AddEq | SubEq | MulEq | DivEq | Or | And => (1, 2),
+            Eqq | Neq | Leq | Geq | RAngle | LAngle => (6, 7),
+            AddEq | SubEq | MulEq | DivEq => (1, 2),
             Question => (4, 3),
+            Or | And => (5, 6),
 
             _ => return None,
         })
