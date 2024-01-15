@@ -200,6 +200,11 @@ impl Formatter {
 
             ExprKind::FString(..) => panic!("Format String formatting isn't supported yet"),
 
+            ExprKind::Index(lhs, index) => {
+                Self::get_fn_name_refs(&mut lhs.inner, name_refs);
+                Self::get_fn_name_refs(&mut index.inner, name_refs);
+            }
+
             _ => {}
         }
     }
@@ -429,6 +434,11 @@ impl Formatter {
             }
 
             ExprKind::FString(..) => panic!("Format String formatting isn't supported yet"),
+
+            ExprKind::Index(lhs, index) => {
+                self.format_internal(&lhs.inner)?;
+                wrap!(self.buffer, '[', { self.format_internal(&index.inner)? }, ']');
+            }
 
             _ => {
                 panic!("unexpected ident: {expr:?}");
