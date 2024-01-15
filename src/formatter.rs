@@ -17,9 +17,15 @@ macro_rules! is_single_value {
             ExprKind::Int(..)
             | ExprKind::Float(..)
             | ExprKind::String(..)
+            | ExprKind::FString(..)
             | ExprKind::Bool(..)
             | ExprKind::Ident(..)
             | ExprKind::Call(..)
+            | ExprKind::Binary(..)
+            | ExprKind::Unary(..)
+            | ExprKind::Array(..)
+            | ExprKind::Postfix(..)
+            | ExprKind::Ternary(..)
         )
     };
 }
@@ -233,15 +239,15 @@ impl Formatter {
             }
 
             ExprKind::Binary(lhs, op, rhs) => {
-                group![self.buffer, lhs.inner, {
-                    self.format_internal(&lhs.inner)?
-                }];
+                // group![self.buffer, lhs.inner, {
+                //     self.format_internal(&lhs.inner)?
+                // }];
 
-                write!(self.buffer, "{op}")?;
+                // write!(self.buffer, "{op}")?;
 
-                group![self.buffer, rhs.inner, {
-                    self.format_internal(&rhs.inner)?
-                }];
+                // group![self.buffer, rhs.inner, {
+                //     self.format_internal(&rhs.inner)?
+                // }];
             }
 
             ExprKind::Unary(op, val) => {

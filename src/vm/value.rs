@@ -319,7 +319,7 @@ impl Value {
 
     pub fn and(&self, other: &Value) -> Option<Value> {
         Some(Value::Bool(match (self, other) {
-            (a, b) => a.bool_eval() == b.bool_eval(),
+            (a, b) => a.bool_eval() && b.bool_eval(),
         }))
     }
 
