@@ -4,16 +4,8 @@ use lazy_static::lazy_static;
 
 use super::value::Value;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-#[repr(u8)]
-pub enum GCItemState {
-    White,
-    Grey,
-    Black,
-}
-
 lazy_static! {
-    pub static ref ALL_ALLOCATIONS: Mutex<HashMap<usize, GCItemState>> = Mutex::new(HashMap::new());
+    pub static ref ALL_ALLOCATIONS: Mutex<HashMap<usize, usize>> = Mutex::new(HashMap::new());
 }
 
 pub fn alloc_value_ptr() -> *mut Value {
@@ -23,7 +15,7 @@ pub fn alloc_value_ptr() -> *mut Value {
     ALL_ALLOCATIONS
         .lock()
         .unwrap()
-        .insert(ptr as *mut Value as usize, GCItemState::White);
+        .insert(ptr as *mut Value as usize, 0);
 
     ptr
 }
@@ -35,56 +27,37 @@ pub fn alloc_new_value(val: Value) -> *mut Value {
     }
     ptr
 }
-#[allow(clippy::not_unsafe_ptr_arg_deref)]
-pub fn mark(node: NonNull<Value>) -> NonNull<Value> {
+pub fn memory_current() -> usize {
+    ALL_ALLOCATIONS.lock().unwrap().len()
+}
+pub fn retain(node: NonNull<Value>) -> NonNull<Value> {
     let mut all_allocations = ALL_ALLOCATIONS.lock().unwrap();
-    let mut grey_objects = Vec::new();
-
-    if let Some(item) = all_allocations.get_mut(&(node.as_ptr() as usize)) {
-        if *item == GCItemState::White {
-            *item = GCItemState::Grey;
-            grey_objects.push(node);
-        }
-    }
-
-    while let Some(g) = grey_objects.pop() {
-        if let Some(item) = all_allocations.get_mut(&(g.as_ptr() as usize)) {
-            if *item == GCItemState::Grey {
-                *item = GCItemState::Black;
-                // We'll be needing this when we addd arrays / tuples later
-                if let Some(children) = unsafe { g.as_ref().referenced_children() } {
-                    for child in children {
-                        if let Some(item) = all_allocations.get_mut(&(child as usize)) {
-                            if *item == GCItemState::White {
-                                *item = GCItemState::Grey;
-                                grey_objects.push(unsafe { child.as_ref().unwrap().into() });
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-
+    *all_allocations.entry(node.as_ptr() as usize).or_insert(0) += 1;
+    println!("{:?}", all_allocations);
     node
 }
 
-pub fn sweep() {
+pub fn release(node: NonNull<Value>) -> NonNull<Value> {
     let mut all_allocations = ALL_ALLOCATIONS.lock().unwrap();
-    let mut to_remove = Vec::new();
-    for (ptr, state) in all_allocations.iter() {
-        if *state == GCItemState::White {
-            dealloc(*ptr as *mut Value);
-            to_remove.push(*ptr);
+    let p = node.as_ptr();
+    let entry = all_allocations.entry(p as usize).or_insert(1);
+    *entry -= 1;
+    dbg!("Releasing Value: ", unsafe { node.as_ref() });
+    if *entry == 0 {
+        all_allocations.remove(&(p as usize));
+        dealloc(p)
+    }
+    node
+}
+
+pub fn release_scope(start: usize) {
+    let mut allocations = ALL_ALLOCATIONS.lock().unwrap();
+    for (key, value) in allocations.iter_mut().skip(start) {
+        *value -= 1;
+        if *value == 0 {
+            ALL_ALLOCATIONS.lock().unwrap().remove(key);
+            dealloc(*key as *mut Value)
         }
-    }
-
-    for ptr in to_remove {
-        all_allocations.remove(&ptr);
-    }
-
-    for (_, state) in all_allocations.iter_mut() {
-        *state = GCItemState::White;
     }
 }
 

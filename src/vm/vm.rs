@@ -11,6 +11,7 @@ use std::ptr::NonNull;
 use std::string::ToString;
 
 use super::bytecode::Bytecode::*;
+use super::memory::{release, release_scope, retain};
 use super::value::{Type, Value};
 use crate::for_each_arg;
 use crate::parser::{LogosToken, PParser, PostfixOp, UnaryOp};
@@ -24,15 +25,12 @@ use crate::{
 
 use super::{
     bytecode::{Bytecode, Instr},
-    memory::{mark, sweep},
     utils::*,
 };
 
 pub type VarId = u32;
 pub type VarPtr = Option<NonNull<Value>>;
 pub(crate) type CallStack = Vec<FnStackData>;
-
-const GC_TRIGGER: usize = 1 << 20;
 
 lazy_static::lazy_static! {
     pub static ref INBUILT_FUNCTIONS: HashSet<&'static str> = HashSet::from_iter([
@@ -111,17 +109,11 @@ impl VM {
 
     pub fn run(&mut self) {
         while self.pc < self.instructions.len() {
-            if self.iteration == GC_TRIGGER {
-                self.gc_recollect();
-            }
-
             let instr = &self.instructions[self.pc];
             if self.run_byte(instr.0.clone(), instr.1.clone()) {
                 break;
             }
         }
-
-        self.gc_recollect();
     }
 
     pub fn compile(&mut self) {
@@ -131,10 +123,7 @@ impl VM {
         }
 
         self.instructions.push((Instr(Halt, vec![]), 0..0));
-
-        // for (idx, (Instr(bytecode, args), _)) in self.instructions.iter().enumerate() {
-        //     println!("instr[{idx}] = ({bytecode}, {args:?})");
-        // }
+        dbg!(&self.instructions);
     }
 
     fn compile_expr(&mut self, expr: Expr) {
@@ -451,7 +440,6 @@ impl VM {
                         returns,
                     },
                 );
-
                 self.variables_id = old_id;
             }
 
@@ -843,13 +831,8 @@ impl VM {
         let args = instr.1.clone();
         let byte = instr.0;
 
-        // if self.iteration == GC_TRIGGER {
-        // self.gc_recollect();
-        // }
-
         match byte {
             Halt => {
-                self.gc_recollect();
                 return true;
             }
 
@@ -1180,12 +1163,17 @@ impl VM {
             }
 
             Replace => unsafe {
+                if let Some(v) = self.get_var(args[0] as u32) {
+                    release(v);
+                }
+
                 let value = self
                     .stack
                     .pop()
                     .unwrap_or_else(|| allocate(Value::Nil))
                     .as_mut();
-
+                // Increase ref count because of the strong reference
+                retain(value.into());
                 self.variables
                     .last_mut()
                     .unwrap()
@@ -1294,11 +1282,7 @@ impl VM {
                 } = fn_obj_option.unwrap();
 
                 let mut fn_args = (0..parameters.len())
-                    .map(|_| {
-                        self.stack
-                            .pop()
-                            .unwrap_or_else(|| mark(allocate(Value::Nil)))
-                    })
+                    .map(|_| self.stack.pop().unwrap_or_else(|| allocate(Value::Nil)))
                     .collect::<Vec<_>>();
 
                 fn_args.reverse();
@@ -1510,12 +1494,13 @@ impl VM {
                 ..
             }) => match name.as_str() {
                 "push" if in_built => unsafe {
-                    let src = self.stack.pop().unwrap().as_ref();
+                    let src = self.stack.pop().unwrap();
+                    retain(src);
                     let dest = self.stack.pop().unwrap().as_mut();
 
                     self.check_type(&name, on_types, dest, span);
 
-                    *dest = dest.binary_add(src).unwrap();
+                    *dest = dest.binary_add(src.as_ref()).unwrap();
                     self.stack.push(NonNull::new_unchecked(dest as *mut Value));
                 },
 
@@ -1673,11 +1658,7 @@ impl VM {
                     } = fn_obj;
 
                     let mut fn_args = (1..parameters.len())
-                        .map(|_| {
-                            self.stack
-                                .pop()
-                                .unwrap_or_else(|| mark(allocate(Value::Nil)))
-                        })
+                        .map(|_| self.stack.pop().unwrap_or_else(|| allocate(Value::Nil)))
                         .collect::<Vec<_>>();
 
                     fn_args.reverse();
@@ -1828,23 +1809,6 @@ impl VM {
         }
 
         self.pc = pc;
-    }
-
-    pub fn gc_recollect(&mut self) {
-        for item in &mut self.stack {
-            mark(*item);
-        }
-
-        // Marking the values in the variables
-        for scope in self.variables.iter() {
-            for item in scope.values() {
-                if item.is_some() {
-                    mark(item.unwrap());
-                }
-            }
-        }
-        // Delete the useless memory
-        sweep();
     }
 
     fn push_data(&mut self, data: Value, span: Range<usize>) {
