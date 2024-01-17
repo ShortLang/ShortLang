@@ -11,17 +11,13 @@ use std::ptr::NonNull;
 use std::string::ToString;
 
 use super::bytecode::Bytecode::*;
-use super::memory::{release, release_scope, retain};
 use super::value::{Type, Value};
 use crate::for_each_arg;
+use crate::parser::{BinaryOp, Expr, ExprKind};
 use crate::parser::{LogosToken, PParser, PostfixOp, UnaryOp};
 use crate::vm::bytecode::MethodFunction;
 use crate::vm::memory;
 use crate::*; // macros
-use crate::{
-    parser::{BinaryOp, Expr, ExprKind},
-    vm::memory::alloc_new_value,
-};
 
 use super::{
     bytecode::{Bytecode, Instr},
@@ -68,12 +64,11 @@ pub struct VM {
     stack: Vec<NonNull<Value>>,
 
     variables_id: HashMap<String, VarId>,
-    variables: Vec<HashMap<u32, Option<NonNull<Value>>>>,
-    // stack_var_names: Vec<String>,
+    variables: Vec<HashMap<u32, VarPtr>>,
 
-    // memory: Memory,
     constants: Vec<Value>,
     var_id_count: usize,
+
     instructions: Vec<(Instr, Range<usize>)>,
     exprs: Vec<Expr>,
     iteration: usize,
@@ -93,7 +88,6 @@ impl VM {
             rng: fastrand::Rng::new(),
             iteration: 0,
             variables: vec![HashMap::new()],
-            // stack_var_names: vec![],
             var_id_count: 0,
             variables_id: HashMap::new(),
             constants: vec![],
@@ -123,7 +117,10 @@ impl VM {
         }
 
         self.instructions.push((Instr(Halt, vec![]), 0..0));
-        dbg!(&self.instructions);
+
+        // for (idx, (Instr(bytecode, args), _)) in self.instructions.iter().enumerate() {
+        // println!("instr[{idx}] = ({bytecode}, {args:?})");
+        // }
     }
 
     fn compile_expr(&mut self, expr: Expr) {
@@ -836,55 +833,40 @@ impl VM {
                 return true;
             }
 
-            Push => {
-                let value = self.stack.last().cloned();
-                match value {
-                    Some(val) => self.stack.push(val),
-                    None => self.runtime_error("Stack underflow", span),
-                }
-            }
-
-            Dup => {
-                let value = self.stack.last().cloned();
-                match value {
-                    Some(val) => self.stack.push(val),
-                    None => self.runtime_error("Stack underflow", span),
-                }
-            }
-
-            Pop => {
-                if self.stack.pop().is_none() {
-                    self.runtime_error("Stack underflow", span);
-                }
-            }
-
             TypeOf => unsafe {
-                let t = self.stack.pop().unwrap().as_ref().get_type();
+                let t = memory::release(self.stack.pop().unwrap())
+                    .as_ref()
+                    .get_type();
+
                 self.stack
-                    .push(NonNull::new_unchecked(alloc_new_value(Value::String(
-                        t.to_owned(),
-                    ))));
+                    .push(memory::retain(allocate(Value::String(t.to_owned()))));
             },
 
             MakeConst => unsafe {
                 let const_ptr = args[0];
-                let val = self.stack.pop().unwrap().as_ref().clone();
+                let val = memory::release(self.stack.pop().unwrap()).as_ref().clone();
 
                 self.constants[const_ptr] = val;
             },
 
             Open => unsafe {
-                let path = self.stack.pop().unwrap().as_ref().to_string();
-                self.stack.push(allocate(Value::File(path)));
+                let path = memory::release(self.stack.pop().unwrap())
+                    .as_ref()
+                    .to_string();
+
+                self.stack.push(memory::retain(allocate(Value::File(path))));
             },
 
             ToString => unsafe {
-                let s = self.stack.pop().unwrap().as_ref().to_string();
-                self.stack.push(allocate(Value::String(s)));
+                let s = memory::release(self.stack.pop().unwrap())
+                    .as_ref()
+                    .to_string();
+
+                self.stack.push(memory::retain(allocate(Value::String(s))));
             },
 
             Sqrt => unsafe {
-                let sqrt_to = self.stack.pop().unwrap().as_ref();
+                let sqrt_to = memory::release(self.stack.pop().unwrap()).as_ref();
                 let value = self
                     .stack
                     .pop()
@@ -910,12 +892,12 @@ impl VM {
                 };
 
                 self.stack
-                    .push(NonNull::new_unchecked(alloc_new_value(Value::Float(value))));
+                    .push(memory::retain(allocate(Value::Float(value))));
             },
 
             Gcd => unsafe {
-                let a = self.stack.pop().unwrap().as_ref();
-                let b = self.stack.pop().unwrap().as_ref();
+                let a = memory::release(self.stack.pop().unwrap()).as_ref();
+                let b = memory::release(self.stack.pop().unwrap()).as_ref();
 
                 let gcd = match (a, b) {
                     (Value::Int(a), Value::Int(b)) => a.gcd_ref(b).complete(),
@@ -932,13 +914,12 @@ impl VM {
                     _ => self.runtime_error("Expected a number", span),
                 };
 
-                self.stack
-                    .push(NonNull::new_unchecked(alloc_new_value(Value::Int(gcd))));
+                self.stack.push(memory::retain(allocate(Value::Int(gcd))));
             },
 
             Lcm => unsafe {
-                let a = self.stack.pop().unwrap().as_ref();
-                let b = self.stack.pop().unwrap().as_ref();
+                let a = memory::release(self.stack.pop().unwrap()).as_ref();
+                let b = memory::release(self.stack.pop().unwrap()).as_ref();
 
                 let lcm = match (a, b) {
                     (Value::Int(a), Value::Int(b)) => a.lcm_ref(b).complete(),
@@ -955,25 +936,24 @@ impl VM {
                     _ => self.runtime_error("Expected a number", span),
                 };
 
-                self.stack
-                    .push(NonNull::new_unchecked(alloc_new_value(Value::Int(lcm))));
+                self.stack.push(memory::retain(allocate(Value::Int(lcm))));
             },
 
             Fib => unsafe {
-                let n = self.stack.pop().unwrap().as_ref();
+                let n = memory::release(self.stack.pop().unwrap()).as_ref();
                 match n {
                     Value::Int(n) => {
                         self.stack
-                            .push(NonNull::new_unchecked(alloc_new_value(Value::Int(
-                                Integer::from(Integer::fibonacci(n.saturating_cast())),
-                            ))));
+                            .push(memory::retain(allocate(Value::Int(Integer::from(
+                                Integer::fibonacci(n.saturating_cast()),
+                            )))));
                     }
 
                     Value::Float(n) => {
                         self.stack
-                            .push(NonNull::new_unchecked(alloc_new_value(Value::Int(
-                                Integer::from(Integer::fibonacci(n.to_u32_saturating().unwrap())),
-                            ))));
+                            .push(memory::retain(allocate(Value::Int(Integer::from(
+                                Integer::fibonacci(n.to_u32_saturating().unwrap()),
+                            )))));
                     }
 
                     _ => self.runtime_error("Expected a number", span),
@@ -981,20 +961,17 @@ impl VM {
             },
 
             Abs => unsafe {
-                let n = self.stack.pop().unwrap().as_ref();
+                let n = memory::release(self.stack.pop().unwrap()).as_ref();
                 match n {
                     Value::Int(n) => {
                         self.stack
-                            .push(NonNull::new_unchecked(alloc_new_value(Value::Int(
-                                n.abs_ref().complete(),
-                            ))));
+                            .push(memory::retain(allocate(Value::Int(n.abs_ref().complete()))));
                     }
 
                     Value::Float(n) => {
-                        self.stack
-                            .push(NonNull::new_unchecked(alloc_new_value(Value::Float(
-                                n.abs_ref().complete(53),
-                            ))));
+                        self.stack.push(memory::retain(allocate(Value::Float(
+                            n.abs_ref().complete(53),
+                        ))));
                     }
 
                     _ => self.runtime_error("Expected a number", span),
@@ -1002,30 +979,25 @@ impl VM {
             },
 
             Round => unsafe {
-                let precision = self.stack.pop().unwrap().as_ref();
-                let n = self.stack.pop().unwrap().as_ref();
+                let precision = memory::release(self.stack.pop().unwrap()).as_ref();
+                let n = memory::release(self.stack.pop().unwrap()).as_ref();
                 match (n, precision) {
                     (Value::Int(n), Value::Int(_)) => {
                         self.stack
-                            .push(NonNull::new_unchecked(alloc_new_value(Value::Int(
-                                Integer::from(n),
-                            ))));
+                            .push(memory::retain(allocate(Value::Int(Integer::from(n)))));
                     }
 
                     (Value::Float(n), Value::Int(precision)) => {
-                        self.stack
-                            .push(NonNull::new_unchecked(alloc_new_value(Value::Float(
-                                Float::parse(format!(
-                                    "{:.1$}",
-                                    n,
-                                    precision.to_usize().unwrap_or_else(|| self.runtime_error(
-                                        "Precision must be a positive integer",
-                                        span
-                                    ))
-                                ))
-                                .unwrap()
-                                .complete(53),
-                            ))));
+                        self.stack.push(memory::retain(allocate(Value::Float(
+                            Float::parse(format!(
+                                "{:.1$}",
+                                n,
+                                precision.to_usize().unwrap_or_else(|| self
+                                    .runtime_error("Precision must be a positive integer", span))
+                            ))
+                            .unwrap()
+                            .complete(53),
+                        ))));
                     }
 
                     _ => self.runtime_error("Expected a number", span),
@@ -1033,20 +1005,17 @@ impl VM {
             },
 
             Floor => unsafe {
-                let n = self.stack.pop().unwrap().as_ref();
+                let n = memory::release(self.stack.pop().unwrap()).as_ref();
                 match n {
                     Value::Int(n) => {
                         self.stack
-                            .push(NonNull::new_unchecked(alloc_new_value(Value::Int(
-                                Integer::from(n),
-                            ))));
+                            .push(memory::retain(allocate(Value::Int(Integer::from(n)))));
                     }
 
                     Value::Float(n) => {
-                        self.stack
-                            .push(NonNull::new_unchecked(alloc_new_value(Value::Float(
-                                n.floor_ref().complete(53),
-                            ))));
+                        self.stack.push(memory::retain(allocate(Value::Float(
+                            n.floor_ref().complete(53),
+                        ))));
                     }
 
                     _ => self.runtime_error("Expected a number", span),
@@ -1054,20 +1023,17 @@ impl VM {
             },
 
             Ceil => unsafe {
-                let n = self.stack.pop().unwrap().as_ref();
+                let n = memory::release(self.stack.pop().unwrap()).as_ref();
                 match n {
                     Value::Int(n) => {
                         self.stack
-                            .push(NonNull::new_unchecked(alloc_new_value(Value::Int(
-                                Integer::from(n),
-                            ))));
+                            .push(memory::retain(allocate(Value::Int(Integer::from(n)))));
                     }
 
                     Value::Float(n) => {
-                        self.stack
-                            .push(NonNull::new_unchecked(alloc_new_value(Value::Float(
-                                n.ceil_ref().complete(53),
-                            ))));
+                        self.stack.push(memory::retain(allocate(Value::Float(
+                            n.ceil_ref().complete(53),
+                        ))));
                     }
 
                     _ => self.runtime_error("Expected a number", span),
@@ -1079,17 +1045,22 @@ impl VM {
                 let mut v = vec![];
 
                 for _ in 0..num_vals {
-                    v.push(self.stack.pop().unwrap().as_ref().to_string());
+                    v.push(
+                        memory::release(self.stack.pop().unwrap())
+                            .as_ref()
+                            .to_string(),
+                    );
                 }
 
                 v.reverse();
 
-                self.stack.push(allocate(Value::String(v.join(""))));
+                self.stack
+                    .push(memory::retain(allocate(Value::String(v.join("")))));
             },
 
             Exit => std::process::exit(0),
             Range => unsafe {
-                let end = self.stack.pop().unwrap().as_ref();
+                let end = memory::release(self.stack.pop().unwrap()).as_ref();
                 let start = self
                     .stack
                     .pop()
@@ -1110,7 +1081,7 @@ impl VM {
                             }
                         }
                         self.stack
-                            .push(NonNull::new_unchecked(alloc_new_value(Value::Array(array))));
+                            .push(memory::retain(allocate(Value::Array(array))));
                     }
                     (Value::Nil, Value::Int(end)) => {
                         let end_value: i64 = end.saturating_cast();
@@ -1125,14 +1096,14 @@ impl VM {
                             }
                         }
                         self.stack
-                            .push(NonNull::new_unchecked(alloc_new_value(Value::Array(array))));
+                            .push(memory::retain(allocate(Value::Array(array))));
                     }
                     _ => self.runtime_error("Expected an integer", span),
                 }
             },
 
             Rand => unsafe {
-                let popped1 = self.stack.pop().unwrap();
+                let popped1 = memory::release(self.stack.pop().unwrap());
                 let popped2 = self
                     .stack
                     .pop()
@@ -1141,17 +1112,15 @@ impl VM {
                 let mut start = self.convert_to_i128(popped2.as_ref(), span);
                 if start == end {
                     self.stack
-                        .push(NonNull::new_unchecked(alloc_new_value(Value::Int(
-                            Integer::from(start),
-                        ))));
+                        .push(memory::retain(allocate(Value::Int(Integer::from(start)))));
                 } else {
                     if start > end {
                         std::mem::swap(&mut start, &mut end);
                     }
                     self.stack
-                        .push(NonNull::new_unchecked(alloc_new_value(Value::Int(
-                            Integer::from(self.rng.i128(start..end)),
-                        ))));
+                        .push(memory::retain(allocate(Value::Int(Integer::from(
+                            self.rng.i128(start..end),
+                        )))));
                 }
             },
 
@@ -1162,18 +1131,17 @@ impl VM {
                     .insert(self.var_id_count as u32, None);
             }
 
-            Replace => unsafe {
+            Replace => {
                 if let Some(v) = self.get_var(args[0] as u32) {
-                    release(v);
+                    memory::release(v);
                 }
 
-                let value = self
-                    .stack
-                    .pop()
-                    .unwrap_or_else(|| allocate(Value::Nil))
-                    .as_mut();
+                let value =
+                    memory::release(self.stack.pop().unwrap_or_else(|| allocate(Value::Nil)));
+
                 // Increase ref count because of the strong reference
-                retain(value.into());
+                memory::retain(value.into());
+
                 self.variables
                     .last_mut()
                     .unwrap()
@@ -1184,41 +1152,37 @@ impl VM {
                 let id = args[0];
                 let v = self.get_var(id as _);
                 if self.get_var(id as u32).is_some() {
-                    self.stack.push(v.unwrap_or_else(|| allocate(Value::Nil)));
+                    self.stack
+                        .push(memory::retain(v.unwrap_or_else(|| allocate(Value::Nil))));
                 } else {
                     self.runtime_error("Variable not found", span)
                 }
             }
 
-            LoadConst => unsafe {
+            LoadConst => {
                 let constant = self.constants.get(args[0]);
                 match constant {
-                    Some(c) => self
-                        .stack
-                        .push(NonNull::new_unchecked(alloc_new_value(c.to_owned()))),
+                    Some(c) => self.stack.push(memory::retain(allocate(c.to_owned()))),
                     None => self.runtime_error("Stack overflow", span),
                 }
-            },
+            }
 
             Not => unsafe {
-                let value = self.stack.pop().unwrap().as_ref();
+                let value = memory::release(self.stack.pop().unwrap()).as_ref();
                 self.stack
-                    .push(NonNull::new_unchecked(alloc_new_value(Value::Bool(
-                        !value.bool_eval(),
-                    ))));
+                    .push(memory::retain(allocate(Value::Bool(!value.bool_eval()))));
             },
 
             Neg => unsafe {
-                let value = self.stack.pop().unwrap().as_ref();
-                self.stack
-                    .push(NonNull::new_unchecked(alloc_new_value(match value {
-                        Value::Int(i) => Value::Int((-i).complete()),
-                        Value::Float(f) => Value::Float((-f).complete(53)),
-                        _ => self.runtime_error(
-                            &format!("Cannot negate the value of type {}", value.get_type()),
-                            span,
-                        ),
-                    })));
+                let value = memory::release(self.stack.pop().unwrap()).as_ref();
+                self.stack.push(memory::retain(allocate(match value {
+                    Value::Int(i) => Value::Int((-i).complete()),
+                    Value::Float(f) => Value::Float((-f).complete(53)),
+                    _ => self.runtime_error(
+                        &format!("Cannot negate the value of type {}", value.get_type()),
+                        span,
+                    ),
+                })));
             },
 
             While => unsafe {
@@ -1226,7 +1190,9 @@ impl VM {
                     self.runtime_error("Expected a loop end instruction pointer", span)
                 });
 
-                let condition = self.stack.pop().unwrap().as_ref().bool_eval();
+                let condition = memory::release(self.stack.pop().unwrap())
+                    .as_ref()
+                    .bool_eval();
 
                 if !condition {
                     self.pc = *loop_end;
@@ -1240,7 +1206,9 @@ impl VM {
                 ran_once,
                 var_ptr,
             } => unsafe {
-                let array = self.stack.pop().unwrap().as_ref().as_array();
+                let array = memory::release(self.stack.pop().unwrap())
+                    .as_ref()
+                    .as_array();
 
                 if *ran_once {
                     *index += 1;
@@ -1298,7 +1266,7 @@ impl VM {
                 self.push_call_stack(fn_obj.instruction_range.start, *scope_idx, variables);
 
                 if !returns {
-                    self.stack.push(allocate(Value::Nil));
+                    self.stack.push(memory::retain(allocate(Value::Nil)));
                 }
             },
 
@@ -1310,19 +1278,25 @@ impl VM {
 
                 (0..items).for_each(|_| {
                     let mut placeholder = Value::Nil;
-                    std::mem::swap(&mut placeholder, self.stack.pop().unwrap().as_mut());
+                    std::mem::swap(
+                        &mut placeholder,
+                        memory::release(self.stack.pop().unwrap()).as_mut(),
+                    );
                     array.push(placeholder);
                 });
                 array.reverse();
 
-                self.stack.push(allocate(Value::Array(array)));
+                self.stack
+                    .push(memory::retain(allocate(Value::Array(array))));
             },
 
             Index => unsafe {
-                let index = self.stack.pop().unwrap().as_ref().as_int();
-                let array = self.stack.pop().unwrap().as_ref().as_array();
+                let index = memory::release(self.stack.pop().unwrap()).as_ref().as_int();
+                let array = memory::release(self.stack.pop().unwrap())
+                    .as_ref()
+                    .as_array();
 
-                self.stack.push(allocate(
+                self.stack.push(memory::retain(allocate(
                     match array.get(index.to_usize().unwrap()) {
                         Some(e) => e,
                         None => self.runtime_error(
@@ -1334,20 +1308,18 @@ impl VM {
                         ),
                     }
                     .clone(),
-                ));
+                )));
             },
 
             SetIndex => unsafe {
-                let value = self.stack.pop().unwrap().as_ref();
-                let index_usize = self
-                    .stack
-                    .pop()
-                    .unwrap()
+                let value = memory::release(self.stack.pop().unwrap()).as_ref();
+                let index_usize = memory::release(self.stack.pop().unwrap())
                     .as_ref()
                     .as_int()
                     .to_usize()
                     .unwrap();
-                match self.stack.pop().unwrap().as_mut() {
+
+                match memory::release(self.stack.pop().unwrap()).as_mut() {
                     Value::Array(arr) => {
                         arr[index_usize] = value.clone();
                     }
@@ -1391,7 +1363,7 @@ impl VM {
             }),
 
             Inc => unsafe {
-                let value = self.stack.pop().unwrap().as_mut();
+                let value = memory::release(self.stack.pop().unwrap()).as_mut();
 
                 match value {
                     Value::Int(i) => *i += 1,
@@ -1405,7 +1377,7 @@ impl VM {
             },
 
             Dec => unsafe {
-                let value = self.stack.pop().unwrap().as_mut();
+                let value = memory::release(self.stack.pop().unwrap()).as_mut();
 
                 match value {
                     Value::Int(i) => *i -= 1,
@@ -1423,23 +1395,21 @@ impl VM {
             },
 
             Factorial => unsafe {
-                let val = self.stack.pop().unwrap().as_ref();
-                self.stack
-                    .push(NonNull::new_unchecked(alloc_new_value(match val {
-                        Value::Int(i) => {
-                            Value::Int(Integer::factorial(i.saturating_cast()).complete())
-                        }
-                        Value::Float(f) => Value::Float(
-                            Float::factorial(f.to_u32_saturating().unwrap()).complete(53),
+                let val = memory::release(self.stack.pop().unwrap()).as_ref();
+                self.stack.push(memory::retain(allocate(match val {
+                    Value::Int(i) => Value::Int(Integer::factorial(i.saturating_cast()).complete()),
+                    Value::Float(f) => {
+                        Value::Float(Float::factorial(f.to_u32_saturating().unwrap()).complete(53))
+                    }
+
+                    _ => self.runtime_error(
+                        &format!(
+                            "Cannot perform factorial on value of type {:?}",
+                            val.get_type()
                         ),
-                        _ => self.runtime_error(
-                            &format!(
-                                "Cannot perform factorial on value of type {:?}",
-                                val.get_type()
-                            ),
-                            span,
-                        ),
-                    })));
+                        span,
+                    ),
+                })));
             },
 
             Jmp => {
@@ -1470,7 +1440,9 @@ impl VM {
 
             TernaryStart => unsafe {
                 let ternary_else_start = args[0];
-                let condition = self.stack.pop().unwrap().as_ref().bool_eval();
+                let condition = memory::release(self.stack.pop().unwrap())
+                    .as_ref()
+                    .bool_eval();
 
                 if !condition {
                     self.pc = ternary_else_start;
@@ -1494,18 +1466,19 @@ impl VM {
                 ..
             }) => match name.as_str() {
                 "push" if in_built => unsafe {
-                    let src = self.stack.pop().unwrap();
-                    retain(src);
-                    let dest = self.stack.pop().unwrap().as_mut();
+                    let src = memory::release(self.stack.pop().unwrap());
+                    memory::retain(src);
+                    let dest = memory::release(self.stack.pop().unwrap()).as_mut();
 
                     self.check_type(&name, on_types, dest, span);
 
                     *dest = dest.binary_add(src.as_ref()).unwrap();
-                    self.stack.push(NonNull::new_unchecked(dest as *mut Value));
+                    self.stack
+                        .push(memory::retain(NonNull::new_unchecked(dest as *mut Value)));
                 },
 
                 "pop" if in_built => unsafe {
-                    let dest = self.stack.pop().unwrap().as_mut();
+                    let dest = memory::release(self.stack.pop().unwrap()).as_mut();
 
                     self.check_type(&name, on_types, dest, span.clone());
 
@@ -1517,11 +1490,11 @@ impl VM {
                         self.runtime_error("Cannot pop empty array", span);
                     };
 
-                    self.stack.push(allocate(val));
+                    self.stack.push(memory::retain(allocate(val)));
                 },
 
                 "clear" if in_built => unsafe {
-                    let var = self.stack.pop().unwrap().as_mut();
+                    let var = memory::release(self.stack.pop().unwrap()).as_mut();
 
                     self.check_type(&name, on_types, var, span);
 
@@ -1531,8 +1504,8 @@ impl VM {
                 },
 
                 "join" if in_built => unsafe {
-                    let separator = self.stack.pop().unwrap().as_ref();
-                    let dest = self.stack.pop().unwrap().as_ref();
+                    let separator = memory::release(self.stack.pop().unwrap()).as_ref();
+                    let dest = memory::release(self.stack.pop().unwrap()).as_ref();
 
                     self.check_type(&name, on_types, dest, span.clone());
 
@@ -1554,12 +1527,13 @@ impl VM {
                             ),
                         });
 
-                    self.stack.push(allocate(result_string.into()));
+                    self.stack
+                        .push(memory::retain(allocate(result_string.into())));
                 },
 
                 "split" if in_built => unsafe {
-                    let split = self.stack.pop().unwrap().as_ref();
-                    let val = self.stack.pop().unwrap().as_ref();
+                    let split = memory::release(self.stack.pop().unwrap()).as_ref();
+                    let val = memory::release(self.stack.pop().unwrap()).as_ref();
                     let empty = String::new();
                     let (val_str, split_str) = match (val, split) {
                         (Value::String(val_str), Value::String(split_str)) => (val_str, split_str),
@@ -1585,25 +1559,26 @@ impl VM {
                             .collect::<Vec<Value>>()
                     };
 
-                    self.stack.push(allocate(Value::Array(split)));
+                    self.stack
+                        .push(memory::retain(allocate(Value::Array(split))));
                 },
 
                 // File methods
                 "r" if in_built => unsafe {
-                    let val = self.stack.pop().unwrap().as_ref();
+                    let val = memory::release(self.stack.pop().unwrap()).as_ref();
                     self.check_type(&name, on_types, val, span.clone());
-                    self.stack.push(allocate(Value::String(
+                    self.stack.push(memory::retain(allocate(Value::String(
                         fs::read_to_string(val.to_string()).unwrap_or_else(|e| {
                             self.runtime_error(
                                 &format!("Failed to read '{}': {}", val.to_string(), e.kind()),
                                 span.clone(),
                             );
                         }),
-                    )));
+                    ))));
                 },
                 "w" if in_built => unsafe {
-                    let content = self.stack.pop().unwrap().as_ref();
-                    let val = self.stack.pop().unwrap().as_ref();
+                    let content = memory::release(self.stack.pop().unwrap()).as_ref();
+                    let val = memory::release(self.stack.pop().unwrap()).as_ref();
                     self.check_type(&name, on_types, val, span.clone());
                     fs::write(val.to_string(), content.to_string()).unwrap_or_else(|e| {
                         self.runtime_error(
@@ -1613,8 +1588,8 @@ impl VM {
                     });
                 },
                 "a" if in_built => unsafe {
-                    let content = self.stack.pop().unwrap().as_ref();
-                    let val = self.stack.pop().unwrap().as_ref();
+                    let content = memory::release(self.stack.pop().unwrap()).as_ref();
+                    let val = memory::release(self.stack.pop().unwrap()).as_ref();
                     self.check_type(&name, on_types, val, span.clone());
                     let mut file = OpenOptions::new()
                         .write(true)
@@ -1637,7 +1612,7 @@ impl VM {
                 },
 
                 _ => unsafe {
-                    let object = self.stack.pop().unwrap();
+                    let object = memory::release(self.stack.pop().unwrap());
                     let object_type = Type::try_from(object.as_ref().get_type()).unwrap();
 
                     let Some(fn_obj) = self.impl_methods.get(&(name.clone(), object_type)) else {
@@ -1687,14 +1662,9 @@ impl VM {
             Print => unsafe {
                 print!(
                     "{}",
-                    match self
-                        .stack
-                        .pop()
-                        .unwrap_or_else(|| allocate(Value::Nil))
+                    memory::release(self.stack.pop().unwrap())
                         .as_ref()
-                    {
-                        v => format!("{v}"),
-                    }
+                        .to_string()
                 );
 
                 if let Err(e) = stdout().flush() {
@@ -1717,12 +1687,16 @@ impl VM {
             },
 
             Len => unsafe {
-                let len = self.stack.pop().unwrap().as_ref().as_array().len();
-                self.stack.push(allocate(Value::Int(len.into())));
+                let len = memory::release(self.stack.pop().unwrap())
+                    .as_ref()
+                    .as_array()
+                    .len();
+                self.stack
+                    .push(memory::retain(allocate(Value::Int(len.into()))));
             },
 
             Input => unsafe {
-                let prompt = self.stack.pop().unwrap().as_ref();
+                let prompt = memory::release(self.stack.pop().unwrap()).as_ref();
 
                 match prompt {
                     Value::Nil => {}
@@ -1745,55 +1719,65 @@ impl VM {
                 if let Some('\r') = s.chars().next_back() {
                     s.pop();
                 }
-                self.stack.push(allocate(Value::String(s)));
+                self.stack.push(memory::retain(allocate(Value::String(s))));
             },
 
             ToInt => unsafe {
-                let val = self.stack.pop().unwrap().as_ref();
-                self.stack.push(allocate(Value::Int(match val {
-                    Value::Int(i) => i.clone(),
-                    Value::Float(f) => f.to_integer().unwrap(),
-                    Value::Bool(b) => Integer::from(*b as i32),
-                    Value::String(s) => match Integer::parse(s) {
-                        Ok(i) => i.complete(),
-                        Err(e) => {
-                            self.runtime_error(
-                                &format!("cannot parse the string to int value, {}", e),
-                                span,
-                            );
-                        }
-                    },
+                let val = memory::release(self.stack.pop().unwrap()).as_ref();
+                self.stack
+                    .push(memory::retain(allocate(Value::Int(match val {
+                        Value::Int(i) => i.clone(),
+                        Value::Float(f) => f.to_integer().unwrap(),
+                        Value::Bool(b) => Integer::from(*b as i32),
+                        Value::String(s) => match Integer::parse(s) {
+                            Ok(i) => i.complete(),
+                            Err(e) => {
+                                self.runtime_error(
+                                    &format!("cannot parse the string to int value, {}", e),
+                                    span,
+                                );
+                            }
+                        },
 
-                    Value::Nil => Integer::new(),
-                    Value::Array(_) => self.runtime_error("cannot convert array type to int", span),
-                    Value::File(_) => self.runtime_error("cannot convert file type to int", span),
-                })));
+                        Value::Nil => Integer::new(),
+                        Value::Array(_) => {
+                            self.runtime_error("cannot convert array type to int", span)
+                        }
+                        Value::File(_) => {
+                            self.runtime_error("cannot convert file type to int", span)
+                        }
+                    }))));
             },
 
             ToFloat => unsafe {
-                let val = self.stack.pop().unwrap().as_ref();
-                self.stack.push(allocate(Value::Float(match val {
-                    Value::Int(i) => float!(i),
-                    Value::Float(f) => f.clone(),
-                    Value::Bool(b) => float!(*b as i32),
-                    Value::String(s) => match Float::parse(s) {
-                        Ok(i) => i.complete(53),
-                        Err(e) => {
-                            self.runtime_error(
-                                &format!("cannot parse the string to float value, {}", e),
-                                span,
-                            );
-                        }
-                    },
+                let val = memory::release(self.stack.pop().unwrap()).as_ref();
+                self.stack
+                    .push(memory::retain(allocate(Value::Float(match val {
+                        Value::Int(i) => float!(i),
+                        Value::Float(f) => f.clone(),
+                        Value::Bool(b) => float!(*b as i32),
+                        Value::String(s) => match Float::parse(s) {
+                            Ok(i) => i.complete(53),
+                            Err(e) => {
+                                self.runtime_error(
+                                    &format!("cannot parse the string to float value, {}", e),
+                                    span,
+                                );
+                            }
+                        },
 
-                    Value::Nil => Float::new(53),
-                    Value::Array(_) => {
-                        self.runtime_error("cannot convert array type to float", span)
-                    }
-                    Value::File(_) => self.runtime_error("cannot convert file type to float", span),
-                })));
+                        Value::Nil => Float::new(53),
+                        Value::Array(_) => {
+                            self.runtime_error("cannot convert array type to float", span)
+                        }
+                        Value::File(_) => {
+                            self.runtime_error("cannot convert file type to float", span)
+                        }
+                    }))));
             },
         }
+
+        memory::free_marked();
 
         self.pc += 1;
         self.iteration += 1;
@@ -1822,20 +1806,23 @@ impl VM {
         F: FnOnce(&Value, &Value) -> Option<Value>,
     {
         unsafe {
-            let b = self
-                .stack
-                .pop()
-                .unwrap_or_else(|| self.runtime_error("Stack underflow", span.clone()))
-                .as_ref();
-            let a = self
-                .stack
-                .pop()
-                .unwrap_or_else(|| self.runtime_error("Stack underflow", span.clone()))
-                .as_ref();
+            let b = memory::release(
+                self.stack
+                    .pop()
+                    .unwrap_or_else(|| self.runtime_error("Stack underflow", span.clone())),
+            )
+            .as_ref();
+
+            let a = memory::release(
+                self.stack
+                    .pop()
+                    .unwrap_or_else(|| self.runtime_error("Stack underflow", span.clone())),
+            )
+            .as_ref();
 
             let result = compare_fn(a, b);
             match result {
-                Some(r) => self.stack.push(NonNull::new_unchecked(alloc_new_value(r))),
+                Some(r) => self.stack.push(memory::retain(allocate(r))),
                 None => self.runtime_error(
                     format!(
                         "Cannot compare values of type {:?} and {:?}",
@@ -1854,19 +1841,22 @@ impl VM {
         F: FnOnce(&Self, &Value, &Value) -> Option<Value>,
     {
         unsafe {
-            let b = self
-                .stack
-                .pop()
-                .unwrap_or_else(|| self.runtime_error("Stack underflow", span.clone()))
-                .as_ref();
-            let a = self
-                .stack
-                .pop()
-                .unwrap_or_else(|| self.runtime_error("Stack underflow", span.clone()))
-                .as_ref();
+            let b = memory::release(
+                self.stack
+                    .pop()
+                    .unwrap_or_else(|| self.runtime_error("Stack underflow", span.clone())),
+            )
+            .as_ref();
+
+            let a = memory::release(
+                self.stack
+                    .pop()
+                    .unwrap_or_else(|| self.runtime_error("Stack underflow", span.clone())),
+            )
+            .as_ref();
 
             match binary_op(self, a, b) {
-                Some(r) => self.stack.push(NonNull::new_unchecked(alloc_new_value(r))),
+                Some(r) => self.stack.push(memory::retain(allocate(r))),
                 None => self.runtime_error(
                     format!(
                         "Cannot perform {op} operation on values of type {:?} and {:?}",
@@ -1885,28 +1875,21 @@ impl VM {
         F: FnOnce(&Self, &Value, &Value) -> Option<Value>,
     {
         unsafe {
-            let b = self
-                .stack
-                .pop()
-                .unwrap_or_else(|| {
-                    self.runtime_error(
-                        format!("Stack underflow while performing {op} operation", op = op)
-                            .as_str(),
-                        span.clone(),
-                    )
-                })
-                .as_ref();
-            let a = self
-                .stack
-                .pop()
-                .unwrap_or_else(|| {
-                    self.runtime_error(
-                        format!("Stack underflow while performing {op} operation", op = op)
-                            .as_str(),
-                        span.clone(),
-                    )
-                })
-                .as_mut();
+            let b = memory::release(self.stack.pop().unwrap_or_else(|| {
+                self.runtime_error(
+                    format!("Stack underflow while performing {op} operation", op = op).as_str(),
+                    span.clone(),
+                )
+            }))
+            .as_ref();
+
+            let a = memory::release(self.stack.pop().unwrap_or_else(|| {
+                self.runtime_error(
+                    format!("Stack underflow while performing {op} operation", op = op).as_str(),
+                    span.clone(),
+                )
+            }))
+            .as_mut();
 
             let result = binary_op(self, a, b);
 
@@ -1967,6 +1950,18 @@ impl VM {
         if previous_stack_len < self.stack.len().saturating_sub(1) {
             while previous_stack_len < self.stack.len() - 1 {
                 self.stack.remove(self.stack.len() - 2);
+            }
+        }
+
+        for (_, value) in self.variables[scope_idx].iter() {
+            if let &Some(value) = value {
+                // println!(
+                //     "ref count of: `{}` is: {}",
+                //     unsafe { value.as_ref() },
+                //     memory::refcount_of(value)
+                // );
+
+                memory::release(value);
             }
         }
 

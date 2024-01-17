@@ -1,4 +1,7 @@
-use std::{collections::HashMap, ptr::NonNull, sync::Mutex};
+use std::collections::HashMap;
+use std::collections::HashSet;
+use std::ptr::NonNull;
+use std::sync::Mutex;
 
 use lazy_static::lazy_static;
 
@@ -6,10 +9,10 @@ use super::value::Value;
 
 lazy_static! {
     pub static ref ALL_ALLOCATIONS: Mutex<HashMap<usize, usize>> = Mutex::new(HashMap::new());
+    pub static ref FREE_BUFFER: Mutex<HashSet<usize>> = Mutex::new(HashSet::new());
 }
 
-pub fn alloc_value_ptr() -> *mut Value {
-    // let ptr = unsafe { alloc(LAYOUT) as *mut Value };
+fn alloc_value_ptr() -> *mut Value {
     let ptr = Box::leak(Box::new(Value::Nil));
 
     ALL_ALLOCATIONS
@@ -22,32 +25,64 @@ pub fn alloc_value_ptr() -> *mut Value {
 
 pub fn alloc_new_value(val: Value) -> *mut Value {
     let ptr = alloc_value_ptr();
-    unsafe {
-        *ptr = val;
-    }
+    unsafe { *ptr = val };
     ptr
 }
+
 pub fn memory_current() -> usize {
     ALL_ALLOCATIONS.lock().unwrap().len()
 }
+
 pub fn retain(node: NonNull<Value>) -> NonNull<Value> {
     let mut all_allocations = ALL_ALLOCATIONS.lock().unwrap();
-    *all_allocations.entry(node.as_ptr() as usize).or_insert(0) += 1;
-    println!("{:?}", all_allocations);
+
+    let entry = if let Some(ptr) = all_allocations.get_mut(&(node.as_ptr() as usize)) {
+        ptr
+    } else if FREE_BUFFER
+        .lock()
+        .unwrap()
+        .remove(&(node.as_ptr() as usize))
+    {
+        all_allocations.entry(node.as_ptr() as usize).or_insert(0)
+    } else {
+        return node;
+    };
+
+    *entry += 1;
+
     node
 }
 
+/// Decrease the reference count of the pointer
+///
+/// If the reference count becomes 0, the pointer
+/// will be marked for deallocation, but will not be
+/// deallocated before calling `free_marked`
 pub fn release(node: NonNull<Value>) -> NonNull<Value> {
     let mut all_allocations = ALL_ALLOCATIONS.lock().unwrap();
     let p = node.as_ptr();
     let entry = all_allocations.entry(p as usize).or_insert(1);
-    *entry -= 1;
-    dbg!("Releasing Value: ", unsafe { node.as_ref() });
+
+    *entry = entry.saturating_sub(1);
+
     if *entry == 0 {
+        // println!("marked Value: {}", unsafe { &*p });
         all_allocations.remove(&(p as usize));
-        dealloc(p)
+        FREE_BUFFER.lock().unwrap().insert(p as usize);
     }
+
     node
+}
+
+pub fn free_marked() {
+    let v = std::mem::take(&mut *FREE_BUFFER.lock().unwrap());
+
+    for ptr in v.into_iter() {
+        let ptr = ptr as *mut Value;
+        // println!("Releasing Value: {}", unsafe { &*ptr });
+
+        dealloc(ptr);
+    }
 }
 
 pub fn release_scope(start: usize) {
@@ -61,13 +96,22 @@ pub fn release_scope(start: usize) {
     }
 }
 
+pub fn refcount_of(ptr: NonNull<Value>) -> usize {
+    *ALL_ALLOCATIONS
+        .lock()
+        .unwrap()
+        .get(&(ptr.as_ptr() as usize))
+        .unwrap()
+}
+
 pub fn deallocate_all() {
-    for (ptr, _) in ALL_ALLOCATIONS.lock().unwrap().iter() {
+    for (ptr, _ref_count) in ALL_ALLOCATIONS.lock().unwrap().iter() {
         let ptr: *mut Value = *ptr as *mut usize as _;
-        drop(unsafe { Box::from_raw(ptr) });
+        dealloc(ptr);
     }
 }
 
-pub fn dealloc(ptr: *mut Value) {
+#[inline(always)]
+fn dealloc(ptr: *mut Value) {
     drop(unsafe { Box::from_raw(ptr) });
 }

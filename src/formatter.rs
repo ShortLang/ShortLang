@@ -238,7 +238,7 @@ impl Formatter {
                 write!(self.buffer, "]")?;
             }
 
-            ExprKind::Binary(lhs, op, rhs) => {
+            ExprKind::Binary(_lhs, _op, _rhs) => {
                 // group![self.buffer, lhs.inner, {
                 //     self.format_internal(&lhs.inner)?
                 // }];
