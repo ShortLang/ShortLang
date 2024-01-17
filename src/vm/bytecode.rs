@@ -84,10 +84,7 @@ pub enum Bytecode {
         ran_once: *mut bool,
         var_ptr: usize,
     },
-    Pop,
-    Push,
     MakeConst, // pop the last constant and make it
-    Dup,
     Sqrt,
     Gcd,
     Lcm,
