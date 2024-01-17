@@ -61,12 +61,17 @@ pub fn retain(node: NonNull<Value>) -> NonNull<Value> {
 pub fn release(node: NonNull<Value>) -> NonNull<Value> {
     let mut all_allocations = ALL_ALLOCATIONS.lock().unwrap();
     let p = node.as_ptr();
-    let entry = all_allocations.entry(p as usize).or_insert(1);
 
-    *entry = entry.saturating_sub(1);
+    let refcount = all_allocations.get_mut(&(p as usize));
 
-    if *entry == 0 {
-        // println!("marked Value: {}", unsafe { &*p });
+    if refcount.is_none() {
+        return node;
+    }
+
+    let refcount = refcount.unwrap();
+    *refcount = refcount.saturating_sub(1);
+
+    if *refcount == 0 {
         all_allocations.remove(&(p as usize));
         FREE_BUFFER.lock().unwrap().insert(p as usize);
     }
@@ -79,7 +84,6 @@ pub fn free_marked() {
 
     for ptr in v.into_iter() {
         let ptr = ptr as *mut Value;
-        // println!("Releasing Value: {}", unsafe { &*ptr });
 
         dealloc(ptr);
     }
@@ -96,12 +100,13 @@ pub fn release_scope(start: usize) {
     }
 }
 
-pub fn refcount_of(ptr: NonNull<Value>) -> usize {
-    *ALL_ALLOCATIONS
+pub fn refcount_of(ptr: NonNull<Value>) -> isize {
+    ALL_ALLOCATIONS
         .lock()
         .unwrap()
         .get(&(ptr.as_ptr() as usize))
-        .unwrap()
+        .map(|i| *i as isize)
+        .unwrap_or(-1)
 }
 
 pub fn deallocate_all() {

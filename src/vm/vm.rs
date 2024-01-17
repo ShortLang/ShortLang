@@ -409,6 +409,8 @@ impl VM {
                 let scope_idx = self.variables.len();
                 self.variables.push(scope);
 
+                self.variables.push(HashMap::new());
+
                 let jmp_instr_ptr = self.instructions.len();
                 self.instructions.push((Instr(Jmp, vec![]), expr.span));
 
@@ -1146,7 +1148,7 @@ impl VM {
                     .last_mut()
                     .unwrap()
                     .insert(args[0] as u32, Some(NonNull::from(value)));
-            },
+            }
 
             GetVar => {
                 let id = args[0];
@@ -1250,7 +1252,9 @@ impl VM {
                 } = fn_obj_option.unwrap();
 
                 let mut fn_args = (0..parameters.len())
-                    .map(|_| self.stack.pop().unwrap_or_else(|| allocate(Value::Nil)))
+                    .map(|_| {
+                        memory::retain(self.stack.pop().unwrap_or_else(|| allocate(Value::Nil)))
+                    })
                     .collect::<Vec<_>>();
 
                 fn_args.reverse();
@@ -1949,18 +1953,12 @@ impl VM {
         // stack except the return value
         if previous_stack_len < self.stack.len().saturating_sub(1) {
             while previous_stack_len < self.stack.len() - 1 {
-                self.stack.remove(self.stack.len() - 2);
+                memory::release(self.stack.remove(self.stack.len() - 2));
             }
         }
 
         for (_, value) in self.variables[scope_idx].iter() {
             if let &Some(value) = value {
-                // println!(
-                //     "ref count of: `{}` is: {}",
-                //     unsafe { value.as_ref() },
-                //     memory::refcount_of(value)
-                // );
-
                 memory::release(value);
             }
         }
