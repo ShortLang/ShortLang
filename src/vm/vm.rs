@@ -709,16 +709,11 @@ impl VM {
                 }
             }
 
-            ExprKind::SetIndex(index, value) => {
-                if let ExprKind::Index(array, index) = index.inner {
-                    self.compile_expr(*array);
-                    self.compile_expr(*index);
-                    self.compile_expr(*value);
-                    self.instructions.push((Instr(SetIndex, vec![]), expr.span));
-                } else {
-                    self.runtime_error("Expected an index", expr.span);
-                }
-            }
+            ExprKind::SetIndex(index, value) => self.compile_idx(index, value, SetIndex, expr.span),
+            ExprKind::AddIndex(index, value) => self.compile_idx(index, value, AddIndex, expr.span),
+            ExprKind::SubIndex(index, value) => self.compile_idx(index, value, SubIndex, expr.span),
+            ExprKind::MulIndex(index, value) => self.compile_idx(index, value, MulIndex, expr.span),
+            ExprKind::DivIndex(index, value) => self.compile_idx(index, value, DivIndex, expr.span),
 
             ExprKind::Match(lhs, branches) => {
                 let mut conditionals = branches
@@ -1346,6 +1341,10 @@ impl VM {
                     _ => self.runtime_error("Expected a string or array", span),
                 }
             },
+            AddIndex => self.perform_index_operation(Value::binary_add, span),
+            SubIndex => self.perform_index_operation(Value::binary_sub, span),
+            MulIndex => self.perform_index_operation(Value::binary_mul, span),
+            DivIndex => self.perform_index_operation(Value::binary_div, span),
 
             Mul => self.perform_bin_op(byte, span, |_, a, b| a.binary_mul(b)),
             Mod => self.perform_bin_op(byte, span, |_, a, b| a.binary_mod(b)),
@@ -1912,6 +1911,28 @@ impl VM {
         }
     }
 
+    fn perform_index_operation(
+        &mut self,
+        operation: fn(&Value, &Value) -> Option<Value>,
+        span: Range<usize>,
+    ) {
+        let value = unsafe { memory::release(self.stack.pop().unwrap()).as_ref() };
+        let index_usize = unsafe {
+            memory::release(self.stack.pop().unwrap())
+                .as_ref()
+                .as_int()
+                .to_usize()
+                .unwrap()
+        };
+
+        match unsafe { memory::release(self.stack.pop().unwrap()).as_mut() } {
+            Value::Array(arr) => {
+                arr[index_usize] = operation(&mut arr[index_usize], value).unwrap();
+            }
+            _ => self.runtime_error("Expected an array", span),
+        }
+    }
+
     fn push_call_stack(
         &mut self,
         fn_ptr: usize,
@@ -2038,6 +2059,23 @@ impl VM {
                 })
                 .saturating_cast(),
             _ => self.runtime_error("Expected a number", span),
+        }
+    }
+
+    fn compile_idx(
+        &mut self,
+        index: Box<Expr>,
+        value: Box<Expr>,
+        bytecode: Bytecode,
+        span: Range<usize>,
+    ) {
+        if let ExprKind::Index(array, index) = index.inner {
+            self.compile_expr(*array);
+            self.compile_expr(*index);
+            self.compile_expr(*value);
+            self.instructions.push((Instr(bytecode, vec![]), span));
+        } else {
+            self.runtime_error("Expected an index", span);
         }
     }
 }

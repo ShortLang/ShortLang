@@ -395,7 +395,13 @@ pub enum ExprKind {
 
     Index(Box<Expr>, Box<Expr>),
     Unary(UnaryOp, Box<Expr>),
+
     SetIndex(Box<Expr>, Box<Expr>),
+    AddIndex(Box<Expr>, Box<Expr>),
+    SubIndex(Box<Expr>, Box<Expr>),
+    MulIndex(Box<Expr>, Box<Expr>),
+    DivIndex(Box<Expr>, Box<Expr>),
+
     Nil,
     Error,
     Break,
@@ -719,6 +725,19 @@ impl<'a> PParser<'a> {
             _ => return None,
         })
     }
+    fn index_op(
+        &mut self,
+        lhs: &mut Expr,
+        start: usize,
+        expr_kind: fn(Box<Expr>, Box<Expr>) -> ExprKind,
+    ) {
+        self.proceed();
+        let e = self.expr(0);
+        *lhs = Expr::new(
+            start..self.current.1.end,
+            expr_kind(Box::new(lhs.clone()), Box::new(e)),
+        );
+    }
     fn current(&self) -> &LogosToken {
         &self.current.0
     }
@@ -744,13 +763,13 @@ impl<'a> PParser<'a> {
                     );
                     self.expect(LogosToken::RSquare);
                     self.proceed();
-                    if self.current() == &LogosToken::Eq {
-                        self.proceed();
-                        let e = self.expr(0);
-                        lhs = Expr::new(
-                            start..self.current.1.end,
-                            ExprKind::SetIndex(Box::new(lhs), Box::new(e)),
-                        );
+                    match self.current() {
+                        LogosToken::Eq => self.index_op(&mut lhs, start, ExprKind::SetIndex),
+                        LogosToken::AddEq => self.index_op(&mut lhs, start, ExprKind::AddIndex),
+                        LogosToken::SubEq => self.index_op(&mut lhs, start, ExprKind::SubIndex),
+                        LogosToken::MulEq => self.index_op(&mut lhs, start, ExprKind::MulIndex),
+                        LogosToken::DivEq => self.index_op(&mut lhs, start, ExprKind::DivIndex),
+                        _ => {}
                     }
                     continue;
                 }

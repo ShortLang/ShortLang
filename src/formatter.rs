@@ -443,7 +443,12 @@ impl Formatter {
 
             ExprKind::Index(lhs, index) => {
                 self.format_internal(&lhs.inner)?;
-                wrap!(self.buffer, '[', { self.format_internal(&index.inner)? }, ']');
+                wrap!(
+                    self.buffer,
+                    '[',
+                    { self.format_internal(&index.inner)? },
+                    ']'
+                );
             }
 
             _ => {
