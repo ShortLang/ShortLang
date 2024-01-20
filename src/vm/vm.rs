@@ -1282,14 +1282,14 @@ impl VM {
             },
 
             Index => unsafe {
-                let index = memory::release(self.stack.pop().unwrap()).as_ref().as_int();
+                let mut index = memory::release(self.stack.pop().unwrap()).as_ref().as_int();
                 let array = memory::release(self.stack.pop().unwrap())
                     .as_ref()
                     .as_array();
 
                 self.stack.push(memory::retain(allocate({
                     let len = array.len();
-                    if index >= len {
+                    if index >= len || len == 0 {
                         self.runtime_error(
                             &format!(
                                 "Index out of bounds, size is: {size}, index is: {index}",
@@ -1298,7 +1298,9 @@ impl VM {
                             span,
                         );
                     }
-                    let index = ((index % len) + len) % len;
+                    if index < 0 {
+                        index = ((index % len) + len) % len;
+                    }
                     array[index.to_usize().unwrap()].clone()
                 })));
             },
