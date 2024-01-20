@@ -514,16 +514,8 @@ impl VM {
             }
 
             ExprKind::While(condition, body) => {
-                self.compile_expr(*condition);
-
-                self.constants.push(Value::Nil);
-
-                self.instructions
-                    .push((Instr(MakeConst, vec![self.constants.len() - 1]), 0..0));
-
                 let body_start = self.instructions.len();
-                self.instructions
-                    .push((Instr(LoadConst, vec![self.constants.len() - 1]), 0..0));
+                self.compile_expr(*condition);
 
                 let while_instr_ptr = self.instructions.len();
                 self.instructions
@@ -1295,8 +1287,17 @@ impl VM {
                     .as_ref()
                     .as_array();
 
-                self.stack.push(memory::retain(allocate(
-                    match array.get(index.to_usize().unwrap()) {
+                self.stack.push(memory::retain(allocate({
+                    let mut abs_index = index.clone();
+                    let array = if index.is_negative() {
+                        let mut x = array.into_owned();
+                        abs_index = abs_index.abs() - 1;
+                        x.reverse();
+                        x
+                    } else {
+                        array.into_owned()
+                    };
+                    match array.get(abs_index.to_usize().unwrap()) {
                         Some(e) => e,
                         None => self.runtime_error(
                             &format!(
@@ -1306,8 +1307,8 @@ impl VM {
                             span,
                         ),
                     }
-                    .clone(),
-                )));
+                    .clone()
+                })));
             },
 
             SetIndex => unsafe {
