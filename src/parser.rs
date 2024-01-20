@@ -700,13 +700,12 @@ impl<'a> PParser<'a> {
     fn infix_binding_power(&mut self, op: &LogosToken) -> Option<(u8, u8)> {
         use LogosToken::*;
         Some(match op {
-            Range => (7, 8),
+            Range | LSquare => (7, 8),
             Plus | Minus => (10, 11),
             Times | Slash => (20, 21),
             Percent => (30, 31),
             BinaryPow => (40, 41),
             Pow => (50, 51),
-
             Dot => (62, 63),
 
             Eqq | Neq | Leq | Geq | RAngle | LAngle => (6, 7),
@@ -721,7 +720,7 @@ impl<'a> PParser<'a> {
         use LogosToken::*;
         Some(match op {
             PAdd | PSub => (70, ()),
-            Bang | LSquare => (80, ()),
+            Bang => (80, ()),
             _ => return None,
         })
     }
@@ -755,24 +754,6 @@ impl<'a> PParser<'a> {
                     break;
                 }
                 self.proceed();
-                if op == LogosToken::LSquare {
-                    let index = self.expr(0);
-                    lhs = Expr::new(
-                        start..self.current.1.end,
-                        ExprKind::Index(Box::new(lhs), Box::new(index)),
-                    );
-                    self.expect(LogosToken::RSquare);
-                    self.proceed();
-                    match self.current() {
-                        LogosToken::Eq => self.index_op(&mut lhs, start, ExprKind::SetIndex),
-                        LogosToken::AddEq => self.index_op(&mut lhs, start, ExprKind::AddIndex),
-                        LogosToken::SubEq => self.index_op(&mut lhs, start, ExprKind::SubIndex),
-                        LogosToken::MulEq => self.index_op(&mut lhs, start, ExprKind::MulIndex),
-                        LogosToken::DivEq => self.index_op(&mut lhs, start, ExprKind::DivIndex),
-                        _ => {}
-                    }
-                    continue;
-                }
                 lhs = Expr::new(
                     start..self.current.1.end,
                     ExprKind::Postfix(Box::new(lhs), op.to_postfix_op()),
@@ -798,6 +779,25 @@ impl<'a> PParser<'a> {
                             start..mhs.0.last().unwrap().span.end,
                             ExprKind::Ternary(Box::new(lhs), mhs.0, None),
                         )
+                    }
+                    continue;
+                }
+
+                if op == LogosToken::LSquare {
+                    let index = self.expr(0);
+                    lhs = Expr::new(
+                        start..self.current.1.end,
+                        ExprKind::Index(Box::new(lhs), Box::new(index)),
+                    );
+                    self.expect(LogosToken::RSquare);
+                    self.proceed();
+                    match self.current() {
+                        LogosToken::Eq => self.index_op(&mut lhs, start, ExprKind::SetIndex),
+                        LogosToken::AddEq => self.index_op(&mut lhs, start, ExprKind::AddIndex),
+                        LogosToken::SubEq => self.index_op(&mut lhs, start, ExprKind::SubIndex),
+                        LogosToken::MulEq => self.index_op(&mut lhs, start, ExprKind::MulIndex),
+                        LogosToken::DivEq => self.index_op(&mut lhs, start, ExprKind::DivIndex),
+                        _ => {}
                     }
                     continue;
                 }
