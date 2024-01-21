@@ -36,6 +36,8 @@ pub enum Bytecode {
     TypeOf,
     ToInt,
     ToFloat,
+    ToOrd,
+    ToChar,
 
     // Method functions
     Method(MethodFunction),

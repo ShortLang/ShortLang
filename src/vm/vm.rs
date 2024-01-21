@@ -35,6 +35,8 @@ lazy_static::lazy_static! {
         "int",
         "flt",
         "str",
+        "ord",
+        "chr",
         "inp",
         "len",
         "type",
@@ -458,6 +460,8 @@ impl VM {
                 "int" => compile_call!(self, name, args, ToInt, expr.span),
                 "flt" => compile_call!(self, name, args, ToFloat, expr.span),
                 "str" => compile_call!(self, name, args, ToString, expr.span),
+                "ord" => compile_call!(self, name, args, ToOrd, expr.span),
+                "chr" => compile_call!(self, name, args, ToChar, expr.span),
                 "inp" => compile_call!(self, name, args, Input, expr.span),
                 "len" => compile_call!(self, name, args, Len, expr.span),
                 "type" => compile_call!(self, name, args, TypeOf, expr.span),
@@ -852,6 +856,24 @@ impl VM {
                     .to_string();
 
                 self.stack.push(memory::retain(allocate(Value::String(s))));
+            },
+
+            ToOrd => unsafe {
+                let s = memory::release(self.stack.pop().unwrap())
+                    .as_ref()
+                    .to_string();
+
+                self.stack
+                    .push(memory::retain(allocate(Value::Int(Integer::from(
+                        s.chars().next().unwrap() as u32,
+                    )))));
+            },
+            ToChar => unsafe {
+                let i = memory::release(self.stack.pop().unwrap()).as_ref().as_int();
+
+                let c = std::char::from_u32(i.saturating_cast()).unwrap_or('\0');
+                self.stack
+                    .push(memory::retain(allocate(Value::String(c.to_string()))));
             },
 
             Sqrt => unsafe {
