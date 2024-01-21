@@ -35,6 +35,8 @@ lazy_static::lazy_static! {
         "int",
         "flt",
         "str",
+        "ord",
+        "chr",
         "inp",
         "len",
         "type",
@@ -458,6 +460,8 @@ impl VM {
                 "int" => compile_call!(self, name, args, ToInt, expr.span),
                 "flt" => compile_call!(self, name, args, ToFloat, expr.span),
                 "str" => compile_call!(self, name, args, ToString, expr.span),
+                "ord" => compile_call!(self, name, args, ToOrd, expr.span),
+                "chr" => compile_call!(self, name, args, ToChar, expr.span),
                 "inp" => compile_call!(self, name, args, Input, expr.span),
                 "len" => compile_call!(self, name, args, Len, expr.span),
                 "type" => compile_call!(self, name, args, TypeOf, expr.span),
@@ -852,6 +856,24 @@ impl VM {
                     .to_string();
 
                 self.stack.push(memory::retain(allocate(Value::String(s))));
+            },
+
+            ToOrd => unsafe {
+                let s = memory::release(self.stack.pop().unwrap())
+                    .as_ref()
+                    .to_string();
+
+                self.stack
+                    .push(memory::retain(allocate(Value::Int(Integer::from(
+                        s.chars().next().unwrap() as u32,
+                    )))));
+            },
+            ToChar => unsafe {
+                let i = memory::release(self.stack.pop().unwrap()).as_ref().as_int();
+
+                let c = std::char::from_u32(i.saturating_cast()).unwrap_or('\0');
+                self.stack
+                    .push(memory::retain(allocate(Value::String(c.to_string()))));
             },
 
             Sqrt => unsafe {
@@ -1282,32 +1304,26 @@ impl VM {
             },
 
             Index => unsafe {
-                let index = memory::release(self.stack.pop().unwrap()).as_ref().as_int();
+                let mut index = memory::release(self.stack.pop().unwrap()).as_ref().as_int();
                 let array = memory::release(self.stack.pop().unwrap())
                     .as_ref()
                     .as_array();
 
                 self.stack.push(memory::retain(allocate({
-                    let mut abs_index = index.clone();
-                    let array = if index.is_negative() {
-                        let mut x = array.into_owned();
-                        abs_index = abs_index.abs() - 1;
-                        x.reverse();
-                        x
-                    } else {
-                        array.into_owned()
-                    };
-                    match array.get(abs_index.to_usize().unwrap()) {
-                        Some(e) => e,
-                        None => self.runtime_error(
+                    let len = array.len();
+                    if index >= len || len == 0 {
+                        self.runtime_error(
                             &format!(
                                 "Index out of bounds, size is: {size}, index is: {index}",
-                                size = array.len()
+                                size = len
                             ),
                             span,
-                        ),
+                        );
                     }
-                    .clone()
+                    if index < 0 {
+                        index = ((index % len) + len) % len;
+                    }
+                    array[index.to_usize().unwrap()].clone()
                 })));
             },
 
