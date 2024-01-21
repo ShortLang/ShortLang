@@ -48,8 +48,6 @@ pub enum LogosToken<'a> {
     Comma,
     #[token(":")]
     Colon,
-    #[token("::")]
-    FourDots,
     #[token("=")]
     Eq,
     #[token("!")]
@@ -140,7 +138,6 @@ impl<'a> fmt::Display for LogosToken<'a> {
             LogosToken::Nil => write!(f, "nil"),
             LogosToken::Inf => write!(f, "inf"),
             LogosToken::Percent => write!(f, "%"),
-            LogosToken::FourDots => write!(f, "::"),
             LogosToken::Bang => write!(f, "!"),
             LogosToken::String(_) => write!(f, "string"),
             LogosToken::FString(_) => write!(f, "fstring"),
@@ -394,6 +391,13 @@ pub enum ExprKind {
     Match(Box<Expr>, Vec<(Expr, Vec<Expr>)>),
 
     Index(Box<Expr>, Box<Expr>),
+    Slice(
+        Box<Expr>,
+        Option<Box<Expr>>,
+        Option<Box<Expr>>,
+        Option<Box<Expr>>,
+    ),
+
     Unary(UnaryOp, Box<Expr>),
 
     SetIndex(Box<Expr>, Box<Expr>),
@@ -583,7 +587,9 @@ impl<'a> PParser<'a> {
                     }
                     let current = self.current.0.clone();
                     let val = if let LogosToken::Ident(first) = current {
-                        if self.peek(0) == Some(LogosToken::FourDots) {
+                        if self.peek(0) == Some(LogosToken::Colon)
+                            && self.peek(1) == Some(LogosToken::Colon)
+                        {
                             let start = self.current.1.start.clone();
                             self.proceed();
                             self.proceed();
@@ -784,11 +790,63 @@ impl<'a> PParser<'a> {
                 }
 
                 if op == LogosToken::LSquare {
-                    let index = self.expr(0);
-                    lhs = Expr::new(
-                        start..self.current.1.end,
-                        ExprKind::Index(Box::new(lhs), Box::new(index)),
-                    );
+                    let mut parts: Vec<Option<Expr>> = Vec::new();
+                    while self.current() != &LogosToken::LSquare || parts.len() < 3 {
+                        match self.current() {
+                            &LogosToken::Colon => {
+                                if parts.last() == None {
+                                    parts.push(None)
+                                }
+                                self.proceed();
+                                if self.current() == &LogosToken::Colon {
+                                    parts.push(None);
+                                    self.proceed();
+                                    continue;
+                                }
+                                if self.current() == &LogosToken::RSquare {
+                                    continue;
+                                }
+                                parts.push(Some(self.expr(0)))
+                            }
+                            &LogosToken::RSquare => {
+                                while parts.len() < 3 {
+                                    parts.push(None)
+                                }
+                                break;
+                            }
+                            _ => {
+                                let expr = self.expr(0);
+                                parts.push(Some(expr));
+                            }
+                        }
+                    }
+                    let index = parts[0].clone();
+                    let index_end = parts[1].clone();
+                    let step = parts[2].clone();
+                    if parts.len() > 3 {
+                        self.report_error(
+                            start..self.current.1.end,
+                            "Slice took more than 3 parts".into(),
+                            "Slice took more than 3 parts".into(),
+                            None,
+                        );
+                    }
+                    if index.is_some() && index_end.is_none() && step.is_none() {
+                        lhs = Expr::new(
+                            start..self.current.1.end,
+                            ExprKind::Index(Box::new(lhs), Box::new(index.unwrap())),
+                        );
+                    } else {
+                        lhs = Expr::new(
+                            start..self.current.1.end,
+                            ExprKind::Slice(
+                                Box::new(lhs),
+                                index.map(|x| Box::new(x)),
+                                index_end.map(|x| Box::new(x)),
+                                step.map(|x| Box::new(x)),
+                            ),
+                        )
+                    }
                     self.expect(LogosToken::RSquare);
                     self.proceed();
                     match self.current() {
