@@ -853,49 +853,6 @@ impl VM {
                     .push(memory::retain(allocate(Value::String(v.join("")))));
             },
 
-            Range => unsafe {
-                let end = memory::release(self.stack.pop().unwrap()).as_ref();
-                let start = self
-                    .stack
-                    .pop()
-                    .unwrap_or_else(|| allocate(Value::Int(Integer::new())))
-                    .as_ref();
-                match (start, end) {
-                    (Value::Int(start), Value::Int(end)) => {
-                        let start_value: i64 = start.saturating_cast();
-                        let end_value: i64 = end.saturating_cast();
-                        let mut array = vec![];
-                        if start_value > end_value {
-                            for i in (end_value + 1..=start_value).rev() {
-                                array.push(Value::Int(Integer::from(i)));
-                            }
-                        } else {
-                            for i in start_value..end_value {
-                                array.push(Value::Int(Integer::from(i)));
-                            }
-                        }
-                        self.stack
-                            .push(memory::retain(allocate(Value::Array(array))));
-                    }
-                    (Value::Nil, Value::Int(end)) => {
-                        let end_value: i64 = end.saturating_cast();
-                        let mut array = vec![];
-                        if 0 > end_value {
-                            for i in (end_value + 1..=0).rev() {
-                                array.push(Value::Int(Integer::from(i)));
-                            }
-                        } else {
-                            for i in 0..end_value {
-                                array.push(Value::Int(Integer::from(i)));
-                            }
-                        }
-                        self.stack
-                            .push(memory::retain(allocate(Value::Array(array))));
-                    }
-                    _ => self.runtime_error("Expected an integer", span),
-                }
-            },
-
             MakeVar => {
                 self.variables
                     .last_mut()
@@ -1301,6 +1258,7 @@ impl VM {
 
                     self.stack.push(memory::retain(allocate(Value::String(s))));
                 },
+
                 "ord" => unsafe {
                     let s = memory::release(self.stack.pop().unwrap())
                         .as_ref()
@@ -1311,7 +1269,6 @@ impl VM {
                             s.chars().next().unwrap() as u32,
                         )))));
                 },
-
                 "chr" => unsafe {
                     let i = memory::release(self.stack.pop().unwrap()).as_ref().as_int();
 
@@ -1516,6 +1473,49 @@ impl VM {
                         }
 
                         _ => self.runtime_error("Expected a number", span),
+                    }
+                },
+
+                "rng" => unsafe {
+                    let end = memory::release(self.stack.pop().unwrap()).as_ref();
+                    let start = self
+                        .stack
+                        .pop()
+                        .unwrap_or_else(|| allocate(Value::Int(Integer::new())))
+                        .as_ref();
+                    match (start, end) {
+                        (Value::Int(start), Value::Int(end)) => {
+                            let start_value: i64 = start.saturating_cast();
+                            let end_value: i64 = end.saturating_cast();
+                            let mut array = vec![];
+                            if start_value > end_value {
+                                for i in (end_value + 1..=start_value).rev() {
+                                    array.push(Value::Int(Integer::from(i)));
+                                }
+                            } else {
+                                for i in start_value..end_value {
+                                    array.push(Value::Int(Integer::from(i)));
+                                }
+                            }
+                            self.stack
+                                .push(memory::retain(allocate(Value::Array(array))));
+                        }
+                        (Value::Nil, Value::Int(end)) => {
+                            let end_value: i64 = end.saturating_cast();
+                            let mut array = vec![];
+                            if 0 > end_value {
+                                for i in (end_value + 1..=0).rev() {
+                                    array.push(Value::Int(Integer::from(i)));
+                                }
+                            } else {
+                                for i in 0..end_value {
+                                    array.push(Value::Int(Integer::from(i)));
+                                }
+                            }
+                            self.stack
+                                .push(memory::retain(allocate(Value::Array(array))));
+                        }
+                        _ => self.runtime_error("Expected an integer", span),
                     }
                 },
 
