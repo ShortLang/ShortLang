@@ -107,7 +107,7 @@ pub enum LogosToken<'a> {
     // Constructs
     #[regex(r#""([^"\\]|\\[\s\S])*""#)]
     String(&'a str),
-    #[regex(r#"f"([^"\\]|\\[\s\S])*""#)]
+    #[regex(r#"f"(([^"\\]|\\[\s\S])|(\{[^}]*\}))*""#)]
     FString(&'a str),
     #[regex(r#"[\p{L}a-zA-Z_][\p{L}\p{N}a-zA-Z0-9_]*"#)]
     Ident(&'a str),
@@ -706,13 +706,13 @@ impl<'a> PParser<'a> {
     fn infix_binding_power(&mut self, op: &LogosToken) -> Option<(u8, u8)> {
         use LogosToken::*;
         Some(match op {
-            Range | LSquare => (7, 8),
+            Range => (7, 8),
             Plus | Minus => (10, 11),
             Times | Slash => (20, 21),
             Percent => (30, 31),
             BinaryPow => (40, 41),
             Pow => (50, 51),
-            Dot => (62, 63),
+            Dot | LSquare => (62, 63),
 
             Eqq | Neq | Leq | Geq | RAngle | LAngle => (6, 7),
             AddEq | SubEq | MulEq | DivEq => (1, 2),
