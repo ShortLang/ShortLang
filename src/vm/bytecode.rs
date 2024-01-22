@@ -29,7 +29,6 @@ pub enum Bytecode {
     Or,
 
     BuiltInFunction(String),
-    TypeOf, // remove this too
 
     // Method functions
     Method(MethodFunction),
@@ -87,7 +86,7 @@ pub enum Bytecode {
     },
     MakeConst, // pop the last constant and make it
     Open,
-    Range, // remove this
+
     // Misc
     ConcatUpTo,
 }

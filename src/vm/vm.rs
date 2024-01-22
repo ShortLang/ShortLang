@@ -350,12 +350,17 @@ impl VM {
                                 }
                             )
                         }
+
                         // properties
                         ExprKind::Ident(name) => match name.as_str() {
                             "type" => {
                                 self.compile_expr(*a);
-                                self.instructions.push((Instr(TypeOf, vec![]), expr.span));
+                                self.instructions.push((
+                                    Instr(BuiltInFunction("type".to_owned()), vec![]),
+                                    expr.span,
+                                ));
                             }
+
                             _ => {}
                         },
 
@@ -366,7 +371,8 @@ impl VM {
                         self.compile_expr(*a);
                         self.compile_expr(*b);
 
-                        self.instructions.push((Instr(Range, vec![]), expr.span));
+                        self.instructions
+                            .push((Instr(BuiltInFunction("rng".to_owned()), vec![]), expr.span));
                     }
                 }
             }
@@ -434,6 +440,7 @@ impl VM {
             ExprKind::Call(ref name, ref args) => inbuilt_fn![self, name, args, expr.span,
                 ["$", 1],
                 ["$$", 1],
+                ["type", 1],
                 ["int", 1],
                 ["flt", 1],
                 ["str", 1],
@@ -812,15 +819,6 @@ impl VM {
             Halt => {
                 return true;
             }
-
-            TypeOf => unsafe {
-                let t = memory::release(self.stack.pop().unwrap())
-                    .as_ref()
-                    .get_type();
-
-                self.stack
-                    .push(memory::retain(allocate(Value::String(t.to_owned()))));
-            },
 
             MakeConst => unsafe {
                 let const_ptr = args[0];
@@ -1634,6 +1632,15 @@ impl VM {
                         .len();
                     self.stack
                         .push(memory::retain(allocate(Value::Int(len.into()))));
+                },
+
+                "type" => unsafe {
+                    let t = memory::release(self.stack.pop().unwrap())
+                        .as_ref()
+                        .get_type();
+
+                    self.stack
+                        .push(memory::retain(allocate(Value::String(t.to_owned()))));
                 },
 
                 "$" => unsafe {
