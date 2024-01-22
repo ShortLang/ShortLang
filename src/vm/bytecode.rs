@@ -28,16 +28,8 @@ pub enum Bytecode {
     And,
     Or,
 
-    // Some built in functions
-    Print,
-    Println,
-    Len,
-    Input,
-    TypeOf,
-    ToInt,
-    ToFloat,
-    ToOrd,
-    ToChar,
+    BuiltInFunction(String),
+    TypeOf, // remove this too
 
     // Method functions
     Method(MethodFunction),
@@ -94,19 +86,8 @@ pub enum Bytecode {
         var_ptr: usize,
     },
     MakeConst, // pop the last constant and make it
-    Sqrt,
-    Gcd,
-    Lcm,
-    Fib,
-    Abs,
-    Round,
-    Floor,
-    Ceil,
-    Rand,
-    Range,
-    ToString,
-    Exit,
     Open,
+    Range, // remove this
     // Misc
     ConcatUpTo,
 }
