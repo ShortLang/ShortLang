@@ -1997,16 +1997,15 @@ impl VM {
         span: Range<usize>,
     ) {
         let value = unsafe { memory::release(self.stack.pop().unwrap()).as_ref() };
-        let index_usize = unsafe {
-            memory::release(self.stack.pop().unwrap())
-                .as_ref()
-                .as_int()
-                .to_usize()
-                .unwrap()
-        };
-
+        let index = unsafe { memory::release(self.stack.pop().unwrap()).as_ref().as_int() };
         match unsafe { memory::release(self.stack.pop().unwrap()).as_mut() } {
             Value::Array(arr) => {
+                let index_usize;
+                if index < 0 {
+                    index_usize = ((index % arr.len() + arr.len()) % arr.len()).to_usize_wrapping();
+                } else {
+                    index_usize = index.to_usize_wrapping();
+                }
                 arr[index_usize] = operation(&mut arr[index_usize], value).unwrap();
             }
             _ => self.runtime_error("Expected an array", span),

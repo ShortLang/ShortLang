@@ -801,12 +801,9 @@ impl<'a> PParser<'a> {
                                 if self.current() == &LogosToken::Colon {
                                     parts.push(None);
                                     self.proceed();
-                                    continue;
+                                } else if self.current() != &LogosToken::RSquare {
+                                    parts.push(Some(self.expr(0)))
                                 }
-                                if self.current() == &LogosToken::RSquare {
-                                    continue;
-                                }
-                                parts.push(Some(self.expr(0)))
                             }
                             &LogosToken::RSquare => {
                                 while parts.len() < 3 {
