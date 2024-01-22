@@ -1,6 +1,6 @@
 #[macro_export]
 macro_rules! inbuilt_methods {
-    { $self:ident, $names:expr, $args:ident, $([ $fn_name:expr => [$($ty:expr),+ $(,)?], $num_args:expr, $span:expr, { $($preprocess:tt)* } ]),*, _ => { $($tt:tt)* } $(,)? } => {
+    [ $self:ident, $names:expr, $args:ident, $([ $fn_name:expr => [$($ty:expr),+ $(,)?], $num_args:expr, $span:expr, { $($preprocess:tt)* } ]),*, _ => { $($tt:tt)* } $(,)? ] => {
         match $names {
             $(
                 $fn_name => {
@@ -26,29 +26,39 @@ macro_rules! inbuilt_methods {
 }
 
 #[macro_export]
-macro_rules! compile_call {
-    { $self:ident, $name:expr, $args:ident, $instr:expr, $span:expr, $num_args:expr } => {
+macro_rules! inbuilt_fn {
+    [ $self:ident, $names:expr, $args:ident, $span:expr, $([ $fn_name:expr, $num_args:expr ]),*, _ => { $($tt:tt)* } $(,)? ] => {
+        match $names.as_str() {
+            $(
+                $fn_name => {
+                    INBUILT_FUNCTIONS.lock().unwrap().insert(String::from($fn_name));
+                    inbuilt_fn![$self, $fn_name, $args, $span.clone(), $num_args];
+                }
+            )*
+
+            _ => { $($tt)* }
+        }
+    };
+
+    [ $self:ident, $name:expr, $args:ident, $span:expr, $num_args:expr ] => {
         {
             for_each_arg!($args, $num_args,
                 Some(e) => { $self.compile_expr(e) },
                 None => { $self.stack.push(allocate(Value::Nil)) }
             );
 
-            $self.instructions.push((Instr($instr, vec![]), $span));
+            $self.instructions.push((Instr(Bytecode::BuiltInFunction(String::from($name)), vec![]), $span));
         }
     };
-    { $self:ident, $name:expr, $args:ident, $instr:expr, $span:expr } => {
+
+    [ $self:ident, $name:expr, $args:ident, $instr:expr, $span:expr ] => {
         compile_call!($self, $name, $args, $instr, $span, 1)
     };
 }
 
 #[macro_export]
 macro_rules! for_each_arg {
-    { $arg:ident, 0, Some($e:ident) => { $($some:tt)* }, None => { $($none:tt)* } } => {
-        println!("doin' nothin'");
-    };
-
-    { $arg:ident, $n:expr, Some($e:ident) => { $($some:tt)* }, None => { $($none:tt)* } } => {
+    [ $arg:ident, $n:expr, Some($e:ident) => { $($some:tt)* }, None => { $($none:tt)* } ] => {
         $arg.as_ref()
             .unwrap_or(&vec![])
             .into_iter()
@@ -63,7 +73,7 @@ macro_rules! for_each_arg {
         )
     };
 
-    { $arg:ident, $e:ident => { $($b:tt)* }} => {
+    [ $arg:ident, $e:ident => { $($b:tt)* } ] => {
         $arg.as_ref()
             .unwrap_or(&vec![])
             .into_iter()
@@ -74,14 +84,14 @@ macro_rules! for_each_arg {
 
 #[macro_export]
 macro_rules! float {
-    ($val:expr) => {
+    [ $val:expr ] => {
         rug::Float::with_val(53, $val)
     };
 }
 
 #[macro_export]
 macro_rules! process_placeholder {
-    { $self:ident, $placeholder:expr, $span:expr } => {
+    [ $self:ident, $placeholder:expr, $span:expr ] => {
         let parsed_exprs = PParser::new(
             $placeholder,
             LogosToken::lexer($placeholder)

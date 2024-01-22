@@ -105,6 +105,10 @@ impl Value {
         }
     }
 
+    pub fn is_nil(&self) -> bool {
+        matches!(self, Value::Nil)
+    }
+
     pub fn as_array(&self) -> Cow<Vec<Value>> {
         match self {
             Self::Array(arr) => Cow::Borrowed(arr),
