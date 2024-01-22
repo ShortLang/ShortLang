@@ -71,9 +71,16 @@ pub enum Value {
 
 impl Value {
     pub fn as_int(&self) -> Integer {
-        match self.clone() {
-            Self::Int(i) => i,
+        match self {
+            Self::Int(i) => i.clone(),
             _ => panic!("Expected an int value, found: {}", self.get_type()),
+        }
+    }
+
+    pub fn try_as_int(&self) -> Option<Integer> {
+        match self {
+            Self::Int(i) => Some(i.clone()),
+            _ => None,
         }
     }
 

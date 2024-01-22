@@ -73,6 +73,7 @@ pub enum Bytecode {
     // Array,
     Array,
     Index,
+    SliceIndex,
 
     SetIndex,
     AddIndex,

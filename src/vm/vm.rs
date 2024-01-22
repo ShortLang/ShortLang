@@ -780,6 +780,18 @@ impl VM {
                 }
             }
 
+            ExprKind::Slice(index, start, end, step) => {
+                self.compile_expr(*index);
+
+                [start, end, step].into_iter().for_each(|i| match i {
+                    Some(i) => self.compile_expr(*i),
+                    _ => self.push_data(Value::Nil, expr.span.clone()),
+                });
+
+                self.instructions
+                    .push((Instr(Bytecode::SliceIndex, vec![]), expr.span));
+            }
+
             _ => {}
         }
     }
@@ -1325,6 +1337,57 @@ impl VM {
                     }
                     array[index.to_usize().unwrap()].clone()
                 })));
+            },
+
+            SliceIndex => unsafe {
+                let &[step, end, start, value] = memory::release_multiple(&[
+                    self.stack.pop().unwrap(),
+                    self.stack.pop().unwrap(),
+                    self.stack.pop().unwrap(),
+                    self.stack.pop().unwrap(),
+                ]);
+
+                let arr = value.as_ref().as_array();
+
+                let step = step.as_ref().try_as_int().unwrap_or(1.into());
+                let mut start = start.as_ref().try_as_int().unwrap_or(0.into());
+                let mut end = end
+                    .as_ref()
+                    .try_as_int()
+                    .unwrap_or_else(|| arr.len().into());
+
+                let reverse = start > end || step.is_negative();
+
+                if start > end {
+                    (start, end) = (end, start);
+                }
+
+                let (start, end, step) = (
+                    start.to_usize().unwrap(),
+                    end.to_usize().unwrap(),
+                    step.abs().to_usize().unwrap(),
+                );
+
+                let mut new_array = (start..end)
+                    .step_by(step)
+                    .map(|i| arr[i].clone())
+                    .collect::<Vec<_>>();
+
+                if reverse {
+                    new_array.reverse();
+                }
+
+                self.stack
+                    .push(memory::retain(allocate(match value.as_ref().get_type() {
+                        "str" => Value::String(
+                            new_array
+                                .into_iter()
+                                .map(|i| i.as_str().chars().next().unwrap())
+                                .collect(),
+                        ),
+                        "array" => Value::Array(new_array),
+                        _ => unreachable!(),
+                    })));
             },
 
             SetIndex => unsafe {

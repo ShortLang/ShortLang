@@ -79,6 +79,22 @@ pub fn release(node: NonNull<Value>) -> NonNull<Value> {
     node
 }
 
+pub fn retain_multiple<const N: usize>(nodes: &[NonNull<Value>; N]) -> &[NonNull<Value>; N] {
+    nodes.iter().for_each(|i| {
+        let _ = retain(*i);
+    });
+
+    nodes
+}
+
+pub fn release_multiple<const N: usize>(nodes: &[NonNull<Value>; N]) -> &[NonNull<Value>; N] {
+    nodes.iter().for_each(|i| {
+        let _ = release(*i);
+    });
+
+    nodes
+}
+
 pub fn free_marked() {
     let v = std::mem::take(&mut *FREE_BUFFER.lock().unwrap());
 
