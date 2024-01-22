@@ -1110,7 +1110,7 @@ impl VM {
                 let reverse = start > end || step.is_negative();
 
                 if start > end {
-                    (start, end) = (end, start);
+                    std::mem::swap(&mut start, &mut end);
                 }
 
                 let (start, end, step) = (
