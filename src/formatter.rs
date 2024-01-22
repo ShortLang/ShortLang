@@ -137,7 +137,7 @@ impl Formatter {
             ExprKind::Set(_, expr) => Self::get_fn_name_refs(&mut expr.inner, name_refs),
 
             ExprKind::Call(name_ref, exprs) => {
-                if !INBUILT_FUNCTIONS.contains(name_ref.as_str()) {
+                if !INBUILT_FUNCTIONS.lock().unwrap().contains(name_ref.as_str()) {
                     name_refs
                         .entry(name_ref.to_string())
                         .or_insert(vec![])
