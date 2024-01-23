@@ -5,5 +5,6 @@ mod utils;
 mod value;
 mod vm;
 
-pub use vm::INBUILT_FUNCTIONS;
+mod stdlib;
+
 pub use vm::VM;

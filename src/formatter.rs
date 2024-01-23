@@ -8,7 +8,7 @@ use crate::parser::Expr;
 use crate::parser::ExprKind;
 use crate::parser::PParser;
 use crate::tokenize;
-use crate::vm::INBUILT_FUNCTIONS;
+
 
 macro_rules! is_single_value {
     [ $val:expr ] => {
@@ -136,24 +136,24 @@ impl Formatter {
 
             ExprKind::Set(_, expr) => Self::get_fn_name_refs(&mut expr.inner, name_refs),
 
-            ExprKind::Call(name_ref, exprs) => {
-                if !INBUILT_FUNCTIONS
-                    .lock()
-                    .unwrap()
-                    .contains(name_ref.as_str())
-                {
-                    name_refs
-                        .entry(name_ref.to_string())
-                        .or_insert(vec![])
-                        .push(name_ref);
-                }
+            // ExprKind::Call(name_ref, exprs) => {
+            //     if !INBUILT_FUNCTIONS
+            //         .lock()
+            //         .unwrap()
+            //         .contains(name_ref.as_str())
+            //     {
+            //         name_refs
+            //             .entry(name_ref.to_string())
+            //             .or_insert(vec![])
+            //             .push(name_ref);
+            //     }
 
-                if let Some(exprs) = exprs.as_mut() {
-                    for expr in exprs {
-                        Self::get_fn_name_refs(&mut expr.inner, name_refs);
-                    }
-                }
-            }
+            //     if let Some(exprs) = exprs.as_mut() {
+            //         for expr in exprs {
+            //             Self::get_fn_name_refs(&mut expr.inner, name_refs);
+            //         }
+            //     }
+            // }
 
             ExprKind::Ternary(condition, then_block, else_block) => {
                 Self::get_fn_name_refs(&mut condition.inner, name_refs);

@@ -28,7 +28,7 @@ pub enum Bytecode {
     And,
     Or,
 
-    BuiltInFunction(String),
+    BuiltInFunction(String, usize), // name, num_args
 
     // Method functions
     Method(MethodFunction),
@@ -40,7 +40,7 @@ pub enum Bytecode {
 
     // FUNCTION,
     // Function,
-    FnCall,
+    FnCall(usize),
     Ret,
 
     Mod,
