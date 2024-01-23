@@ -9,7 +9,6 @@ use crate::parser::ExprKind;
 use crate::parser::PParser;
 use crate::tokenize;
 
-
 macro_rules! is_single_value {
     [ $val:expr ] => {
         matches!(
@@ -154,7 +153,6 @@ impl Formatter {
             //         }
             //     }
             // }
-
             ExprKind::Ternary(condition, then_block, else_block) => {
                 Self::get_fn_name_refs(&mut condition.inner, name_refs);
 

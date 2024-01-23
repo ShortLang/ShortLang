@@ -47,7 +47,7 @@ pub(crate) struct FnStackData {
 type Output = Result<VarPtr, String>;
 
 pub struct Handler {
-    func: Box<dyn Fn(&[NonNull<Value>]) ->Output>,
+    func: Box<dyn Fn(&[NonNull<Value>]) -> Output>,
 }
 
 impl Handler {

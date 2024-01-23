@@ -1036,7 +1036,13 @@ impl VM {
                     .as_str();
                 let fn_obj_option = self.functions.get(fn_name);
                 if fn_obj_option.is_none() {
-                    self.runtime_error(format!("No function name `{fn_name}` found that takes: {num_args} argument(s)").as_str(), span);
+                    self.runtime_error(
+                        format!(
+                            "No function name `{fn_name}` found that takes: {num_args} argument(s)"
+                        )
+                        .as_str(),
+                        span,
+                    );
                 }
 
                 let fn_obj @ FunctionData {

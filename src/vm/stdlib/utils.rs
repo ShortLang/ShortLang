@@ -1,5 +1,3 @@
-
-
 use az::SaturatingCast;
 use rug::Integer;
 
