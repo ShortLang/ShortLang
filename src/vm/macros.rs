@@ -11,7 +11,7 @@ macro_rules! inbuilt_methods {
                         None => { $self.stack.push(allocate(Value::Nil)) }
                     );
 
-                    $self.instructions.push((Instr(Method(MethodFunction {
+                    $self.instructions.push((Instr(Bytecode::Method(MethodFunction {
                         name: $fn_name.to_string(),
                         on_types: vec![$($ty,)*],
                         num_args: $num_args,
@@ -32,28 +32,19 @@ macro_rules! inbuilt_fn {
             $(
                 $fn_name => {
                     INBUILT_FUNCTIONS.lock().unwrap().insert(String::from($fn_name));
-                    inbuilt_fn![$self, $fn_name, $args, $span.clone(), $num_args];
+
+                    for_each_arg!($args, $num_args,
+                        Some(e) => { $self.compile_expr(e) },
+                        None => { $self.stack.push(allocate(Value::Nil)) }
+                    );
+
+                    $self.instructions.push((Instr(Bytecode::BuiltInFunction(String::from($fn_name)), vec![]), $span));
                 }
             )*
 
             _ => { $($tt)* }
         }
-    };
-
-    [ $self:ident, $name:expr, $args:ident, $span:expr, $num_args:expr ] => {
-        {
-            for_each_arg!($args, $num_args,
-                Some(e) => { $self.compile_expr(e) },
-                None => { $self.stack.push(allocate(Value::Nil)) }
-            );
-
-            $self.instructions.push((Instr(Bytecode::BuiltInFunction(String::from($name)), vec![]), $span));
-        }
-    };
-
-    [ $self:ident, $name:expr, $args:ident, $instr:expr, $span:expr ] => {
-        compile_call!($self, $name, $args, $instr, $span, 1)
-    };
+    }
 }
 
 #[macro_export]

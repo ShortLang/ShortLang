@@ -1,3 +1,5 @@
+#![allow(unreachable_patterns)]
+
 use az::SaturatingCast;
 use logos::Logos;
 use miette::{miette, LabeledSpan};
@@ -11,7 +13,6 @@ use std::ptr::NonNull;
 use std::string::ToString;
 use std::sync::Mutex;
 
-use super::bytecode::Bytecode::*;
 use super::value::{Type, Value};
 use crate::for_each_arg;
 use crate::parser::{BinaryOp, Expr, ExprKind};
@@ -96,7 +97,7 @@ impl VM {
             self.compile_expr(expr.clone());
         }
 
-        self.instructions.push((Instr(Halt, vec![]), 0..0));
+        self.instructions.push((Instr(Bytecode::Halt, vec![]), 0..0));
 
         // for (idx, (Instr(bytecode, args), _)) in self.instructions.iter().enumerate() {
         // println!("instr[{idx}] = ({bytecode}, {args:?})");
@@ -108,38 +109,38 @@ impl VM {
             ExprKind::Int(integer) => {
                 let index = self.add_constant(Value::Int(integer));
                 self.instructions
-                    .push((Instr(LoadConst, vec![index - 1]), expr.span));
+                    .push((Instr(Bytecode::LoadConst, vec![index - 1]), expr.span));
             }
 
             ExprKind::Float(float) => {
                 let index = self.add_constant(Value::Float(float));
                 self.instructions
-                    .push((Instr(LoadConst, vec![index - 1]), expr.span));
+                    .push((Instr(Bytecode::LoadConst, vec![index - 1]), expr.span));
             }
 
             ExprKind::Nil => {
                 let index = self.add_constant(Value::Nil);
                 self.instructions
-                    .push((Instr(LoadConst, vec![index - 1]), expr.span));
+                    .push((Instr(Bytecode::LoadConst, vec![index - 1]), expr.span));
             }
 
             ExprKind::Postfix(expr, op) => match op {
                 PostfixOp::Increase => {
                     let span = expr.span.clone();
                     self.compile_expr(*expr);
-                    self.instructions.push((Instr(Inc, vec![]), span));
+                    self.instructions.push((Instr(Bytecode::Inc, vec![]), span));
                 }
 
                 PostfixOp::Decrease => {
                     let span = expr.span.clone();
                     self.compile_expr(*expr);
-                    self.instructions.push((Instr(Dec, vec![]), span));
+                    self.instructions.push((Instr(Bytecode::Dec, vec![]), span));
                 }
 
                 PostfixOp::Factorial => {
                     self.compile_expr(*expr.clone());
                     self.instructions
-                        .push((Instr(Factorial, vec![]), expr.span));
+                        .push((Instr(Bytecode::Factorial, vec![]), expr.span));
                 }
             },
 
@@ -151,14 +152,14 @@ impl VM {
 
                 let id = id.unwrap();
                 self.instructions
-                    .push((Instr(GetVar, vec![*id as usize]), expr.span));
+                    .push((Instr(Bytecode::GetVar, vec![*id as usize]), expr.span));
             }
 
             ExprKind::Index(array, index) => {
                 self.compile_expr(*array);
                 self.compile_expr(*index);
 
-                self.instructions.push((Instr(Index, vec![]), expr.span))
+                self.instructions.push((Instr(Bytecode::Index, vec![]), expr.span))
             }
 
             ExprKind::Set(name, value) => {
@@ -168,12 +169,12 @@ impl VM {
                     self.variables_id.insert(name, self.var_id_count as u32);
 
                     self.instructions
-                        .push((Instr(MakeVar, vec![]), expr.span.clone()));
+                        .push((Instr(Bytecode::MakeVar, vec![]), expr.span.clone()));
 
                     self.compile_expr(*value);
 
                     self.instructions
-                        .push((Instr(Replace, vec![self.var_id_count]), expr.span));
+                        .push((Instr(Bytecode::Replace, vec![self.var_id_count]), expr.span));
 
                     self.var_id_count += 1;
                     return;
@@ -182,7 +183,7 @@ impl VM {
                 self.compile_expr(*value);
                 self.instructions.push((
                     Instr(
-                        Replace,
+                        Bytecode::Replace,
                         vec![*self.variables_id.get(&name).unwrap() as usize],
                     ),
                     expr.span,
@@ -192,7 +193,7 @@ impl VM {
             ExprKind::String(string) => {
                 let index = self.add_constant(Value::String(string));
                 self.instructions
-                    .push((Instr(LoadConst, vec![index - 1]), expr.span));
+                    .push((Instr(Bytecode::LoadConst, vec![index - 1]), expr.span));
             }
 
             ExprKind::FString(value) => {
@@ -261,13 +262,13 @@ impl VM {
                 }
 
                 self.instructions
-                    .push((Instr(ConcatUpTo, vec![len]), expr.span));
+                    .push((Instr(Bytecode::ConcatUpTo, vec![len]), expr.span));
             }
 
             ExprKind::Bool(boolean) => {
                 let index = self.add_constant(Value::Bool(boolean));
                 self.instructions
-                    .push((Instr(LoadConst, vec![index - 1]), expr.span));
+                    .push((Instr(Bytecode::LoadConst, vec![index - 1]), expr.span));
             }
 
             ExprKind::Array(val) => {
@@ -276,7 +277,7 @@ impl VM {
                     self.compile_expr(elem);
                 }
 
-                self.instructions.push((Instr(Array, vec![len]), expr.span));
+                self.instructions.push((Instr(Bytecode::Array, vec![len]), expr.span));
             }
 
             ExprKind::Binary(a, op, b) => {
@@ -292,27 +293,27 @@ impl VM {
                 }
 
                 match op {
-                    BinaryOp::Add => self.instructions.push((Instr(Add, vec![]), expr.span)),
-                    BinaryOp::Mul => self.instructions.push((Instr(Mul, vec![]), expr.span)),
-                    BinaryOp::Mod => self.instructions.push((Instr(Mod, vec![]), expr.span)),
+                    BinaryOp::Add => self.instructions.push((Instr(Bytecode::Add, vec![]), expr.span)),
+                    BinaryOp::Mul => self.instructions.push((Instr(Bytecode::Mul, vec![]), expr.span)),
+                    BinaryOp::Mod => self.instructions.push((Instr(Bytecode::Mod, vec![]), expr.span)),
                     BinaryOp::BinaryPow => self
                         .instructions
-                        .push((Instr(BinaryPow, vec![]), expr.span)),
-                    BinaryOp::Pow => self.instructions.push((Instr(Pow, vec![]), expr.span)),
-                    BinaryOp::Div => self.instructions.push((Instr(Div, vec![]), expr.span)),
-                    BinaryOp::Sub => self.instructions.push((Instr(Sub, vec![]), expr.span)),
-                    BinaryOp::Less => self.instructions.push((Instr(Lt, vec![]), expr.span)),
-                    BinaryOp::Greater => self.instructions.push((Instr(Gt, vec![]), expr.span)),
-                    BinaryOp::LessEq => self.instructions.push((Instr(Le, vec![]), expr.span)),
-                    BinaryOp::GreaterEq => self.instructions.push((Instr(Ge, vec![]), expr.span)),
-                    BinaryOp::NotEq => self.instructions.push((Instr(Neq, vec![]), expr.span)),
-                    BinaryOp::Eq => self.instructions.push((Instr(Eq, vec![]), expr.span)),
-                    BinaryOp::AddEq => self.instructions.push((Instr(AddEq, vec![]), expr.span)),
-                    BinaryOp::SubEq => self.instructions.push((Instr(SubEq, vec![]), expr.span)),
-                    BinaryOp::MulEq => self.instructions.push((Instr(MulEq, vec![]), expr.span)),
-                    BinaryOp::DivEq => self.instructions.push((Instr(DivEq, vec![]), expr.span)),
-                    BinaryOp::And => self.instructions.push((Instr(And, vec![]), expr.span)),
-                    BinaryOp::Or => self.instructions.push((Instr(Or, vec![]), expr.span)),
+                        .push((Instr(Bytecode::BinaryPow, vec![]), expr.span)),
+                    BinaryOp::Pow => self.instructions.push((Instr(Bytecode::Pow, vec![]), expr.span)),
+                    BinaryOp::Div => self.instructions.push((Instr(Bytecode::Div, vec![]), expr.span)),
+                    BinaryOp::Sub => self.instructions.push((Instr(Bytecode::Sub, vec![]), expr.span)),
+                    BinaryOp::Less => self.instructions.push((Instr(Bytecode::Lt, vec![]), expr.span)),
+                    BinaryOp::Greater => self.instructions.push((Instr(Bytecode::Gt, vec![]), expr.span)),
+                    BinaryOp::LessEq => self.instructions.push((Instr(Bytecode::Le, vec![]), expr.span)),
+                    BinaryOp::GreaterEq => self.instructions.push((Instr(Bytecode::Ge, vec![]), expr.span)),
+                    BinaryOp::NotEq => self.instructions.push((Instr(Bytecode::Neq, vec![]), expr.span)),
+                    BinaryOp::Eq => self.instructions.push((Instr(Bytecode::Eq, vec![]), expr.span)),
+                    BinaryOp::AddEq => self.instructions.push((Instr(Bytecode::AddEq, vec![]), expr.span)),
+                    BinaryOp::SubEq => self.instructions.push((Instr(Bytecode::SubEq, vec![]), expr.span)),
+                    BinaryOp::MulEq => self.instructions.push((Instr(Bytecode::MulEq, vec![]), expr.span)),
+                    BinaryOp::DivEq => self.instructions.push((Instr(Bytecode::DivEq, vec![]), expr.span)),
+                    BinaryOp::And => self.instructions.push((Instr(Bytecode::And, vec![]), expr.span)),
+                    BinaryOp::Or => self.instructions.push((Instr(Bytecode::Or, vec![]), expr.span)),
 
                     BinaryOp::Attr => match b.inner {
                         ExprKind::Call(name, args) => {
@@ -337,7 +338,7 @@ impl VM {
 
                                     self.instructions.push((
                                         Instr(
-                                            Method(MethodFunction {
+                                            Bytecode::Method(MethodFunction {
                                                 name: name,
                                                 on_types: vec![],
                                                 num_args: 0,
@@ -356,7 +357,7 @@ impl VM {
                             "type" => {
                                 self.compile_expr(*a);
                                 self.instructions.push((
-                                    Instr(BuiltInFunction("type".to_owned()), vec![]),
+                                    Instr(Bytecode::BuiltInFunction("type".to_owned()), vec![]),
                                     expr.span,
                                 ));
                             }
@@ -372,7 +373,7 @@ impl VM {
                         self.compile_expr(*b);
 
                         self.instructions
-                            .push((Instr(BuiltInFunction("rng".to_owned()), vec![]), expr.span));
+                            .push((Instr(Bytecode::BuiltInFunction("rng".to_owned()), vec![]), expr.span));
                     }
                 }
             }
@@ -397,7 +398,7 @@ impl VM {
                 self.variables.push(HashMap::new());
 
                 let jmp_instr_ptr = self.instructions.len();
-                self.instructions.push((Instr(Jmp, vec![]), expr.span));
+                self.instructions.push((Instr(Bytecode::Jmp, vec![]), expr.span));
 
                 let body_start = self.instructions.len();
                 let mut returns = false;
@@ -409,7 +410,7 @@ impl VM {
                     self.compile_expr(expr);
                 }
 
-                self.instructions.push((Instr(Ret, vec![]), 0..0));
+                self.instructions.push((Instr(Bytecode::Ret, vec![]), 0..0));
 
                 let body_end = self.instructions.len();
                 self.instructions[jmp_instr_ptr].0 .1.push(body_end);
@@ -434,10 +435,10 @@ impl VM {
 
             ExprKind::Return(val) => {
                 self.compile_expr(*val);
-                self.instructions.push((Instr(Ret, vec![]), expr.span));
+                self.instructions.push((Instr(Bytecode::Ret, vec![]), expr.span));
             }
 
-            ExprKind::Call(ref name, ref args) => inbuilt_fn![self, name, args, expr.span,
+            ExprKind::Call(name, args) => inbuilt_fn![self, name, args, expr.span,
                 ["$", 1],
                 ["$$", 1],
                 ["type", 1],
@@ -450,8 +451,8 @@ impl VM {
                 ["len", 1],
                 ["type", 1],
                 ["open", 1],
-                ["gcd", 1],
-                ["lcm", 1],
+                ["gcd", 2],
+                ["lcm", 2],
                 ["fib", 1],
                 ["abs", 1],
                 ["floor", 1],
@@ -466,7 +467,7 @@ impl VM {
                     for_each_arg!(args, arg => { self.compile_expr(arg) });
 
                     self.push_data(name.as_str().into(), expr.span.clone());
-                    self.instructions.push((Instr(FnCall, vec![]), expr.span));
+                    self.instructions.push((Instr(Bytecode::FnCall, vec![]), expr.span));
                     self.stack.push(allocate(Value::Nil));
                  }
             ],
@@ -476,14 +477,14 @@ impl VM {
 
                 let ternary_instr_ptr = self.instructions.len();
                 self.instructions
-                    .push((Instr(TernaryStart, vec![]), expr.span));
+                    .push((Instr(Bytecode::TernaryStart, vec![]), expr.span));
 
                 for expr in then_block {
                     self.compile_expr(expr);
                 }
 
                 let jump_instr_ptr = self.instructions.len();
-                self.instructions.push((Instr(Jmp, vec![]), 0..0));
+                self.instructions.push((Instr(Bytecode::Jmp, vec![]), 0..0));
 
                 let ternary_else_start = self.instructions.len();
                 for expr in else_block.unwrap_or(vec![]) {
@@ -505,13 +506,13 @@ impl VM {
 
                 let while_instr_ptr = self.instructions.len();
                 self.instructions
-                    .push((Instr(While, vec![]), expr.span.clone()));
+                    .push((Instr(Bytecode::While, vec![]), expr.span.clone()));
 
                 for expr in body {
                     self.compile_expr(expr);
                 }
 
-                self.instructions.push((Instr(Jmp, vec![body_start]), 0..0));
+                self.instructions.push((Instr(Bytecode::Jmp, vec![body_start]), 0..0));
 
                 let body_end = self.instructions.len();
 
@@ -529,7 +530,7 @@ impl VM {
                     };
 
                 self.instructions
-                    .push((Instr(Break, vec![parent_loop_instr_ptr]), expr.span));
+                    .push((Instr(Bytecode::Break, vec![parent_loop_instr_ptr]), expr.span));
             }
 
             ExprKind::Continue => {
@@ -540,15 +541,15 @@ impl VM {
                     };
 
                 self.instructions
-                    .push((Instr(Continue, vec![parent_loop_instr_ptr]), expr.span));
+                    .push((Instr(Bytecode::Continue, vec![parent_loop_instr_ptr]), expr.span));
             }
 
             ExprKind::Unary(op, expr) => {
                 self.compile_expr(*expr.clone());
 
                 match op {
-                    UnaryOp::Not => self.instructions.push((Instr(Not, vec![]), expr.span)),
-                    UnaryOp::Neg => self.instructions.push((Instr(Neg, vec![]), expr.span)),
+                    UnaryOp::Not => self.instructions.push((Instr(Bytecode::Not, vec![]), expr.span)),
+                    UnaryOp::Neg => self.instructions.push((Instr(Bytecode::Neg, vec![]), expr.span)),
                     _ => {}
                 }
             }
@@ -556,9 +557,9 @@ impl VM {
             ExprKind::Every(list, body, name) => {
                 self.variables_id.insert(name, self.var_id_count as u32);
                 self.instructions
-                    .push((Instr(MakeVar, vec![]), expr.span.clone()));
+                    .push((Instr(Bytecode::MakeVar, vec![]), expr.span.clone()));
                 self.instructions
-                    .push((Instr(Replace, vec![self.var_id_count]), expr.span.clone()));
+                    .push((Instr(Bytecode::Replace, vec![self.var_id_count]), expr.span.clone()));
 
                 let var_ptr = self.var_id_count;
                 self.var_id_count += 1;
@@ -569,18 +570,18 @@ impl VM {
                 self.constants.push(Value::Nil);
 
                 self.instructions
-                    .push((Instr(MakeConst, vec![self.constants.len() - 1]), 0..0));
+                    .push((Instr(Bytecode::MakeConst, vec![self.constants.len() - 1]), 0..0));
 
                 let loop_start = self.instructions.len();
                 self.instructions
-                    .push((Instr(LoadConst, vec![self.constants.len() - 1]), 0..0));
+                    .push((Instr(Bytecode::LoadConst, vec![self.constants.len() - 1]), 0..0));
 
                 let instr_ptr = self.instructions.len();
                 let ran_once = Box::leak(Box::new(false));
 
                 self.instructions.push((
                     Instr(
-                        Every {
+                        Bytecode::Every {
                             loop_end: 0, // will be changed later
                             index: Box::leak(Box::new(0usize)),
                             ran_once,
@@ -596,10 +597,10 @@ impl VM {
                 }
 
                 self.instructions
-                    .push((Instr(ForLoopJmp { ran_once }, vec![loop_start]), 0..0));
+                    .push((Instr(Bytecode::ForLoopJmp { ran_once }, vec![loop_start]), 0..0));
 
                 let end = self.instructions.len();
-                let Every { loop_end, .. } = &mut self.instructions[instr_ptr].0 .0 else {
+                let Bytecode::Every { loop_end, .. } = &mut self.instructions[instr_ptr].0 .0 else {
                     unreachable!()
                 };
 
@@ -655,7 +656,7 @@ impl VM {
                     self.variables.push(scope);
 
                     let jmp_instr_ptr = self.instructions.len();
-                    self.instructions.push((Instr(Jmp, vec![]), e.span));
+                    self.instructions.push((Instr(Bytecode::Jmp, vec![]), e.span));
 
                     let body_start = self.instructions.len();
                     let mut returns = false;
@@ -667,7 +668,7 @@ impl VM {
                         self.compile_expr(expr);
                     }
 
-                    self.instructions.push((Instr(Ret, vec![]), 0..0));
+                    self.instructions.push((Instr(Bytecode::Ret, vec![]), 0..0));
 
                     let body_end = self.instructions.len();
                     self.instructions[jmp_instr_ptr].0 .1.push(body_end);
@@ -687,11 +688,11 @@ impl VM {
                 }
             }
 
-            ExprKind::SetIndex(index, value) => self.compile_idx(index, value, SetIndex, expr.span),
-            ExprKind::AddIndex(index, value) => self.compile_idx(index, value, AddIndex, expr.span),
-            ExprKind::SubIndex(index, value) => self.compile_idx(index, value, SubIndex, expr.span),
-            ExprKind::MulIndex(index, value) => self.compile_idx(index, value, MulIndex, expr.span),
-            ExprKind::DivIndex(index, value) => self.compile_idx(index, value, DivIndex, expr.span),
+            ExprKind::SetIndex(index, value) => self.compile_idx(index, value, Bytecode::SetIndex, expr.span),
+            ExprKind::AddIndex(index, value) => self.compile_idx(index, value, Bytecode::AddIndex, expr.span),
+            ExprKind::SubIndex(index, value) => self.compile_idx(index, value, Bytecode::SubIndex, expr.span),
+            ExprKind::MulIndex(index, value) => self.compile_idx(index, value, Bytecode::MulIndex, expr.span),
+            ExprKind::DivIndex(index, value) => self.compile_idx(index, value, Bytecode::DivIndex, expr.span),
 
             ExprKind::Match(lhs, branches) => {
                 let mut conditionals = branches
@@ -816,18 +817,18 @@ impl VM {
         let byte = instr.0;
 
         match byte {
-            Halt => {
+            Bytecode::Halt => {
                 return true;
             }
 
-            MakeConst => unsafe {
+            Bytecode::MakeConst => unsafe {
                 let const_ptr = args[0];
                 let val = memory::release(self.stack.pop().unwrap()).as_ref().clone();
 
                 self.constants[const_ptr] = val;
             },
 
-            Open => unsafe {
+            Bytecode::Open => unsafe {
                 let path = memory::release(self.stack.pop().unwrap())
                     .as_ref()
                     .to_string();
@@ -835,7 +836,7 @@ impl VM {
                 self.stack.push(memory::retain(allocate(Value::File(path))));
             },
 
-            ConcatUpTo => unsafe {
+            Bytecode::ConcatUpTo => unsafe {
                 let num_vals = args[0];
                 let mut v = vec![];
 
@@ -853,14 +854,14 @@ impl VM {
                     .push(memory::retain(allocate(Value::String(v.join("")))));
             },
 
-            MakeVar => {
+            Bytecode::MakeVar => {
                 self.variables
                     .last_mut()
                     .unwrap()
                     .insert(self.var_id_count as u32, None);
             }
 
-            Replace => {
+            Bytecode::Replace => {
                 if let Some(v) = self.get_var(args[0] as u32) {
                     memory::release(v);
                 }
@@ -877,7 +878,7 @@ impl VM {
                     .insert(args[0] as u32, Some(NonNull::from(value)));
             }
 
-            GetVar => {
+            Bytecode::GetVar => {
                 let id = args[0];
                 let v = self.get_var(id as _);
                 if self.get_var(id as u32).is_some() {
@@ -888,7 +889,7 @@ impl VM {
                 }
             }
 
-            LoadConst => {
+            Bytecode::LoadConst => {
                 let constant = self.constants.get(args[0]);
                 match constant {
                     Some(c) => self.stack.push(memory::retain(allocate(c.to_owned()))),
@@ -896,13 +897,13 @@ impl VM {
                 }
             }
 
-            Not => unsafe {
+            Bytecode::Not => unsafe {
                 let value = memory::release(self.stack.pop().unwrap()).as_ref();
                 self.stack
                     .push(memory::retain(allocate(Value::Bool(!value.bool_eval()))));
             },
 
-            Neg => unsafe {
+            Bytecode::Neg => unsafe {
                 let value = memory::release(self.stack.pop().unwrap()).as_ref();
                 self.stack.push(memory::retain(allocate(match value {
                     Value::Int(i) => Value::Int((-i).complete()),
@@ -914,7 +915,7 @@ impl VM {
                 })));
             },
 
-            While => unsafe {
+            Bytecode::While => unsafe {
                 let loop_end = args.get(0).unwrap_or_else(|| {
                     self.runtime_error("Expected a loop end instruction pointer", span)
                 });
@@ -929,7 +930,7 @@ impl VM {
                 }
             },
 
-            Every {
+            Bytecode::Every {
                 loop_end,
                 index,
                 ran_once,
@@ -959,7 +960,7 @@ impl VM {
                 }
             },
 
-            FnCall => unsafe {
+            Bytecode::FnCall => unsafe {
                 let fn_name = self
                     .stack
                     .pop()
@@ -1001,9 +1002,9 @@ impl VM {
                 }
             },
 
-            Ret => self.pop_call_stack(),
+            Bytecode::Ret => self.pop_call_stack(),
 
-            Array => unsafe {
+            Bytecode::Array => unsafe {
                 let items = args[0];
                 let mut array = vec![];
 
@@ -1021,7 +1022,7 @@ impl VM {
                     .push(memory::retain(allocate(Value::Array(array))));
             },
 
-            Index => unsafe {
+            Bytecode::Index => unsafe {
                 let mut index = memory::release(self.stack.pop().unwrap()).as_ref().as_int();
                 let array = memory::release(self.stack.pop().unwrap())
                     .as_ref()
@@ -1045,7 +1046,7 @@ impl VM {
                 })));
             },
 
-            SliceIndex => unsafe {
+            Bytecode::SliceIndex => unsafe {
                 let &[step, end, start, value] = memory::release_multiple(&[
                     self.stack.pop().unwrap(),
                     self.stack.pop().unwrap(),
@@ -1096,7 +1097,7 @@ impl VM {
                     })));
             },
 
-            SetIndex => unsafe {
+            Bytecode::SetIndex => unsafe {
                 let value = memory::release(self.stack.pop().unwrap()).as_ref();
                 let index_usize = memory::release(self.stack.pop().unwrap())
                     .as_ref()
@@ -1127,23 +1128,24 @@ impl VM {
                     _ => self.runtime_error("Expected a string or array", span),
                 }
             },
-            AddIndex => self.perform_index_operation(Value::binary_add, span),
-            SubIndex => self.perform_index_operation(Value::binary_sub, span),
-            MulIndex => self.perform_index_operation(Value::binary_mul, span),
-            DivIndex => self.perform_index_operation(Value::binary_div, span),
 
-            Mul => self.perform_bin_op(byte, span, |_, a, b| a.binary_mul(b)),
-            Mod => self.perform_bin_op(byte, span, |_, a, b| a.binary_mod(b)),
-            BinaryPow => self.perform_bin_op(byte, span, |_, a, b| a.binary_bitwise_xor(b)),
-            Pow => self.perform_bin_op(byte, span, |_, a, b| a.binary_pow(b)),
-            Sub => self.perform_bin_op(byte, span, |_, a, b| a.binary_sub(b)),
-            Add => self.perform_bin_op(byte, span, |_, a, b| a.binary_add(b)),
-            AddEq => self.perform_bin_op_in_place(byte, span, |_, a, b| a.binary_add(b)),
-            SubEq => self.perform_bin_op_in_place(byte, span, |_, a, b| a.binary_sub(b)),
-            MulEq => self.perform_bin_op_in_place(byte, span, |_, a, b| a.binary_mul(b)),
-            DivEq => self.perform_bin_op_in_place(byte, span, |_, a, b| a.binary_div(b)),
+            Bytecode::AddIndex => self.perform_index_operation(Value::binary_add, span),
+            Bytecode::SubIndex => self.perform_index_operation(Value::binary_sub, span),
+            Bytecode::MulIndex => self.perform_index_operation(Value::binary_mul, span),
+            Bytecode::DivIndex => self.perform_index_operation(Value::binary_div, span),
 
-            Div => self.perform_bin_op(byte, span.clone(), |s, a, b| {
+            Bytecode::Mul => self.perform_bin_op(byte, span, |_, a, b| a.binary_mul(b)),
+            Bytecode::Mod => self.perform_bin_op(byte, span, |_, a, b| a.binary_mod(b)),
+            Bytecode::BinaryPow => self.perform_bin_op(byte, span, |_, a, b| a.binary_bitwise_xor(b)),
+            Bytecode::Pow => self.perform_bin_op(byte, span, |_, a, b| a.binary_pow(b)),
+            Bytecode::Sub => self.perform_bin_op(byte, span, |_, a, b| a.binary_sub(b)),
+            Bytecode::Add => self.perform_bin_op(byte, span, |_, a, b| a.binary_add(b)),
+            Bytecode::AddEq => self.perform_bin_op_in_place(byte, span, |_, a, b| a.binary_add(b)),
+            Bytecode::SubEq => self.perform_bin_op_in_place(byte, span, |_, a, b| a.binary_sub(b)),
+            Bytecode::MulEq => self.perform_bin_op_in_place(byte, span, |_, a, b| a.binary_mul(b)),
+            Bytecode::DivEq => self.perform_bin_op_in_place(byte, span, |_, a, b| a.binary_div(b)),
+
+            Bytecode::Div => self.perform_bin_op(byte, span.clone(), |s, a, b| {
                 if b.is_zero() {
                     s.runtime_error("Cannot divide by zero", span);
                 }
@@ -1151,7 +1153,7 @@ impl VM {
                 a.binary_div(b)
             }),
 
-            Inc => unsafe {
+            Bytecode::Inc => unsafe {
                 let value = memory::release(self.stack.pop().unwrap()).as_mut();
 
                 match value {
@@ -1165,7 +1167,7 @@ impl VM {
                 }
             },
 
-            Dec => unsafe {
+            Bytecode::Dec => unsafe {
                 let value = memory::release(self.stack.pop().unwrap()).as_mut();
 
                 match value {
@@ -1183,7 +1185,7 @@ impl VM {
                 }
             },
 
-            Factorial => unsafe {
+            Bytecode::Factorial => unsafe {
                 let val = memory::release(self.stack.pop().unwrap()).as_ref();
                 self.stack.push(memory::retain(allocate(match val {
                     Value::Int(i) => Value::Int(Integer::factorial(i.saturating_cast()).complete()),
@@ -1201,33 +1203,33 @@ impl VM {
                 })));
             },
 
-            Jmp => {
+            Bytecode::Jmp => {
                 self.pc = args[0];
                 return false;
             }
 
-            ForLoopJmp { ran_once } => {
+            Bytecode::ForLoopJmp { ran_once } => {
                 self.pc = args[0];
                 *unsafe { &mut *ran_once } = true;
 
                 return false;
             }
 
-            Break => {
+            Bytecode::Break => {
                 let while_instr_ptr = args[0];
                 let (Instr(_, loop_args), _) = &self.instructions[while_instr_ptr];
                 self.pc = loop_args[0];
                 return false;
             }
 
-            Continue => {
+            Bytecode::Continue => {
                 let while_instr_ptr = args[0];
                 let (Instr(_, loop_args), _) = &self.instructions[while_instr_ptr];
                 self.pc = loop_args[1];
                 return false;
             }
 
-            TernaryStart => unsafe {
+            Bytecode::TernaryStart => unsafe {
                 let ternary_else_start = args[0];
                 let condition = memory::release(self.stack.pop().unwrap())
                     .as_ref()
@@ -1239,16 +1241,16 @@ impl VM {
                 }
             },
 
-            Lt => self.compare_values(span, |a, b| a.less_than(b)),
-            Gt => self.compare_values(span, |a, b| a.greater_than(b)),
-            Le => self.compare_values(span, |a, b| a.less_than_or_equal(b)),
-            Ge => self.compare_values(span, |a, b| a.greater_than_or_equal(b)),
-            Eq => self.compare_values(span, |a, b| a.equal_to(b)),
-            Neq => self.compare_values(span, |a, b| a.not_equal_to(b)),
-            And => self.compare_values(span, |a, b| a.and(b)),
-            Or => self.compare_values(span, |a, b| a.or(b)),
+            Bytecode::Lt => self.compare_values(span, |a, b| a.less_than(b)),
+            Bytecode::Gt => self.compare_values(span, |a, b| a.greater_than(b)),
+            Bytecode::Le => self.compare_values(span, |a, b| a.less_than_or_equal(b)),
+            Bytecode::Ge => self.compare_values(span, |a, b| a.greater_than_or_equal(b)),
+            Bytecode::Eq => self.compare_values(span, |a, b| a.equal_to(b)),
+            Bytecode::Neq => self.compare_values(span, |a, b| a.not_equal_to(b)),
+            Bytecode::And => self.compare_values(span, |a, b| a.and(b)),
+            Bytecode::Or => self.compare_values(span, |a, b| a.or(b)),
 
-            BuiltInFunction(name) => match name.as_str() {
+            Bytecode::BuiltInFunction(name) => match name.as_str() {
                 "exit" => std::process::exit(0),
 
                 "str" => unsafe {
@@ -1672,7 +1674,7 @@ impl VM {
                 _ => self.runtime_error(&format!("Unknown function: {name}"), span),
             },
 
-            Method(MethodFunction {
+            Bytecode::Method(MethodFunction {
                 name,
                 on_types,
                 in_built,
@@ -1894,7 +1896,7 @@ impl VM {
     fn push_data(&mut self, data: Value, span: Range<usize>) {
         let const_idx = self.add_constant(data);
         self.instructions
-            .push((Instr(LoadConst, vec![const_idx - 1]), span));
+            .push((Instr(Bytecode::LoadConst, vec![const_idx - 1]), span));
     }
 
     fn compare_values<F>(&mut self, span: Range<usize>, compare_fn: F)
@@ -2095,7 +2097,7 @@ impl VM {
         (0..current_instr_ptr)
             .rev()
             .map(|i| (i, &self.instructions[i]))
-            .find(|&(_, (instr, _))| matches!(instr.0, While))
+            .find(|&(_, (instr, _))| matches!(instr.0, Bytecode::While))
     }
 
     fn check_type(&self, fn_name: &str, types: Vec<Type>, value: &Value, span: Range<usize>) {
@@ -2165,7 +2167,7 @@ mod tests {
             inner: ExprKind::Int(Integer::from(5)),
         });
         assert_eq!(vm.instructions.len(), 1);
-        assert_eq!(vm.instructions[0].0 .0, LoadConst);
+        assert_eq!(vm.instructions[0].0 .0, Bytecode::LoadConst);
         assert_eq!(vm.constants[0], Value::Int(Integer::from(5)));
     }
 
@@ -2177,7 +2179,7 @@ mod tests {
             inner: ExprKind::Float(float!(5.0)),
         });
         assert_eq!(vm.instructions.len(), 1);
-        assert_eq!(vm.instructions[0].0 .0, LoadConst);
+        assert_eq!(vm.instructions[0].0 .0, Bytecode::LoadConst);
         assert_eq!(vm.constants[0], Value::Float(float!(5.0)));
     }
 
@@ -2190,7 +2192,7 @@ mod tests {
             inner: ExprKind::Ident("x".to_string()),
         });
         assert_eq!(vm.instructions.len(), 1);
-        assert_eq!(vm.instructions[0].0 .0, GetVar);
+        assert_eq!(vm.instructions[0].0 .0, Bytecode::GetVar);
     }
 
     #[test]
@@ -2207,16 +2209,16 @@ mod tests {
             ),
         });
         assert_eq!(vm.instructions.len(), 3);
-        assert_eq!(vm.instructions[0].0 .0, MakeVar);
-        assert_eq!(vm.instructions[1].0 .0, LoadConst);
-        assert_eq!(vm.instructions[2].0 .0, Replace);
+        assert_eq!(vm.instructions[0].0 .0, Bytecode::MakeVar);
+        assert_eq!(vm.instructions[1].0 .0, Bytecode::LoadConst);
+        assert_eq!(vm.instructions[2].0 .0, Bytecode::Replace);
     }
 
     #[test]
     fn test_run_byte_load_const() {
         let mut vm = VM::new("", vec![]);
         vm.add_constant(Value::Int(Integer::from(5)));
-        let instr = Instr(LoadConst, vec![0]);
+        let instr = Instr(Bytecode::LoadConst, vec![0]);
         vm.run_byte(instr, 0..0);
         assert_eq!(vm.stack.len(), 1);
         assert_eq!(
@@ -2267,8 +2269,8 @@ mod tests {
             ),
         });
         assert_eq!(vm.instructions.len(), 3);
-        assert_eq!(vm.instructions[1].0 .0, LoadConst);
-        assert_eq!(vm.instructions[2].0 .0, FnCall);
+        assert_eq!(vm.instructions[1].0 .0, Bytecode::LoadConst);
+        assert_eq!(vm.instructions[2].0 .0, Bytecode::FnCall);
     }
 
     #[test]
@@ -2285,7 +2287,7 @@ mod tests {
                 returns: true,
             },
         );
-        let instr = Instr(FnCall, vec![0]);
+        let instr = Instr(Bytecode::FnCall, vec![0]);
         vm.run_byte(instr, 0..0);
         assert_eq!(vm.stack.len(), 1);
         assert_eq!(
@@ -2312,9 +2314,9 @@ mod tests {
             ),
         });
         assert_eq!(vm.instructions.len(), 3);
-        assert_eq!(vm.instructions[0].0 .0, LoadConst);
-        assert_eq!(vm.instructions[1].0 .0, LoadConst);
-        assert_eq!(vm.instructions[2].0 .0, Add);
+        assert_eq!(vm.instructions[0].0 .0, Bytecode::LoadConst);
+        assert_eq!(vm.instructions[1].0 .0, Bytecode::LoadConst);
+        assert_eq!(vm.instructions[2].0 .0, Bytecode::Add);
     }
 
     #[test]
@@ -2334,9 +2336,9 @@ mod tests {
         );
         vm.compile();
         assert_eq!(vm.instructions.len(), 3);
-        assert_eq!(vm.instructions[0].0 .0, LoadConst);
-        assert_eq!(vm.instructions[1].0 .0, LoadConst);
-        assert_eq!(vm.instructions[2].0 .0, Halt);
+        assert_eq!(vm.instructions[0].0 .0, Bytecode::LoadConst);
+        assert_eq!(vm.instructions[1].0 .0, Bytecode::LoadConst);
+        assert_eq!(vm.instructions[2].0 .0, Bytecode::Halt);
         assert_eq!(vm.constants[0], Value::Int(Integer::from(5)));
         assert_eq!(vm.constants[1], Value::Int(Integer::from(3)));
     }
