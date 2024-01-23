@@ -8,7 +8,7 @@ macro_rules! inbuilt_methods {
 
                     for_each_arg!($args, $num_args,
                         Some(e) => { $self.compile_expr(e) },
-                        None => { $self.stack.push(allocate(Value::Nil)) }
+                        None => { $self.push_data(Value::Nil, 0..0) }
                     );
 
                     $self.instructions.push((Instr(Bytecode::Method(MethodFunction {
@@ -35,7 +35,7 @@ macro_rules! inbuilt_fn {
 
                     for_each_arg!($args, $num_args,
                         Some(e) => { $self.compile_expr(e) },
-                        None => { $self.stack.push(allocate(Value::Nil)) }
+                        None => { $self.push_data(Value::Nil, 0..0) }
                     );
 
                     $self.instructions.push((Instr(Bytecode::BuiltInFunction(String::from($fn_name)), vec![]), $span));
@@ -105,4 +105,23 @@ macro_rules! process_placeholder {
             $self.compile_expr(expr);
         }
     };
+}
+
+#[macro_export]
+macro_rules! add_fn {
+    [ $set:expr, $( $name:expr => [$placeholder:ident; $n:expr] { $($tt:tt)* } ),* $(,)? ] => {
+        $(
+            $set.insert((String::from($name), $n), Handler::new(
+                |$placeholder| unsafe {
+                    $($tt)*
+                }
+            ));
+        )*
+    };
+
+    [ $set:expr, $( $name:expr => [ $func:expr, $n:expr ] ),* $(,)? ] => {
+        $(
+            $set.insert((String::from($name), $n), Handler::new($func));
+        )*
+    }
 }

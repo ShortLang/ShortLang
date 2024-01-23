@@ -1,7 +1,10 @@
 use std::ptr::NonNull;
 use std::{collections::HashMap, ops::Range};
 
-use super::{memory::alloc_new_value, value::Value, vm::VarId};
+use super::memory::alloc_new_value;
+use super::value::Value;
+
+use super::vm::{VarId, VarPtr};
 
 #[derive(Debug, Clone)]
 pub(crate) struct FunctionData {
@@ -39,5 +42,26 @@ pub(crate) struct FnStackData {
     pub(crate) previous_stack_len: usize,
     pub(crate) variables_id: HashMap<String, u32>,
     pub(crate) variables: HashMap<u32, Option<NonNull<Value>>>,
-    // pub(crate) self_ptr: Option<NonNull<Value>>,
 }
+
+type Output = Result<VarPtr, String>;
+
+pub struct Handler {
+    func: Box<dyn Fn(&[NonNull<Value>]) ->Output>,
+}
+
+impl Handler {
+    pub fn new<F: Fn(&[NonNull<Value>]) -> Output + 'static>(func: F) -> Self {
+        Self {
+            func: Box::new(func),
+        }
+    }
+
+    pub fn call(&self, params: &[NonNull<Value>]) -> Output {
+        self.func.as_ref()(params)
+    }
+}
+
+// SAFETY: We are not doing any multi-threading so it is fine
+unsafe impl Send for Handler {}
+unsafe impl Sync for Handler {}
