@@ -5,7 +5,7 @@ use logos::Logos;
 use miette::{miette, LabeledSpan};
 use rug::ops::CompleteRound;
 use rug::{Complete, Float, Integer};
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::fs::OpenOptions;
 use std::io::*;
 use std::ops::Range;
@@ -31,7 +31,7 @@ pub type VarPtr = Option<NonNull<Value>>;
 pub(crate) type CallStack = Vec<FnStackData>;
 
 lazy_static::lazy_static! {
-    pub static ref INBUILT_FUNCTIONS: Mutex<HashSet<String>> = Mutex::new(HashSet::new());
+    pub static ref INBUILT_FUNCTIONS: Mutex<HashMap<(String, usize), Handler>> = Mutex::new(HashMap::new());
 }
 
 pub struct VM {
@@ -63,6 +63,8 @@ pub struct VM {
 
 impl VM {
     pub fn new(src: &str, exprs: Vec<Expr>) -> Self {
+        super::stdlib::init();
+
         Self {
             pc: 0,
             stack: Vec::with_capacity(1000),
@@ -396,7 +398,7 @@ impl VM {
                             "type" => {
                                 self.compile_expr(*a);
                                 self.instructions.push((
-                                    Instr(Bytecode::BuiltInFunction("type".to_owned()), vec![]),
+                                    Instr(Bytecode::BuiltInFunction("type".to_owned(), 1), vec![]),
                                     expr.span,
                                 ));
                             }
@@ -412,7 +414,7 @@ impl VM {
                         self.compile_expr(*b);
 
                         self.instructions.push((
-                            Instr(Bytecode::BuiltInFunction("rng".to_owned()), vec![]),
+                            Instr(Bytecode::BuiltInFunction("rng".to_owned(), 2), vec![]),
                             expr.span,
                         ));
                     }
@@ -481,39 +483,32 @@ impl VM {
                     .push((Instr(Bytecode::Ret, vec![]), expr.span));
             }
 
-            ExprKind::Call(name, args) => inbuilt_fn![self, name, args, expr.span,
-                ["$", 1],
-                ["$$", 1],
-                ["type", 1],
-                ["int", 1],
-                ["flt", 1],
-                ["str", 1],
-                ["ord", 1],
-                ["chr", 1],
-                ["inp", 1],
-                ["len", 1],
-                ["type", 1],
-                ["open", 1],
-                ["gcd", 2],
-                ["lcm", 2],
-                ["fib", 1],
-                ["abs", 1],
-                ["floor", 1],
-                ["ceil", 1],
-                ["exit", 1],
-                ["rnd", 2],
-                ["rng", 2],
-                ["sqrt", 2],
-                ["round", 2],
+            ExprKind::Call(name, args) => {
+                let num_args = args.as_ref().map_or(0, |v| v.len());
 
-                _ => {
+                if INBUILT_FUNCTIONS
+                    .lock()
+                    .unwrap()
+                    .contains_key(&(name.clone(), num_args))
+                {
+                    for_each_arg!(args, num_args,
+                        Some(arg) => { self.compile_expr(arg) },
+                        None => { self.push_data(Value::Nil, 0..0) }
+                    );
+
+                    self.instructions.push((
+                        Instr(Bytecode::BuiltInFunction(name, num_args), vec![]),
+                        expr.span,
+                    ));
+                } else {
                     for_each_arg!(args, arg => { self.compile_expr(arg) });
 
                     self.push_data(name.as_str().into(), expr.span.clone());
-                    self.instructions.push((Instr(Bytecode::FnCall, vec![]), expr.span));
+                    self.instructions
+                        .push((Instr(Bytecode::FnCall(num_args), vec![]), expr.span));
                     self.stack.push(allocate(Value::Nil));
-                 }
-            ],
+                }
+            }
 
             ExprKind::Ternary(condition, then_block, else_block) => {
                 self.compile_expr(*condition);
@@ -1032,7 +1027,7 @@ impl VM {
                 }
             },
 
-            Bytecode::FnCall => unsafe {
+            Bytecode::FnCall(num_args) => unsafe {
                 let fn_name = self
                     .stack
                     .pop()
@@ -1041,7 +1036,7 @@ impl VM {
                     .as_str();
                 let fn_obj_option = self.functions.get(fn_name);
                 if fn_obj_option.is_none() {
-                    self.runtime_error(format!("Function `{}` not found", fn_name).as_str(), span);
+                    self.runtime_error(format!("No function name `{fn_name}` found that takes: {num_args} argument(s)").as_str(), span);
                 }
 
                 let fn_obj @ FunctionData {
@@ -1324,429 +1319,27 @@ impl VM {
             Bytecode::And => self.compare_values(span, |a, b| a.and(b)),
             Bytecode::Or => self.compare_values(span, |a, b| a.or(b)),
 
-            Bytecode::BuiltInFunction(name) => match name.as_str() {
-                "exit" => std::process::exit(0),
+            Bytecode::BuiltInFunction(name, num_args) => {
+                let mut fn_args = (0..num_args)
+                    .map(|_| {
+                        memory::retain(self.stack.pop().unwrap_or_else(|| allocate(Value::Nil)))
+                    })
+                    .collect::<Vec<_>>();
 
-                "str" => unsafe {
-                    let s = memory::release(self.stack.pop().unwrap())
-                        .as_ref()
-                        .to_string();
+                fn_args.reverse();
 
-                    self.stack.push(memory::retain(allocate(Value::String(s))));
-                },
+                let ib_fn = INBUILT_FUNCTIONS.lock().unwrap();
+                let Some(ib_fn) = ib_fn.get(&(name, num_args)) else {
+                    self.runtime_error("What the...", span);
+                };
 
-                "ord" => unsafe {
-                    let s = memory::release(self.stack.pop().unwrap())
-                        .as_ref()
-                        .to_string();
+                match ib_fn.call(&fn_args) {
+                    Ok(Some(ret_val)) => self.stack.push(memory::retain(ret_val)),
+                    Err(e) => self.runtime_error(&e, span),
 
-                    self.stack
-                        .push(memory::retain(allocate(Value::Int(Integer::from(
-                            s.chars().next().unwrap() as u32,
-                        )))));
-                },
-                "chr" => unsafe {
-                    let i = memory::release(self.stack.pop().unwrap()).as_ref().as_int();
-
-                    let c = std::char::from_u32(i.saturating_cast()).unwrap_or('\0');
-                    self.stack
-                        .push(memory::retain(allocate(Value::String(c.to_string()))));
-                },
-
-                "sqrt" => unsafe {
-                    let default_value = Value::Int(2.into());
-
-                    let mut sqrt_to = memory::release(self.stack.pop().unwrap()).as_ref();
-                    let value = memory::release(
-                        self.stack
-                            .pop()
-                            .unwrap_or_else(|| allocate(Value::Int(Integer::from(2)))),
-                    )
-                    .as_ref();
-
-                    if sqrt_to.is_nil() && value.is_nil() {
-                        self.runtime_error("Expected 1 or 2 arguments, got none", span);
-                    }
-
-                    if sqrt_to.is_nil() {
-                        sqrt_to = &default_value;
-                    }
-
-                    let sqrt_to = match sqrt_to {
-                        Value::Int(i) => i.saturating_cast(),
-                        Value::Float(f) => f.to_u32_saturating().unwrap(),
-                        _ => self.runtime_error("Expected a number", span),
-                    };
-                    let value = match value {
-                        Value::Int(i) => match sqrt_to {
-                            2 => float!(i).sqrt(),
-                            3 => float!(i).cbrt(),
-                            _ => float!(i).root(sqrt_to),
-                        },
-                        Value::Float(f) => match sqrt_to {
-                            2 => f.clone().sqrt(),
-                            3 => f.clone().cbrt(),
-                            _ => f.clone().root(sqrt_to),
-                        },
-                        _ => self.runtime_error("Expected a number", span),
-                    };
-
-                    self.stack
-                        .push(memory::retain(allocate(Value::Float(value))));
-                },
-
-                "gcd" => unsafe {
-                    let a = memory::release(self.stack.pop().unwrap()).as_ref();
-                    let b = memory::release(self.stack.pop().unwrap()).as_ref();
-
-                    let gcd = match (a, b) {
-                        (Value::Int(a), Value::Int(b)) => a.gcd_ref(b).complete(),
-                        (Value::Int(a), Value::Float(b)) => a
-                            .gcd_ref(&b.to_integer().unwrap_or(Integer::from(0)))
-                            .complete(),
-                        (Value::Float(a), Value::Int(b)) => {
-                            a.to_integer().unwrap_or(Integer::from(0)).gcd(b)
-                        }
-                        (Value::Float(a), Value::Float(b)) => a
-                            .to_integer()
-                            .unwrap_or(Integer::from(0))
-                            .gcd(&b.to_integer().unwrap_or(Integer::from(0))),
-                        _ => self.runtime_error("Expected a number", span),
-                    };
-
-                    self.stack.push(memory::retain(allocate(Value::Int(gcd))));
-                },
-
-                "lcm" => unsafe {
-                    let a = memory::release(self.stack.pop().unwrap()).as_ref();
-                    let b = memory::release(self.stack.pop().unwrap()).as_ref();
-
-                    let lcm = match (a, b) {
-                        (Value::Int(a), Value::Int(b)) => a.lcm_ref(b).complete(),
-                        (Value::Int(a), Value::Float(b)) => a
-                            .lcm_ref(&b.to_integer().unwrap_or(Integer::from(0)))
-                            .complete(),
-                        (Value::Float(a), Value::Int(b)) => {
-                            a.to_integer().unwrap_or(Integer::from(0)).lcm(b)
-                        }
-                        (Value::Float(a), Value::Float(b)) => a
-                            .to_integer()
-                            .unwrap_or(Integer::from(0))
-                            .lcm(&b.to_integer().unwrap_or(Integer::from(0))),
-                        _ => self.runtime_error("Expected a number", span),
-                    };
-
-                    self.stack.push(memory::retain(allocate(Value::Int(lcm))));
-                },
-
-                "fib" => unsafe {
-                    let n = memory::release(self.stack.pop().unwrap()).as_ref();
-                    match n {
-                        Value::Int(n) => {
-                            self.stack
-                                .push(memory::retain(allocate(Value::Int(Integer::from(
-                                    Integer::fibonacci(n.saturating_cast()),
-                                )))));
-                        }
-
-                        Value::Float(n) => {
-                            self.stack
-                                .push(memory::retain(allocate(Value::Int(Integer::from(
-                                    Integer::fibonacci(n.to_u32_saturating().unwrap()),
-                                )))));
-                        }
-
-                        _ => self.runtime_error("Expected a number", span),
-                    }
-                },
-
-                "abs" => unsafe {
-                    let n = memory::release(self.stack.pop().unwrap()).as_ref();
-                    match n {
-                        Value::Int(n) => {
-                            self.stack
-                                .push(memory::retain(allocate(Value::Int(n.abs_ref().complete()))));
-                        }
-
-                        Value::Float(n) => {
-                            self.stack.push(memory::retain(allocate(Value::Float(
-                                n.abs_ref().complete(53),
-                            ))));
-                        }
-
-                        _ => self.runtime_error("Expected a number", span),
-                    }
-                },
-
-                "round" => unsafe {
-                    let mut precision = memory::release(self.stack.pop().unwrap()).as_ref();
-                    let n = memory::release(self.stack.pop().unwrap()).as_ref();
-
-                    if precision.is_nil() && n.is_nil() {
-                        self.runtime_error("Expected 1 or 2 arguments, got none", span);
-                    }
-
-                    let default_value = Value::Int(1.into());
-                    if precision.is_nil() {
-                        precision = &default_value;
-                    }
-
-                    match (n, precision) {
-                        (Value::Int(n), Value::Int(_)) => {
-                            self.stack
-                                .push(memory::retain(allocate(Value::Int(Integer::from(n)))));
-                        }
-
-                        (Value::Float(n), Value::Int(precision)) => {
-                            self.stack.push(memory::retain(allocate(Value::Float(
-                                Float::parse(format!(
-                                    "{:.1$}",
-                                    n,
-                                    precision.to_usize().unwrap_or_else(|| self.runtime_error(
-                                        "Precision must be a positive integer",
-                                        span
-                                    ))
-                                ))
-                                .unwrap()
-                                .complete(53),
-                            ))));
-                        }
-
-                        _ => self.runtime_error("Expected a number", span),
-                    }
-                },
-
-                "floor" => unsafe {
-                    let n = memory::release(self.stack.pop().unwrap()).as_ref();
-                    match n {
-                        Value::Int(n) => {
-                            self.stack
-                                .push(memory::retain(allocate(Value::Int(Integer::from(n)))));
-                        }
-
-                        Value::Float(n) => {
-                            self.stack.push(memory::retain(allocate(Value::Float(
-                                n.floor_ref().complete(53),
-                            ))));
-                        }
-
-                        _ => self.runtime_error("Expected a number", span),
-                    }
-                },
-
-                "ceil" => unsafe {
-                    let n = memory::release(self.stack.pop().unwrap()).as_ref();
-                    match n {
-                        Value::Int(n) => {
-                            self.stack
-                                .push(memory::retain(allocate(Value::Int(Integer::from(n)))));
-                        }
-
-                        Value::Float(n) => {
-                            self.stack.push(memory::retain(allocate(Value::Float(
-                                n.ceil_ref().complete(53),
-                            ))));
-                        }
-
-                        _ => self.runtime_error("Expected a number", span),
-                    }
-                },
-
-                "rng" => unsafe {
-                    let end = memory::release(self.stack.pop().unwrap()).as_ref();
-                    let start = self
-                        .stack
-                        .pop()
-                        .unwrap_or_else(|| allocate(Value::Int(Integer::new())))
-                        .as_ref();
-                    match (start, end) {
-                        (Value::Int(start), Value::Int(end)) => {
-                            let start_value: i64 = start.saturating_cast();
-                            let end_value: i64 = end.saturating_cast();
-                            let mut array = vec![];
-                            if start_value > end_value {
-                                for i in (end_value + 1..=start_value).rev() {
-                                    array.push(Value::Int(Integer::from(i)));
-                                }
-                            } else {
-                                for i in start_value..end_value {
-                                    array.push(Value::Int(Integer::from(i)));
-                                }
-                            }
-                            self.stack
-                                .push(memory::retain(allocate(Value::Array(array))));
-                        }
-                        (Value::Nil, Value::Int(end)) => {
-                            let end_value: i64 = end.saturating_cast();
-                            let mut array = vec![];
-                            if 0 > end_value {
-                                for i in (end_value + 1..=0).rev() {
-                                    array.push(Value::Int(Integer::from(i)));
-                                }
-                            } else {
-                                for i in 0..end_value {
-                                    array.push(Value::Int(Integer::from(i)));
-                                }
-                            }
-                            self.stack
-                                .push(memory::retain(allocate(Value::Array(array))));
-                        }
-                        _ => self.runtime_error("Expected an integer", span),
-                    }
-                },
-
-                "rnd" => unsafe {
-                    let popped1 = memory::release(self.stack.pop().unwrap()).as_ref();
-                    let popped2 = memory::release(
-                        self.stack
-                            .pop()
-                            .unwrap_or_else(|| allocate(Value::Int(Integer::from(0)))),
-                    )
-                    .as_ref();
-
-                    let mut end = self.convert_to_i128(popped1, span.clone());
-                    let mut start = self.convert_to_i128(popped2, span);
-                    if start == end {
-                        self.stack
-                            .push(memory::retain(allocate(Value::Int(Integer::from(start)))));
-                    } else {
-                        if start > end {
-                            std::mem::swap(&mut start, &mut end);
-                        }
-                        self.stack
-                            .push(memory::retain(allocate(Value::Int(Integer::from(
-                                self.rng.i128(start..end),
-                            )))));
-                    }
-                },
-
-                "flt" => unsafe {
-                    let val = memory::release(self.stack.pop().unwrap()).as_ref();
-                    self.stack
-                        .push(memory::retain(allocate(Value::Float(match val {
-                            Value::Int(i) => float!(i),
-                            Value::Float(f) => f.clone(),
-                            Value::Bool(b) => float!(*b as i32),
-                            Value::String(s) => match Float::parse(s) {
-                                Ok(i) => i.complete(53),
-                                Err(e) => {
-                                    self.runtime_error(
-                                        &format!("cannot parse the string to float value, {}", e),
-                                        span,
-                                    );
-                                }
-                            },
-
-                            Value::Nil => Float::new(53),
-                            Value::Array(_) => {
-                                self.runtime_error("cannot convert array type to float", span)
-                            }
-                            Value::File(_) => {
-                                self.runtime_error("cannot convert file type to float", span)
-                            }
-                        }))));
-                },
-
-                "int" => unsafe {
-                    let val = memory::release(self.stack.pop().unwrap()).as_ref();
-                    self.stack
-                        .push(memory::retain(allocate(Value::Int(match val {
-                            Value::Int(i) => i.clone(),
-                            Value::Float(f) => f.to_integer().unwrap(),
-                            Value::Bool(b) => Integer::from(*b as i32),
-                            Value::String(s) => match Integer::parse(s) {
-                                Ok(i) => i.complete(),
-                                Err(e) => {
-                                    self.runtime_error(
-                                        &format!("cannot parse the string to int value, {}", e),
-                                        span,
-                                    );
-                                }
-                            },
-
-                            Value::Nil => Integer::new(),
-                            Value::Array(_) => {
-                                self.runtime_error("cannot convert array type to int", span)
-                            }
-                            Value::File(_) => {
-                                self.runtime_error("cannot convert file type to int", span)
-                            }
-                        }))));
-                },
-
-                "inp" => unsafe {
-                    let prompt = memory::release(self.stack.pop().unwrap()).as_ref();
-
-                    match prompt {
-                        Value::Nil => {}
-                        _ => {
-                            print!("{}", prompt.to_string());
-                            stdout().flush().unwrap();
-                        }
-                    }
-
-                    let mut s = String::new();
-                    match stdin().read_line(&mut s) {
-                        Err(x) => {
-                            self.runtime_error(x.to_string().as_str(), span);
-                        }
-                        Ok(_) => {}
-                    };
-                    if let Some('\n') = s.chars().next_back() {
-                        s.pop();
-                    }
-                    if let Some('\r') = s.chars().next_back() {
-                        s.pop();
-                    }
-                    self.stack.push(memory::retain(allocate(Value::String(s))));
-                },
-
-                "len" => unsafe {
-                    let len = memory::release(self.stack.pop().unwrap())
-                        .as_ref()
-                        .as_array()
-                        .len();
-                    self.stack
-                        .push(memory::retain(allocate(Value::Int(len.into()))));
-                },
-
-                "type" => unsafe {
-                    let t = memory::release(self.stack.pop().unwrap())
-                        .as_ref()
-                        .get_type();
-
-                    self.stack
-                        .push(memory::retain(allocate(Value::String(t.to_owned()))));
-                },
-
-                "$" => unsafe {
-                    println!(
-                        "{}",
-                        memory::release(self.stack.pop().unwrap())
-                            .as_ref()
-                            .to_string()
-                    );
-
-                    if let Err(e) = stdout().flush() {
-                        self.runtime_error(&format!("Failed to flush stdout, {e:?}"), span);
-                    }
-                },
-
-                "$$" => unsafe {
-                    print!(
-                        "{}",
-                        memory::release(self.stack.pop().unwrap())
-                            .as_ref()
-                            .to_string()
-                    );
-
-                    if let Err(e) = stdout().flush() {
-                        self.runtime_error(&format!("Failed to flush stdout, {e:?}"), span);
-                    }
-                },
-
-                _ => self.runtime_error(&format!("Unknown function: {name}"), span),
-            },
+                    _ => {}
+                }
+            }
 
             Bytecode::Method(MethodFunction {
                 name,
@@ -2186,24 +1779,6 @@ impl VM {
         }
     }
 
-    fn convert_to_i128(&self, value: &Value, span: Range<usize>) -> i128 {
-        match value {
-            Value::Int(i) => i.saturating_cast(),
-            Value::Float(f) => f
-                .to_integer()
-                .unwrap_or_else(|| {
-                    // Only way for the unwrap to fail is if the float is infinity
-                    if f.is_sign_negative() {
-                        Integer::from(i128::MIN)
-                    } else {
-                        Integer::from(i128::MAX)
-                    }
-                })
-                .saturating_cast(),
-            _ => self.runtime_error("Expected a number", span),
-        }
-    }
-
     fn compile_idx(
         &mut self,
         index: Box<Expr>,
@@ -2344,7 +1919,7 @@ mod tests {
         });
         assert_eq!(vm.instructions.len(), 3);
         assert_eq!(vm.instructions[1].0 .0, Bytecode::LoadConst);
-        assert_eq!(vm.instructions[2].0 .0, Bytecode::FnCall);
+        assert_eq!(vm.instructions[2].0 .0, Bytecode::FnCall(0));
     }
 
     #[test]
@@ -2361,7 +1936,7 @@ mod tests {
                 returns: true,
             },
         );
-        let instr = Instr(Bytecode::FnCall, vec![0]);
+        let instr = Instr(Bytecode::FnCall(0), vec![0]);
         vm.run_byte(instr, 0..0);
         assert_eq!(vm.stack.len(), 1);
         assert_eq!(
