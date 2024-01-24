@@ -1143,8 +1143,8 @@ impl VM {
                 }
 
                 let (start, end, step) = (
-                    start.to_usize().unwrap(),
-                    end.to_usize().unwrap(),
+                    start.abs().to_usize().unwrap(),
+                    end.abs().to_usize().unwrap(),
                     step.abs().to_usize().unwrap(),
                 );
 

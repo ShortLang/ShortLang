@@ -87,6 +87,8 @@ impl Value {
     pub fn as_float(&self) -> Float {
         match self.clone() {
             Self::Float(f) => f,
+            Self::Int(i) => float!(i),
+
             _ => panic!("Expected an float value, found: {}", self.get_type()),
         }
     }
