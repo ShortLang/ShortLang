@@ -30,11 +30,12 @@ pub fn init() {
         "type" => [basic::get_type, 1],
         "open" => [basic::open, 1],
 
-        "rng" => [basic::rng, 1],
-        "rng" => [basic::rng, 2],
+        "rng" => [basic::rng_1, 1],
+        "rng" => [basic::rng_2, 2],
 
-        "rnd" => [basic::rnd, 1],
-        "rnd" => [basic::rnd, 2],
+        "rnd" => [basic::rnd_0, 0],
+        "rnd" => [basic::rnd_1, 1],
+        "rnd" => [basic::rnd_2, 2],
 
         "flt" => [basic::to_float, 1],
         "str" => [basic::to_str, 1],
@@ -48,9 +49,9 @@ pub fn init() {
         "floor" => [math::floor, 1],
 
         "sqrt" => [math::sqrt, 1],
-        "sqrt" => [math::sqrt, 2],
+        "root" => [math::root, 2],
 
-        "round" => [math::round, 1],
-        "round" => [math::round, 2],
+        "round" => [math::round_1, 1],
+        "round" => [math::round_2, 2],
     ];
 }
