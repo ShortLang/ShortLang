@@ -1096,7 +1096,7 @@ impl VM {
             },
 
             Bytecode::Index => unsafe {
-                let mut index = memory::release(self.stack.pop().unwrap()).as_ref().as_int();
+                let index = memory::release(self.stack.pop().unwrap()).as_ref().as_int();
                 let array = memory::release(self.stack.pop().unwrap())
                     .as_ref()
                     .as_array();
@@ -1112,10 +1112,7 @@ impl VM {
                             span,
                         );
                     }
-                    if index < 0 {
-                        index = ((index % len) + len) % len;
-                    }
-                    array[index.to_usize().unwrap()].clone()
+                    array[to_usize!(index, len)].clone()
                 })));
             },
 
@@ -1172,21 +1169,18 @@ impl VM {
 
             Bytecode::SetIndex => unsafe {
                 let value = memory::release(self.stack.pop().unwrap()).as_ref();
-                let index_usize = memory::release(self.stack.pop().unwrap())
-                    .as_ref()
-                    .as_int()
-                    .to_usize()
-                    .unwrap();
-
+                let index = memory::release(self.stack.pop().unwrap()).as_ref().as_int();
                 match memory::release(self.stack.pop().unwrap()).as_mut() {
                     Value::Array(arr) => {
-                        arr[index_usize] = value.clone();
+                        let index = to_usize!(index, arr.len());
+                        arr[index] = value.clone();
                     }
                     Value::String(s) => {
                         let mut chars: Vec<char> = s.chars().collect();
                         if let Value::String(new_char_str) = value {
                             if new_char_str.len() == 1 {
-                                chars[index_usize] = new_char_str.chars().next().unwrap();
+                                let index = to_usize!(index, chars.len());
+                                chars[index] = new_char_str.chars().next().unwrap();
                                 *s = chars.into_iter().collect();
                             } else {
                                 self.runtime_error(
@@ -1688,13 +1682,8 @@ impl VM {
         let index = unsafe { memory::release(self.stack.pop().unwrap()).as_ref().as_int() };
         match unsafe { memory::release(self.stack.pop().unwrap()).as_mut() } {
             Value::Array(arr) => {
-                let index_usize;
-                if index < 0 {
-                    index_usize = ((index % arr.len() + arr.len()) % arr.len()).to_usize_wrapping();
-                } else {
-                    index_usize = index.to_usize_wrapping();
-                }
-                arr[index_usize] = operation(&mut arr[index_usize], value).unwrap();
+                let index = to_usize!(index, arr.len());
+                arr[index] = operation(&mut arr[index], value).unwrap();
             }
             _ => self.runtime_error("Expected an array", span),
         }

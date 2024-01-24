@@ -106,3 +106,14 @@ macro_rules! process_placeholder {
         }
     };
 }
+
+#[macro_export]
+macro_rules! to_usize {
+    [ $index:expr, $length:expr ] => {
+        if $index < 0 {
+            (($index % $length + $length) % $length).to_usize_wrapping()
+        } else {
+            $index.to_usize_wrapping()
+        }
+    };
+}

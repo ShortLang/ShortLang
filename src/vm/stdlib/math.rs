@@ -28,9 +28,7 @@ pub fn fib(val: Input) -> Output {
     let n = unsafe { val[0].as_ref() };
     match n {
         Value::Int(n) => ret!(Value::Int(Integer::fibonacci(n.saturating_cast()).into())),
-
         Value::Float(n) => ret!(Value::Int(Integer::fibonacci(n.saturating_cast()).into())),
-
         _ => ret!(err: "Expected a number"),
     }
 }
@@ -61,7 +59,6 @@ pub fn abs(val: Input) -> Output {
     match n {
         Value::Int(n) => ret!(Value::Int(n.abs_ref().complete())),
         Value::Float(n) => ret!(Value::Float(n.abs_ref().complete(53))),
-
         _ => ret!(err: "Expected a number"),
     }
 }
@@ -86,34 +83,6 @@ pub fn round_2(val: Input) -> Output {
     ));
 }
 
-// if precision.is_nil() && n.is_nil() {
-//     ret!(err: "Expected 1 or 2 arguments, got none");
-// }
-
-// let default_value = Value::Int(1.into());
-// if precision.is_nil() {
-//     precision = &default_value;
-// }
-
-// match (n, precision) {
-//     (Value::Int(n), Value::Int(_)) => ret!(Value::Int(Integer::from(n))),
-
-//     (Value::Float(n), Value::Int(precision)) => {
-//         let Some(precision) = precision.to_usize() else {
-//             ret!(err: "Precision must be a positive integer")
-//         };
-
-//         ret!(Value::Float(
-//             Float::parse(format!("{:.1$}", n, precision))
-//                 .unwrap()
-//                 .complete(53),
-//         ));
-//     }
-
-//     _ => ret!(err: "Expected a number"),
-// }
-// }
-
 pub fn floor(val: Input) -> Output {
     let n = unsafe { val[0].as_ref() };
     match n {
@@ -128,24 +97,18 @@ pub fn ceil(val: Input) -> Output {
     let n = unsafe { val[0].as_ref() };
     match n {
         Value::Int(n) => ret!(Value::Int(Integer::from(n))),
-        Value::Float(n) => ret!(Value::Float(n.ceil_ref().complete(53),)),
-
+        Value::Float(n) => ret!(Value::Float(n.ceil_ref().complete(53))),
         _ => ret!(err: "Expected a number"),
     }
 }
 
 pub fn sqrt(val: Input) -> Output {
     let n = float!(unsafe { val[0].as_ref().as_int() });
-    let sqrt = n.sqrt();
-
-    Ok(Some(allocate(Value::Float(sqrt))))
+    Ok(Some(allocate(Value::Float(n.sqrt()))))
 }
 
 pub fn root(val: Input) -> Output {
     let [n, th_root] = unsafe { [val[0].as_ref().as_int(), val[1].as_ref().as_int()] };
-    let n = float!(n);
-
-    let root = n.root(th_root.to_u32_wrapping());
-
+    let root = float!(n).root(th_root.saturating_cast());
     Ok(Some(allocate(Value::Float(root))))
 }

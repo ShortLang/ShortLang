@@ -1,6 +1,6 @@
-use std::sync::Mutex;
-
+use az::SaturatingCast;
 use rug::{ops::CompleteRound, Complete, Float, Integer};
+use std::sync::Mutex;
 
 use super::*;
 
@@ -10,20 +10,17 @@ lazy_static::lazy_static! {
 
 pub fn len(val: Input) -> Output {
     let len = unsafe { val[0].as_ref().as_array().len() };
-
     ret!(Value::Int(len.into()))
 }
 
 pub fn print(val: Input) -> Output {
     print!("{}", unsafe { val[0].as_ref() });
     std::io::Write::flush(&mut std::io::stdout()).expect("Failed to flush stdout");
-
     ret!()
 }
 
 pub fn println(val: Input) -> Output {
     println!("{}", unsafe { val[0].as_ref() });
-
     ret!()
 }
 
@@ -52,45 +49,35 @@ pub fn char(val: Input) -> Output {
 
 /// Takes 1 parameter, 0..n or n..=0 if n < 0
 pub fn rng_1(val: Input) -> Output {
-    let upper_lim = unsafe { val[0].as_ref().as_int().to_i128_wrapping() };
-
-    let reverse = upper_lim.is_negative();
-
-    let mut array = (0..upper_lim.abs())
-        .map(|i| Value::Int((if reverse { -i } else { i }).into()))
-        .collect::<Vec<_>>();
-
-    if reverse {
-        array.reverse();
+    let upper_lim: i128 = convert_to_i128!(unsafe { val[0].as_ref() });
+    let mut array = Vec::new();
+    if 0 > upper_lim {
+        for i in (upper_lim..0).rev() {
+            array.push(Value::Int(i.into()));
+        }
+    } else {
+        for i in 0..upper_lim {
+            array.push(Value::Int(i.into()));
+        }
     }
-
     ret!(Value::Array(array));
 }
 
 /// Takes 2 parameters, 0..n or n..=0 if n < 0
 pub fn rng_2(val: Input) -> Output {
-    // TODO: add negative number support
-
-    let [lower_lim, upper_lim] = unsafe {
-        [
-            val[0].as_ref().as_int().to_i128_wrapping(),
-            val[1].as_ref().as_int().to_i128_wrapping(),
-        ]
-    };
-
-    let reverse = lower_lim > upper_lim;
-
-    let low = std::cmp::min(lower_lim, upper_lim);
-    let high = std::cmp::max(lower_lim, upper_lim);
-
-    let mut array = (low.abs()..high.abs())
-        .map(|i| Value::Int(i.into()))
-        .collect::<Vec<_>>();
-
-    if reverse {
-        array.reverse();
+    let [lower_lim, upper_lim] = unsafe { [val[0].as_ref(), val[1].as_ref()] };
+    let lower_lim: i128 = convert_to_i128!(lower_lim);
+    let upper_lim: i128 = convert_to_i128!(upper_lim);
+    let mut array = Vec::new();
+    if lower_lim > upper_lim {
+        for i in (upper_lim..lower_lim).rev() {
+            array.push(Value::Int(i.into()));
+        }
+    } else {
+        for i in lower_lim..upper_lim {
+            array.push(Value::Int(i.into()));
+        }
     }
-
     ret!(Value::Array(array));
 }
 
@@ -101,30 +88,25 @@ pub fn rnd_0(_val: Input) -> Output {
 
 /// Takes 1 parameter
 pub fn rnd_1(val: Input) -> Output {
-    let upper_limit = unsafe { val[0].as_ref().as_int() };
-    ret!(Value::Int(
-        RAND.lock()
-            .unwrap()
-            .i128(0..upper_limit.to_i128_wrapping())
-            .into()
-    ));
+    let upper_limit: i128 = unsafe { convert_to_i128!(val[0].as_ref()) };
+    ret!(Value::Int(RAND.lock().unwrap().i128(0..upper_limit).into()));
 }
 
 /// Takes 2 parameters
 pub fn rnd_2(val: Input) -> Output {
-    let [lower_lim, upper_lim] = unsafe { [val[0].as_ref().as_int(), val[1].as_ref().as_int()] };
-
+    let [lower_lim, upper_lim]: [i128; 2] = unsafe {
+        [
+            convert_to_i128!(val[0].as_ref()),
+            convert_to_i128!(val[1].as_ref()),
+        ]
+    };
     ret!(Value::Int(
-        RAND.lock()
-            .unwrap()
-            .i128(lower_lim.to_i128_wrapping()..upper_lim.to_i128_wrapping())
-            .into()
+        RAND.lock().unwrap().i128(lower_lim..upper_lim).into()
     ));
 }
 
 pub fn to_float(val: Input) -> Output {
     let val = unsafe { val[0].as_ref() };
-
     ret!(Value::Float(match val {
         Value::Int(i) => float!(i),
         Value::Float(f) => f.clone(),
@@ -135,7 +117,6 @@ pub fn to_float(val: Input) -> Output {
                 &format!("cannot parse the string to float value, {}", e)
             ),
         },
-
         Value::Nil => Float::new(53),
         Value::Array(_) => ret!(err: "Cannot convert array type to float"),
         Value::File(_) => ret!(err: "Cannot convert file type to float"),
@@ -154,7 +135,6 @@ pub fn to_int(val: Input) -> Output {
                 &format!("cannot parse the string to int value, {}", e)
             ),
         },
-
         Value::Nil => Integer::new(),
         Value::Array(_) => ret!(err:"Cannot convert array type to int"),
         Value::File(_) => ret!(err:"Cannot convert file type to int"),
@@ -163,7 +143,6 @@ pub fn to_int(val: Input) -> Output {
 
 pub fn input(val: Input) -> Output {
     use std::io::*;
-
     let prompt = unsafe { val[0].as_ref() };
 
     match prompt {
