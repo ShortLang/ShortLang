@@ -106,22 +106,3 @@ macro_rules! process_placeholder {
         }
     };
 }
-
-#[macro_export]
-macro_rules! add_fn {
-    [ $set:expr, $( $name:expr => [$placeholder:ident; $n:expr] { $($tt:tt)* } ),* $(,)? ] => {
-        $(
-            $set.insert((String::from($name), $n), Handler::new(
-                |$placeholder| unsafe {
-                    $($tt)*
-                }
-            ));
-        )*
-    };
-
-    [ $set:expr, $( $name:expr => [ $func:expr, $n:expr ] ),* $(,)? ] => {
-        $(
-            $set.insert((String::from($name), $n), Handler::new($func));
-        )*
-    }
-}
