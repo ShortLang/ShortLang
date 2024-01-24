@@ -1,8 +1,12 @@
-use az::SaturatingCast;
+use std::sync::Mutex;
+
 use rug::{ops::CompleteRound, Complete, Float, Integer};
 
-use super::utils::*;
 use super::*;
+
+lazy_static::lazy_static! {
+    static ref RAND: Mutex<fastrand::Rng> = Mutex::new(fastrand::Rng::new());
+}
 
 pub fn len(val: Input) -> Output {
     let len = unsafe { val[0].as_ref().as_array().len() };
@@ -46,73 +50,76 @@ pub fn char(val: Input) -> Output {
     ))
 }
 
-pub fn rng(val: Input) -> Output {
-    let &[start, end] = val else { unreachable!() };
-    let [start, end] = unsafe { [start.as_ref(), end.as_ref()] };
+/// Takes 1 parameter, 0..n or n..=0 if n < 0
+pub fn rng_1(val: Input) -> Output {
+    let upper_lim = unsafe { val[0].as_ref().as_int().to_i128_wrapping() };
 
-    match (start, end) {
-        (Value::Int(start), Value::Int(end)) => {
-            let start_value: i64 = start.saturating_cast();
-            let end_value: i64 = end.saturating_cast();
-            let mut array = vec![];
-            if start_value > end_value {
-                for i in (end_value + 1..=start_value).rev() {
-                    array.push(Value::Int(Integer::from(i)));
-                }
-            } else {
-                for i in start_value..end_value {
-                    array.push(Value::Int(Integer::from(i)));
-                }
-            }
+    let reverse = upper_lim.is_negative();
 
-            ret!(Value::Array(array));
-        }
-        (Value::Nil, Value::Int(end)) => {
-            let end_value: i64 = end.saturating_cast();
-            let mut array = vec![];
-            if 0 > end_value {
-                for i in (end_value + 1..=0).rev() {
-                    array.push(Value::Int(Integer::from(i)));
-                }
-            } else {
-                for i in 0..end_value {
-                    array.push(Value::Int(Integer::from(i)));
-                }
-            }
+    let mut array = (0..upper_lim.abs())
+        .map(|i| Value::Int((if reverse { -i } else { i }).into()))
+        .collect::<Vec<_>>();
 
-            ret!(Value::Array(array));
-        }
-
-        _ => ret!(err: "Expected an integer"),
+    if reverse {
+        array.reverse();
     }
+
+    ret!(Value::Array(array));
 }
 
-pub fn rnd(val: Input) -> Output {
-    let [popped2, popped1] = val else {
-        unreachable!()
+/// Takes 2 parameters, 0..n or n..=0 if n < 0
+pub fn rng_2(val: Input) -> Output {
+    // TODO: add negative number support
+
+    let [lower_lim, upper_lim] = unsafe {
+        [
+            val[0].as_ref().as_int().to_i128_wrapping(),
+            val[1].as_ref().as_int().to_i128_wrapping(),
+        ]
     };
 
-    let [popped2, popped1] = unsafe { [popped2.as_ref(), popped1.as_ref()] };
+    let reverse = lower_lim > upper_lim;
 
-    let Ok(mut end) = convert_to_i128(popped1) else {
-        ret!(err: "Expected a number".to_owned())
-    };
+    let low = std::cmp::min(lower_lim, upper_lim);
+    let high = std::cmp::max(lower_lim, upper_lim);
 
-    let Ok(mut start) = convert_to_i128(popped2) else {
-        ret!(err: "Expected a number".to_owned())
-    };
+    let mut array = (low.abs()..high.abs())
+        .map(|i| Value::Int(i.into()))
+        .collect::<Vec<_>>();
 
-    if start == end {
-        ret!(Value::Int(Integer::from(start)));
-    } else {
-        if start > end {
-            std::mem::swap(&mut start, &mut end);
-        }
-
-        ret!(Value::Int(Integer::from(
-            fastrand::Rng::new().i128(start..end)
-        )));
+    if reverse {
+        array.reverse();
     }
+
+    ret!(Value::Array(array));
+}
+
+/// Takes 0 parameters
+pub fn rnd_0(_val: Input) -> Output {
+    ret!(Value::Int(RAND.lock().unwrap().i128(..).into()));
+}
+
+/// Takes 1 parameter
+pub fn rnd_1(val: Input) -> Output {
+    let upper_limit = unsafe { val[0].as_ref().as_int() };
+    ret!(Value::Int(
+        RAND.lock()
+            .unwrap()
+            .i128(0..upper_limit.to_i128_wrapping())
+            .into()
+    ));
+}
+
+/// Takes 2 parameters
+pub fn rnd_2(val: Input) -> Output {
+    let [lower_lim, upper_lim] = unsafe { [val[0].as_ref().as_int(), val[1].as_ref().as_int()] };
+
+    ret!(Value::Int(
+        RAND.lock()
+            .unwrap()
+            .i128(lower_lim.to_i128_wrapping()..upper_lim.to_i128_wrapping())
+            .into()
+    ));
 }
 
 pub fn to_float(val: Input) -> Output {
