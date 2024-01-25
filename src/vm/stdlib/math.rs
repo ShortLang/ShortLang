@@ -3,7 +3,26 @@ use rug::{ops::CompleteRound, Complete, Float, Integer};
 
 use super::*;
 
-pub fn lcm(val: Input) -> Output {
+pub fn init() {
+    let mut ib = INBUILT_FUNCTIONS.lock().unwrap();
+
+    add_fn![ib,
+        "lcm" => [lcm, 2],
+        "gcd" => [gcd, 2],
+        "fib" => [fib, 1],
+        "abs" => [abs, 1],
+        "ceil" => [ceil, 1],
+        "floor" => [floor, 1],
+
+        "sqrt" => [sqrt, 1],
+        "root" => [root, 2],
+
+        "round" => [round_1, 1],
+        "round" => [round_2, 2],
+    ];
+}
+
+fn lcm(val: Input) -> Output {
     let &[a, b] = val else { unreachable!() };
     let [a, b] = unsafe { [a.as_ref(), b.as_ref()] };
 
@@ -24,7 +43,7 @@ pub fn lcm(val: Input) -> Output {
     ret!(Value::Int(lcm));
 }
 
-pub fn fib(val: Input) -> Output {
+fn fib(val: Input) -> Output {
     let n = unsafe { val[0].as_ref() };
     match n {
         Value::Int(n) => ret!(Value::Int(Integer::fibonacci(n.saturating_cast()).into())),
@@ -33,7 +52,7 @@ pub fn fib(val: Input) -> Output {
     }
 }
 
-pub fn gcd(val: Input) -> Output {
+fn gcd(val: Input) -> Output {
     let &[a, b] = val else { unreachable!() };
     let [a, b] = unsafe { [a.as_ref(), b.as_ref()] };
 
@@ -54,7 +73,7 @@ pub fn gcd(val: Input) -> Output {
     ret!(Value::Int(gcd))
 }
 
-pub fn abs(val: Input) -> Output {
+fn abs(val: Input) -> Output {
     let n = unsafe { val[0].as_ref() };
     match n {
         Value::Int(n) => ret!(Value::Int(n.abs_ref().complete())),
@@ -64,7 +83,7 @@ pub fn abs(val: Input) -> Output {
 }
 
 /// Takes 1 parameter
-pub fn round_1(val: Input) -> Output {
+fn round_1(val: Input) -> Output {
     let n = unsafe { val[0].as_ref().as_float() };
 
     ret!(Value::Float(
@@ -72,7 +91,7 @@ pub fn round_1(val: Input) -> Output {
     ));
 }
 
-pub fn round_2(val: Input) -> Output {
+fn round_2(val: Input) -> Output {
     let n = unsafe { val[0].as_ref().as_float() };
     let precision = unsafe { val[1].as_ref().as_int() };
 
@@ -83,7 +102,7 @@ pub fn round_2(val: Input) -> Output {
     ));
 }
 
-pub fn floor(val: Input) -> Output {
+fn floor(val: Input) -> Output {
     let n = unsafe { val[0].as_ref() };
     match n {
         Value::Int(n) => ret!(Value::Int(Integer::from(n))),
@@ -93,7 +112,7 @@ pub fn floor(val: Input) -> Output {
     }
 }
 
-pub fn ceil(val: Input) -> Output {
+fn ceil(val: Input) -> Output {
     let n = unsafe { val[0].as_ref() };
     match n {
         Value::Int(n) => ret!(Value::Int(Integer::from(n))),
@@ -102,12 +121,12 @@ pub fn ceil(val: Input) -> Output {
     }
 }
 
-pub fn sqrt(val: Input) -> Output {
+fn sqrt(val: Input) -> Output {
     let n = float!(unsafe { val[0].as_ref().as_int() });
     Ok(Some(allocate(Value::Float(n.sqrt()))))
 }
 
-pub fn root(val: Input) -> Output {
+fn root(val: Input) -> Output {
     let [n, th_root] = unsafe { [val[0].as_ref().as_int(), val[1].as_ref().as_int()] };
     let root = float!(n).root(th_root.saturating_cast());
     Ok(Some(allocate(Value::Float(root))))

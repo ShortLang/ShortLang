@@ -1,15 +1,32 @@
 use super::*;
 
-pub fn get_env(val: Input) -> Output {
+pub fn init() {
+    let mut ib = INBUILT_FUNCTIONS.lock().unwrap();
+
+    add_fn![ib,
+        "arg" => [args, 0],
+
+        "env" => [list_vars, 0],
+        "env" => [get_env, 1],
+        "env" => [set_env, 2],
+    ];
+}
+
+fn args(_: Input) -> Output {
+    ret!(Value::Array(
+        std::env::args().map(|i| i.into()).collect::<Vec<Value>>()
+    ))
+}
+
+fn get_env(val: Input) -> Output {
     let var_name = unsafe { val[0].as_ref().as_str() };
     let env = std::env::var(var_name).unwrap_or("".to_owned());
 
     ret!(Value::String(env))
 }
 
-pub fn set_env(val: Input) -> Output {
+fn set_env(val: Input) -> Output {
     let [key, value] = unsafe { [val[0].as_ref().as_str(), val[1].as_ref().as_str()] };
-
     let old_value = std::env::var(key).unwrap_or("".to_owned());
 
     std::env::set_var(key, value);
@@ -17,7 +34,7 @@ pub fn set_env(val: Input) -> Output {
     ret!(Value::String(old_value))
 }
 
-pub fn list_vars(_: Input) -> Output {
+fn list_vars(_: Input) -> Output {
     let vars = std::env::vars_os()
         .into_iter()
         .map(|(key, value)| {

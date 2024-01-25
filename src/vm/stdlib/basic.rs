@@ -8,37 +8,66 @@ lazy_static::lazy_static! {
     static ref RAND: Mutex<fastrand::Rng> = Mutex::new(fastrand::Rng::new());
 }
 
-pub fn len(val: Input) -> Output {
+pub fn init() {
+    let mut ib = INBUILT_FUNCTIONS.lock().unwrap();
+
+    add_fn![ib,
+        "$" => [println, 1],
+        "$$" => [print, 1],
+
+        "inp" => [input, 1],
+        "chr" => [char, 1],
+        "ord" => [ord, 1],
+
+        "len" => [len, 1],
+        "exit" => [exit, 0],
+        "type" => [get_type, 1],
+        "open" => [open, 1],
+
+        "rng" => [rng_1, 1],
+        "rng" => [rng_2, 2],
+
+        "rnd" => [rnd_0, 0],
+        "rnd" => [rnd_1, 1],
+        "rnd" => [rnd_2, 2],
+
+        "flt" => [to_float, 1],
+        "str" => [to_str, 1],
+        "int" => [to_int, 1],
+    ];
+}
+
+fn len(val: Input) -> Output {
     let len = unsafe { val[0].as_ref().as_array().len() };
     ret!(Value::Int(len.into()))
 }
 
-pub fn print(val: Input) -> Output {
+fn print(val: Input) -> Output {
     print!("{}", unsafe { val[0].as_ref() });
     std::io::Write::flush(&mut std::io::stdout()).expect("Failed to flush stdout");
     ret!()
 }
 
-pub fn println(val: Input) -> Output {
+fn println(val: Input) -> Output {
     println!("{}", unsafe { val[0].as_ref() });
     ret!()
 }
 
-pub fn exit(_: Input) -> Output {
+fn exit(_: Input) -> Output {
     std::process::exit(0);
 }
 
-pub fn to_str(val: Input) -> Output {
+fn to_str(val: Input) -> Output {
     ret!(Value::String(unsafe { val[0].as_ref().to_string() }))
 }
 
-pub fn ord(val: Input) -> Output {
+fn ord(val: Input) -> Output {
     ret!(Value::Int(
         unsafe { val[0].as_ref().as_str().chars().next().unwrap() as u8 }.into(),
     ))
 }
 
-pub fn char(val: Input) -> Output {
+fn char(val: Input) -> Output {
     ret!(Value::String(
         String::from_utf8(vec![unsafe {
             val[0].as_ref().as_int().to_u8().unwrap_or(b'\0')
@@ -48,7 +77,7 @@ pub fn char(val: Input) -> Output {
 }
 
 /// Takes 1 parameter, 0..n or n..=0 if n < 0
-pub fn rng_1(val: Input) -> Output {
+fn rng_1(val: Input) -> Output {
     let upper_lim: i128 = convert_to_i128!(unsafe { val[0].as_ref() });
     let mut array = Vec::new();
     if 0 > upper_lim {
@@ -64,7 +93,7 @@ pub fn rng_1(val: Input) -> Output {
 }
 
 /// Takes 2 parameters, 0..n or n..=0 if n < 0
-pub fn rng_2(val: Input) -> Output {
+fn rng_2(val: Input) -> Output {
     let [lower_lim, upper_lim] = unsafe { [val[0].as_ref(), val[1].as_ref()] };
     let lower_lim: i128 = convert_to_i128!(lower_lim);
     let upper_lim: i128 = convert_to_i128!(upper_lim);
@@ -82,18 +111,18 @@ pub fn rng_2(val: Input) -> Output {
 }
 
 /// Takes 0 parameters
-pub fn rnd_0(_val: Input) -> Output {
+fn rnd_0(_val: Input) -> Output {
     ret!(Value::Int(RAND.lock().unwrap().i128(..).into()));
 }
 
 /// Takes 1 parameter
-pub fn rnd_1(val: Input) -> Output {
+fn rnd_1(val: Input) -> Output {
     let upper_limit: i128 = unsafe { convert_to_i128!(val[0].as_ref()) };
     ret!(Value::Int(RAND.lock().unwrap().i128(0..upper_limit).into()));
 }
 
 /// Takes 2 parameters
-pub fn rnd_2(val: Input) -> Output {
+fn rnd_2(val: Input) -> Output {
     let [lower_lim, upper_lim]: [i128; 2] = unsafe {
         [
             convert_to_i128!(val[0].as_ref()),
@@ -105,7 +134,7 @@ pub fn rnd_2(val: Input) -> Output {
     ));
 }
 
-pub fn to_float(val: Input) -> Output {
+fn to_float(val: Input) -> Output {
     let val = unsafe { val[0].as_ref() };
     ret!(Value::Float(match val {
         Value::Int(i) => float!(i),
@@ -123,7 +152,7 @@ pub fn to_float(val: Input) -> Output {
     }));
 }
 
-pub fn to_int(val: Input) -> Output {
+fn to_int(val: Input) -> Output {
     let val = unsafe { val[0].as_ref() };
     ret!(Value::Int(match val {
         Value::Int(i) => i.clone(),
@@ -141,7 +170,7 @@ pub fn to_int(val: Input) -> Output {
     }));
 }
 
-pub fn input(val: Input) -> Output {
+fn input(val: Input) -> Output {
     use std::io::*;
     let prompt = unsafe { val[0].as_ref() };
 
@@ -162,12 +191,12 @@ pub fn input(val: Input) -> Output {
     ret!(Value::String(s.trim().to_string()));
 }
 
-pub fn get_type(val: Input) -> Output {
+fn get_type(val: Input) -> Output {
     let t = unsafe { val[0].as_ref().get_type() };
     ret!(Value::String(t.to_owned()));
 }
 
-pub fn open(val: Input) -> Output {
+fn open(val: Input) -> Output {
     let path = unsafe { val[0].as_ref().to_string() };
     ret!(Value::File(path))
 }

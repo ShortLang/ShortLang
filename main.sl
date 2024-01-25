@@ -1,6 +1,1 @@
-$env("TERM")
-
-env("my_name", "wizard")
-$env("my_name")
-
-$f"first env is: $env()[0][0] = $env()[0][1]"
+$f"\x1b[31;1muser:\x1b[0m\t {env("USER")}\n\x1b[32;1msh:\x1b[0m\t {env("SHELL")}\n\x1b[33;1mterm:\x1b[0m\t {env("TERM")}\n\x1b[34;1mlocale:\x1b[0m\t {env("LANG")}\n\x1b[35;1mcols:\x1b[0m\t \x1b[41m  \x1b[42m  \x1b[43m  \x1b[44m  \x1b[45m  \x1b[0m"
