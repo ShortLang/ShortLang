@@ -1,6 +1,6 @@
 [package]
 name = "short_lang"
-version = "0.3.0"
+version = "0.4.0"
 edition = "2021"
 authors = ["Pranjal Patel <pranjalpatel@duck.com>", "Hamza <hamzaoubrahim51@gmail.com>", "FirePlank <contact@fireplank.xyz>"]
 description = "A programming language designed for code golfing."
