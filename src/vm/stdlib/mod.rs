@@ -1,7 +1,7 @@
 mod basic;
 mod macros;
 mod math;
-mod utils;
+mod os;
 
 pub(crate) use super::utils::allocate;
 pub(crate) use super::utils::Handler;
@@ -53,5 +53,9 @@ pub fn init() {
 
         "round" => [math::round_1, 1],
         "round" => [math::round_2, 2],
+
+        "env" => [os::list_vars, 0],
+        "env" => [os::get_env, 1],
+        "env" => [os::set_env, 2],
     ];
 }
