@@ -1,5 +1,5 @@
 [package]
-name = "short_lang"
+name = "shortlang"
 version = "0.4.0"
 edition = "2021"
 authors = ["Pranjal Patel <pranjalpatel@duck.com>", "Hamza <hamzaoubrahim51@gmail.com>", "FirePlank <contact@fireplank.xyz>"]
@@ -7,10 +7,6 @@ description = "A programming language designed for code golfing."
 repository = "https://github.com/ShortLang/ShortLang/"
 license = "GPL-3.0-only"
 readme = "README.md"
-
-[[bin]]
-name = "ShortLang"
-path = "src/main.rs"
 
 [dependencies]
 clap = { version = "4.4.12", features = ["derive"] }

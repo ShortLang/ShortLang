@@ -21,16 +21,19 @@ fn args(_: Input) -> Output {
 fn get_env(val: Input) -> Output {
     let var_name = unsafe { val[0].as_ref().as_str() };
     let env = std::env::var(var_name).unwrap_or("".to_owned());
-
+    if env.is_empty() {
+        ret!(Value::Nil)
+    }
     ret!(Value::String(env))
 }
 
 fn set_env(val: Input) -> Output {
     let [key, value] = unsafe { [val[0].as_ref().as_str(), val[1].as_ref().as_str()] };
     let old_value = std::env::var(key).unwrap_or("".to_owned());
-
     std::env::set_var(key, value);
-
+    if old_value.is_empty() {
+        ret!(Value::Nil)
+    }
     ret!(Value::String(old_value))
 }
 
