@@ -1420,6 +1420,7 @@ impl VM {
                     let (val_str, split_str) = match (val, split) {
                         (Value::String(val_str), Value::String(split_str)) => (val_str, split_str),
                         (Value::Nil, Value::String(split_str)) => (split_str, &empty),
+                        (Value::String(val_str), Value::Nil) => (val_str, &empty),
                         _ => self.runtime_error(
                             &format!(
                                 "Expected 'str' as argument of split, found '{}'",
