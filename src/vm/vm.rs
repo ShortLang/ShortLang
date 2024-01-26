@@ -853,7 +853,7 @@ impl VM {
 
     fn runtime_error(&self, message: &str, span: Range<usize>) -> ! {
         let reason = message.to_string();
-        println!(
+        eprintln!(
             "{:?}",
             miette!(
                 labels = vec![LabeledSpan::at(span, reason)],

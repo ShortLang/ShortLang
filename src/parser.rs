@@ -451,7 +451,7 @@ impl<'a> PParser<'a> {
             report = miette!(labels = vec![LabeledSpan::at(span, label)], "{}", message)
                 .with_source_code(self.source.to_string());
         }
-        println!("{:?}", report);
+        eprintln!("{:?}", report);
         std::process::exit(1);
     }
 
