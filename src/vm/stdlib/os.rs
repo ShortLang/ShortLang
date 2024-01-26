@@ -1,15 +1,27 @@
 use super::*;
 
+extern "C" {
+    fn system(_: *mut u8) -> i32;
+}
+
 pub fn init() {
     let mut ib = INBUILT_FUNCTIONS.lock().unwrap();
 
     add_fn![ib,
+        "run" => [run, 1],
         "arg" => [args, 0],
 
         "env" => [list_vars, 0],
         "env" => [get_env, 1],
         "env" => [set_env, 2],
     ];
+}
+
+fn run(val: Input) -> Output {
+    let input = unsafe { val[0].as_ref().as_str() };
+    let status = unsafe { system(input.as_ptr() as *mut _) };
+
+    ret!(Value::Int(status.into()))
 }
 
 fn args(_: Input) -> Output {
