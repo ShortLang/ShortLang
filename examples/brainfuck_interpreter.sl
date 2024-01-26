@@ -2,7 +2,7 @@
 prog = inp("Program: ").split()
 ii = 0
 tape = []
-ev rng(0,300) {
+ev rng(300) {
     tape += 0
 }
 tp = 0

@@ -3,8 +3,8 @@
 use clap::builder::TypedValueParser;
 use clap::Parser;
 use optimizer::Optimizer;
-use std::fs;
-use std::io::Write;
+use std::io::{Read, Write};
+use std::{fs, io};
 
 mod optimizer;
 use formatter::Formatter;
@@ -93,8 +93,12 @@ fn main() {
     let args = Args::parse();
     let std_lib = include_str!("../std/std.sl").to_owned();
     let src = fs::read_to_string(&args.file).unwrap_or_else(|_| {
-        println!("Error: Input file could not be read");
-        std::process::exit(1);
+        let mut buffer = String::new();
+        io::stdin().read_to_string(&mut buffer).unwrap_or_else(|_| {
+            println!("Error: Failed to read from stdin");
+            std::process::exit(1);
+        });
+        buffer
     });
 
     if args.format {
