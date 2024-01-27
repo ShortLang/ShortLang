@@ -85,20 +85,18 @@ fn abs(val: Input) -> Output {
 /// Takes 1 parameter
 fn round_1(val: Input) -> Output {
     let n = unsafe { val[0].as_ref().as_float() };
-
-    ret!(Value::Float(
-        Float::parse(format!("{:.1}", n)).unwrap().complete(53),
-    ));
+    ret!(Value::Int(
+        n.round().to_integer().unwrap_or(Integer::from(0))
+    ))
 }
 
 fn round_2(val: Input) -> Output {
     let n = unsafe { val[0].as_ref().as_float() };
     let precision = unsafe { val[1].as_ref().as_int() };
-
     ret!(Value::Float(
         Float::parse(format!("{:.1$}", n, precision.to_usize_wrapping()))
             .unwrap()
-            .complete(53),
+            .complete(53)
     ));
 }
 
@@ -106,7 +104,7 @@ fn floor(val: Input) -> Output {
     let n = unsafe { val[0].as_ref() };
     match n {
         Value::Int(n) => ret!(Value::Int(Integer::from(n))),
-        Value::Float(n) => ret!(Value::Float(n.floor_ref().complete(53),)),
+        Value::Float(n) => ret!(Value::Float(n.floor_ref().complete(53))),
 
         _ => ret!(err: "Expected a number"),
     }
