@@ -3,7 +3,7 @@
 use clap::builder::TypedValueParser;
 use clap::Parser;
 use optimizer::Optimizer;
-use std::io::Write;
+use std::io::{Read, Write};
 use std::{fs, io};
 
 use formatter::Formatter;
@@ -28,10 +28,6 @@ pub struct Args {
     /// The input file to use
     #[clap(name = "FILE", default_value = "")]
     file: String,
-
-    /// Take input from stdin instead of a file
-    #[clap(name = "stdin", short, long)]
-    input_from_stdin: bool,
 
     /// Prints the AST of the input file
     #[clap(short, long)]
@@ -99,53 +95,46 @@ fn main() {
     let args = Args::parse();
     let std_lib = include_str!("../std/std.sl").to_owned();
 
-    let src = if args.input_from_stdin {
-        io::stdin().lines().map(Result::unwrap).collect::<String>()
+    let src = if !args.file.is_empty() {
+        fs::read_to_string(&args.file).unwrap_or_else(|_| {
+            eprintln!("Error: Input file could not be read");
+            std::process::exit(1);
+        })
     } else {
-        if !args.file.is_empty() {
-            fs::read_to_string(&args.file).unwrap_or_else(|_| {
-                eprintln!("Error: Input file could not be read");
-                std::process::exit(1);
-            })
-        } else {
-            // No input file or stdin specified, start the repl
-            let mut rl = DefaultEditor::new().unwrap();
-            let mut lines = Vec::new();
+        // No input file or stdin specified, start the repl
+        let mut rl = DefaultEditor::new().unwrap();
+        let mut lines = Vec::new();
 
-            loop {
-                let readline = rl.readline(">>> ");
-                match readline {
-                    Ok(input) => {
-                        rl.add_history_entry(input.as_str()); // Add the line to the history
-                        if input.trim().is_empty() {
-                            continue;
-                        } else {
-                            lines.push(input);
-                        }
+        loop {
+            let readline = rl.readline(">>> ");
+            match readline {
+                Ok(input) => {
+                    rl.add_history_entry(input.as_str()); // Add the line to the history
+                    if input.trim().is_empty() {
+                        continue;
+                    } else {
+                        lines.push(input);
+                    }
 
-                        let src = lines.join("\n");
-                        let mut ast_std = PParser::new(&std_lib, tokenize(&std_lib)).parse();
-                        let mut ast_src = PParser::new(&src, tokenize(&src)).parse();
-                        ast_std.append(&mut ast_src);
+                    let src = lines.join("\n");
+                    let mut ast_std = PParser::new(&std_lib, tokenize(&std_lib)).parse();
+                    let mut ast_src = PParser::new(&src, tokenize(&src)).parse();
+                    ast_std.append(&mut ast_src);
 
-                        let ast = Optimizer::new(ast_std).optimize_all();
-                        let mut vm = VM::new(&src, ast);
+                    let ast = Optimizer::new(ast_std).optimize_all();
+                    let mut vm = VM::new(&src, ast);
 
-                        vm.compile();
-                        vm.run();
-                    }
-                    Err(ReadlineError::Interrupted) => {
-                        println!("CTRL-C");
-                        std::process::exit(0);
-                    }
-                    Err(ReadlineError::Eof) => {
-                        println!("CTRL-D");
-                        std::process::exit(0);
-                    }
-                    Err(err) => {
-                        eprintln!("Error: {:?}", err);
-                        std::process::exit(1);
-                    }
+                    vm.compile();
+                    vm.run();
+                }
+                Err(ReadlineError::Interrupted) => {
+                    println!("CTRL-C");
+                    std::process::exit(0);
+                }
+                Err(ReadlineError::Eof) => std::process::exit(0),
+                Err(err) => {
+                    eprintln!("Error: {:?}", err);
+                    std::process::exit(1);
                 }
             }
         }
