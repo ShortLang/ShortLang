@@ -1,1 +1,1 @@
-run("echo hello")
+$"hello".push(" world!")

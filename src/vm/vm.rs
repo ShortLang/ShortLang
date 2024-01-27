@@ -17,7 +17,6 @@ use super::value::{Type, Value};
 use crate::for_each_arg;
 use crate::parser::{BinaryOp, Expr, ExprKind};
 use crate::parser::{LogosToken, PParser, PostfixOp, UnaryOp};
-use crate::vm::bytecode::MethodFunction;
 use crate::vm::memory;
 use crate::*; // macros
 
@@ -1371,12 +1370,22 @@ impl VM {
                 let data_type = Type::try_from(data.as_ref().get_type()).unwrap(); // safe
 
                 // Check if a built-in method exists
-                if let Some(method_fn) = INBUILT_METHODS.lock().unwrap().get(&(name.clone(), data_type, num_args)) {
-                    method_fn.call(data, &fn_args);
+                if let Some(method_fn) =
+                    INBUILT_METHODS
+                        .lock()
+                        .unwrap()
+                        .get(&(name.clone(), data_type, num_args))
+                {
+                    match method_fn.call(data, &fn_args) {
+                        Ok(Some(ret_val)) => self.stack.push(memory::retain(ret_val)),
+                        Err(e) => self.runtime_error(&e, span),
+
+                        _ => {}
+                    }
                 } else {
                     todo!("Custom impl functions are not implemented yet");
                 }
-            }
+            },
 
             _ => {} // old impl
                     // Bytecode::Method(MethodFunction {
@@ -1385,153 +1394,7 @@ impl VM {
                     //     in_built,
                     //     ..
                     // }) => match name.as_str() {
-                    // "push" if in_built => unsafe {
-                    //     let src = memory::release(self.stack.pop().unwrap());
-                    //     memory::retain(src);
-                    //     let dest = memory::release(self.stack.pop().unwrap()).as_mut();
-
-                    //     self.check_type(&name, on_types, dest, span);
-
-                    //     *dest = dest.binary_add(src.as_ref()).unwrap();
-                    //     self.stack
-                    //         .push(memory::retain(NonNull::new_unchecked(dest as *mut Value)));
-                    // },
-
-                    // "pop" if in_built => unsafe {
-                    //     let dest = memory::release(self.stack.pop().unwrap()).as_mut();
-
-                    //     self.check_type(&name, on_types, dest, span.clone());
-
-                    //     let Some(val) = (match dest {
-                    //         Value::Array(a) => a.pop(),
-                    //         Value::String(s) => s.pop().map(|i| Value::String(i.to_string())),
-                    //         _ => unreachable!(),
-                    //     }) else {
-                    //         self.runtime_error("Cannot pop empty array", span);
-                    //     };
-
-                    //     self.stack.push(memory::retain(allocate(val)));
-                    // },
-
-                    // "clear" if in_built => unsafe {
-                    //     let var = memory::release(self.stack.pop().unwrap()).as_mut();
-
-                    //     self.check_type(&name, on_types, var, span);
-
-                    //     if !var.clear() {
-                    //         panic!();
-                    //     }
-                    // },
-
-                    // "join" if in_built => unsafe {
-                    //     let separator = memory::release(self.stack.pop().unwrap()).as_ref();
-                    //     let dest = memory::release(self.stack.pop().unwrap()).as_ref();
-
-                    //     self.check_type(&name, on_types, dest, span.clone());
-
-                    //     let array = dest.as_array();
-                    //     let result_string = array
-                    //         .iter()
-                    //         .map(|i| i.to_string())
-                    //         .collect::<Vec<_>>()
-                    //         .join(match separator {
-                    //             Value::Nil => "",
-                    //             Value::String(s) => s,
-
-                    //             _ => self.runtime_error(
-                    //                 &format!(
-                    //                     "Cannot join with the value of type '{}'",
-                    //                     separator.get_type()
-                    //                 ),
-                    //                 span,
-                    //             ),
-                    //         });
-
-                    //     self.stack
-                    //         .push(memory::retain(allocate(result_string.into())));
-                    // },
-
-                    // "split" if in_built => unsafe {
-                    //     let split = memory::release(self.stack.pop().unwrap()).as_ref();
-                    //     let val = memory::release(self.stack.pop().unwrap()).as_ref();
-                    //     let empty = String::new();
-                    //     let (val_str, split_str) = match (val, split) {
-                    //         (Value::String(val_str), Value::String(split_str)) => (val_str, split_str),
-                    //         (Value::Nil, Value::String(split_str)) => (split_str, &empty),
-                    //         (Value::String(val_str), Value::Nil) => (val_str, &empty),
-                    //         _ => self.runtime_error(
-                    //             &format!(
-                    //                 "Expected 'str' as argument of split, found '{}'",
-                    //                 val.get_type()
-                    //             ),
-                    //             span,
-                    //         ),
-                    //     };
-
-                    //     let split = if split_str.is_empty() {
-                    //         val_str
-                    //             .chars()
-                    //             .map(|i| i.to_string().into())
-                    //             .collect::<Vec<Value>>()
-                    //     } else {
-                    //         val_str
-                    //             .split(split_str)
-                    //             .map(|i| i.into())
-                    //             .collect::<Vec<Value>>()
-                    //     };
-
-                    //     self.stack
-                    //         .push(memory::retain(allocate(Value::Array(split))));
-                    // },
-
                     // // File methods
-                    // "r" if in_built => unsafe {
-                    //     let val = memory::release(self.stack.pop().unwrap()).as_ref();
-                    //     self.check_type(&name, on_types, val, span.clone());
-                    //     self.stack.push(memory::retain(allocate(Value::String(
-                    //         fs::read_to_string(val.to_string()).unwrap_or_else(|e| {
-                    //             self.runtime_error(
-                    //                 &format!("Failed to read '{}': {}", val.to_string(), e.kind()),
-                    //                 span.clone(),
-                    //             );
-                    //         }),
-                    //     ))));
-                    // },
-                    // "w" if in_built => unsafe {
-                    //     let content = memory::release(self.stack.pop().unwrap()).as_ref();
-                    //     let val = memory::release(self.stack.pop().unwrap()).as_ref();
-                    //     self.check_type(&name, on_types, val, span.clone());
-                    //     fs::write(val.to_string(), content.to_string()).unwrap_or_else(|e| {
-                    //         self.runtime_error(
-                    //             &format!("Failed to write to '{}': {}", val.to_string(), e.kind()),
-                    //             span.clone(),
-                    //         );
-                    //     });
-                    // },
-                    // "a" if in_built => unsafe {
-                    //     let content = memory::release(self.stack.pop().unwrap()).as_ref();
-                    //     let val = memory::release(self.stack.pop().unwrap()).as_ref();
-                    //     self.check_type(&name, on_types, val, span.clone());
-                    //     let mut file = OpenOptions::new()
-                    //         .write(true)
-                    //         .append(true)
-                    //         .open(val.to_string())
-                    //         .unwrap_or_else(|e| {
-                    //             self.runtime_error(
-                    //                 &format!("Failed to open '{}': {}", val.to_string(), e.kind()),
-                    //                 span.clone(),
-                    //             );
-                    //         });
-
-                    //     file.write_all(content.to_string().as_bytes())
-                    //         .unwrap_or_else(|e| {
-                    //             self.runtime_error(
-                    //                 &format!("Failed to append to '{}': {}", val.to_string(), e.kind()),
-                    //                 span.clone(),
-                    //             );
-                    //         })
-                    // },
-
                     // _ => unsafe {
                     //     let object = memory::release(self.stack.pop().unwrap());
                     //     let object_type = Type::try_from(object.as_ref().get_type()).unwrap();
