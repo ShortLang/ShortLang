@@ -1,13 +1,15 @@
 use super::*;
 
 pub fn init() {
-    let mut set = INBUILT_METHODS.lock().unwrap();
+    let mut functions = INBUILT_METHODS.lock().unwrap();
 
-    add_method![set,
+    add_method![functions,
         "push" => [push, 1, Type::String, Type::Array],
+        "join" => [push, 1, Type::Array],
+        "split" => [push, 1, Type::String],
+
         "pop" => [push, 0, Type::String, Type::Array],
-        "join" => [push, 0, Type::Array],
-        "split" => [push, 0, Type::String],
+        "type" => [get_type, 0, Type::String, Type::Array, Type::Integer, Type::Float, Type::Nil],
     ];
 }
 
@@ -90,4 +92,9 @@ fn split(data: Data, args: Args) -> Output {
     };
 
     ret!(Value::Array(split))
+}
+
+fn get_type(data: Data, _: Args) -> Output {
+    let t = unsafe { data.as_ref().get_type() };
+    ret!(Value::String(t.to_owned()))
 }

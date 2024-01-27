@@ -62,11 +62,11 @@ impl FnHandler {
     }
 }
 
-pub struct MethodFnHandler {
+pub struct FieldFnHandler {
     func: Box<dyn Fn(NonNull<Value>, &[NonNull<Value>]) -> Output>,
 }
 
-impl MethodFnHandler {
+impl FieldFnHandler {
     pub fn new<F: Fn(NonNull<Value>, &[NonNull<Value>]) -> Output + 'static>(func: F) -> Self {
         Self {
             func: Box::new(func),
@@ -78,9 +78,11 @@ impl MethodFnHandler {
     }
 }
 
+
 // SAFETY: We are not doing any multi-threading so it is fine
 unsafe impl Send for FnHandler {}
 unsafe impl Sync for FnHandler {}
 
-unsafe impl Send for MethodFnHandler {}
-unsafe impl Sync for MethodFnHandler {}
+unsafe impl Send for FieldFnHandler {}
+unsafe impl Sync for FieldFnHandler {}
+

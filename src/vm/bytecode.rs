@@ -1,5 +1,3 @@
-use super::value::Type;
-
 #[allow(non_camel_case_types)]
 #[derive(Clone, Debug, PartialEq)]
 pub enum Bytecode {
@@ -31,7 +29,6 @@ pub enum Bytecode {
     BuiltInFunction(String, usize), // name, num_args
 
     // Method functions
-    Method(String, usize), // name, num_args
     Field(String, usize), // name, num_args
     // Method(MethodFunction),
 

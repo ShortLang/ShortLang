@@ -6,8 +6,6 @@ use miette::{miette, LabeledSpan};
 use rug::ops::CompleteRound;
 use rug::{Complete, Float, Integer};
 use std::collections::HashMap;
-use std::fs::OpenOptions;
-use std::io::*;
 use std::ops::Range;
 use std::ptr::NonNull;
 use std::string::ToString;
@@ -31,9 +29,7 @@ pub(crate) type CallStack = Vec<FnStackData>;
 
 lazy_static::lazy_static! {
     pub static ref INBUILT_FUNCTIONS: Mutex<HashMap<(String, usize), FnHandler>> = Mutex::new(HashMap::new());
-
-    pub static ref INBUILT_METHODS: Mutex<HashMap<(String, Type, usize), MethodFnHandler>> = Mutex::new(HashMap::new());
-    pub static ref INBUILT_FIELDS: Mutex<HashMap<(String, Type, usize), MethodFnHandler>> = Mutex::new(HashMap::new());
+    pub static ref INBUILT_METHODS: Mutex<HashMap<(String, Type, usize), FieldFnHandler>> = Mutex::new(HashMap::new());
 }
 
 pub struct VM {
@@ -82,7 +78,6 @@ impl VM {
             functions: HashMap::new(),
             call_stack: CallStack::new(),
             impl_methods: HashMap::new(),
-            // memory: Memory::new(),
         }
     }
 
@@ -360,63 +355,21 @@ impl VM {
 
                     BinaryOp::Attr => match b.inner {
                         ExprKind::Call(name, args) => {
-                            let num_args = args.as_ref().map(|i| i.len()).unwrap_or(0);
-
                             self.compile_expr(*a);
 
+                            let num_args = args.as_ref().map(|i| i.len()).unwrap_or(0);
                             for_each_arg!(args,
                                 e => { self.compile_expr(e) }
                             );
 
                             self.instructions
-                                .push((Instr(Bytecode::Method(name, num_args), vec![]), expr.span));
-
-                            //     inbuilt_methods!(self, name.as_str(), args,
-                            //         [ "push"  => [Type::Array, Type::String], 1, expr.span, { self.compile_expr(*a); } ],
-                            //         [ "pop"   => [Type::Array, Type::String], 0, expr.span, { self.compile_expr(*a); } ],
-                            //         [ "clear" => [Type::Array, Type::String], 0, expr.span, { self.compile_expr(*a); } ],
-                            //         [ "join"  => [Type::Array],               1, expr.span, { self.compile_expr(*a); } ],
-                            //         [ "split" => [Type::String],              1, expr.span, { self.compile_expr(*a); } ],
-
-                            //         // File methods
-                            //         [ "r" => [Type::File], 0, expr.span, { self.compile_expr(*a); } ],
-                            //         [ "w" => [Type::File], 1, expr.span, { self.compile_expr(*a); } ],
-                            //         [ "a" => [Type::File], 1, expr.span, { self.compile_expr(*a); } ],
-
-                            //         _ => {
-                            //             for arg in args.unwrap_or_else(|| vec![]) {
-                            //                 self.compile_expr(arg);
-                            //             }
-
-                            //             self.compile_expr(*a);
-
-                            //             self.instructions.push((
-                            //                 Instr(
-                            //                     Bytecode::Method(MethodFunction {
-                            //                         name: name,
-                            //                         on_types: vec![],
-                            //                         num_args: 0,
-                            //                         in_built: false
-                            //                     }),
-                            //                     vec![]
-                            //                 ),
-                            //                 expr.span
-                            //             ));
-                            //         }
-                            //     )
+                                .push((Instr(Bytecode::Field(name, num_args), vec![]), expr.span));
                         }
 
-                        // properties
                         ExprKind::Ident(name) => {
-                            //     "type" => {
-                            //         self.compile_expr(*a);
-                            //         self.instructions.push((
-                            //             Instr(Bytecode::BuiltInFunction("type".to_owned(), 1), vec![]),
-                            //             expr.span,
-                            //         ));
-                            //     }
-
-                            //     _ => {}
+                            self.compile_expr(*a);
+                            self.instructions
+                                .push((Instr(Bytecode::Field(name, 0), vec![]), expr.span));
                         }
 
                         _ => self.runtime_error("Expected an attribute", expr.span),
@@ -625,8 +578,6 @@ impl VM {
 
                 let var_ptr = self.var_id_count;
                 self.var_id_count += 1;
-
-                // FIXME: what if the loop is inside a function which is being called multiple times?
 
                 self.compile_expr(*list);
                 self.constants.push(Value::Nil);
@@ -1355,7 +1306,7 @@ impl VM {
                 }
             }
 
-            Bytecode::Method(name, num_args) => unsafe {
+            Bytecode::Field(name, num_args) => unsafe {
                 // Collect function args
                 let mut fn_args = (0..num_args)
                     .map(|_| {
@@ -1383,65 +1334,49 @@ impl VM {
                         _ => {}
                     }
                 } else {
-                    todo!("Custom impl functions are not implemented yet");
+                    let object = memory::release(self.stack.pop().unwrap());
+                    let object_type = Type::try_from(object.as_ref().get_type()).unwrap();
+
+                    let Some(fn_obj) = self.impl_methods.get(&(name.clone(), object_type)) else {
+                        self.runtime_error(
+                            &format!(
+                                "No method named '{name}' found on the type '{}' that takes: {} arguments",
+                                object_type.get_type(),
+                                num_args
+                            ),
+                            span,
+                        );
+                    };
+
+                    let FunctionData {
+                        parameters,
+                        scope_idx,
+                        ..
+                    } = fn_obj;
+
+                    let mut fn_args = (1..parameters.len())
+                        .map(|_| self.stack.pop().unwrap_or_else(|| allocate(Value::Nil)))
+                        .collect::<Vec<_>>();
+
+                    fn_args.reverse();
+
+                    let variables = self.variables[*scope_idx].clone();
+
+                    let mut arg_iter = fn_obj.get_var_ids().into_iter().enumerate();
+
+                    let (_, self_var_idx) = arg_iter.next().unwrap();
+                    *self.variables[*scope_idx].get_mut(&self_var_idx).unwrap() = Some(object);
+
+                    for (idx, param_var_idx) in arg_iter {
+                        *self.variables[*scope_idx].get_mut(&param_var_idx).unwrap() =
+                            Some(fn_args[idx - 1]);
+                    }
+
+                    self.push_call_stack(fn_obj.instruction_range.start, *scope_idx, variables);
                 }
             },
 
-            _ => {} // old impl
-                    // Bytecode::Method(MethodFunction {
-                    //     name,
-                    //     on_types,
-                    //     in_built,
-                    //     ..
-                    // }) => match name.as_str() {
-                    // // File methods
-                    // _ => unsafe {
-                    //     let object = memory::release(self.stack.pop().unwrap());
-                    //     let object_type = Type::try_from(object.as_ref().get_type()).unwrap();
-
-                    //     let Some(fn_obj) = self.impl_methods.get(&(name.clone(), object_type)) else {
-                    //         self.runtime_error(
-                    //             &format!(
-                    //                 "No method named '{name}' found on the type '{}'",
-                    //                 object_type.get_type()
-                    //             ),
-                    //             span,
-                    //         );
-                    //     };
-
-                    //     let FunctionData {
-                    //         parameters,
-                    //         scope_idx,
-                    //         // returns,
-                    //         ..
-                    //     } = fn_obj;
-
-                    //     let mut fn_args = (1..parameters.len())
-                    //         .map(|_| self.stack.pop().unwrap_or_else(|| allocate(Value::Nil)))
-                    //         .collect::<Vec<_>>();
-
-                    //     fn_args.reverse();
-
-                    //     let variables = self.variables[*scope_idx].clone();
-
-                    //     let mut arg_iter = fn_obj.get_var_ids().into_iter().enumerate();
-
-                    //     let (_, self_var_idx) = arg_iter.next().unwrap();
-                    //     *self.variables[*scope_idx].get_mut(&self_var_idx).unwrap() = Some(object);
-
-                    //     for (idx, param_var_idx) in arg_iter {
-                    //         *self.variables[*scope_idx].get_mut(&param_var_idx).unwrap() =
-                    //             Some(fn_args[idx - 1]);
-                    //     }
-
-                    //     // let returns = *returns;
-                    //     self.push_call_stack(fn_obj.instruction_range.start, *scope_idx, variables);
-
-                    //     // if !returns {
-                    //     // self.stack.push(allocate(Value::Nil));
-                    //     // }
-                    // },
-                    // },
+            _ => {}
         }
 
         memory::free_marked();

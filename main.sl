@@ -1,1 +1,1 @@
-$"hello".push(" world!")
+$"hello".pop()

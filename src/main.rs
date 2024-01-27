@@ -1,12 +1,9 @@
-#![allow(non_snake_case, dead_code)]
-
 use clap::builder::TypedValueParser;
 use clap::Parser;
 use optimizer::Optimizer;
-use std::io::{Read, Write};
+use std::io::Write;
 use std::{fs, io};
 
-mod optimizer;
 use formatter::Formatter;
 use logos::Logos;
 use miette::{miette, Severity};
@@ -18,6 +15,7 @@ mod formatter;
 mod name_generator;
 mod parser;
 mod vm;
+mod optimizer;
 
 /// The arguments for the ShortLang compiler
 #[derive(Parser, Debug)]
@@ -104,12 +102,12 @@ fn main() {
     };
 
     // let src = fs::read_to_string(&args.file).unwrap_or_else(|_| {
-        // let mut buffer = String::new();
-        // io::stdin().read_to_string(&mut buffer).unwrap_or_else(|_| {
-            // println!("Error: Failed to read from stdin");
-            // std::process::exit(1);
-        // });
-        // buffer
+    // let mut buffer = String::new();
+    // io::stdin().read_to_string(&mut buffer).unwrap_or_else(|_| {
+    // println!("Error: Failed to read from stdin");
+    // std::process::exit(1);
+    // });
+    // buffer
     // });
 
     if args.format {
