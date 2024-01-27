@@ -1386,17 +1386,6 @@ impl VM {
         false
     }
 
-    fn call_function(&mut self, name: &str) {
-        let pc = self.pc;
-        let fn_obj = &self.functions[name];
-        for i in fn_obj.instruction_range.clone() {
-            let (instr, span) = self.instructions[i].clone();
-            self.run_byte(instr, span);
-        }
-
-        self.pc = pc;
-    }
-
     fn push_data(&mut self, data: Value, span: Range<usize>) {
         let const_idx = self.add_constant(data);
         self.instructions
@@ -1597,18 +1586,6 @@ impl VM {
             .rev()
             .map(|i| (i, &self.instructions[i]))
             .find(|&(_, (instr, _))| matches!(instr.0, Bytecode::While))
-    }
-
-    fn check_type(&self, fn_name: &str, types: Vec<Type>, value: &Value, span: Range<usize>) {
-        if types.into_iter().find(|i| i.is_same_type(value)).is_none() {
-            self.runtime_error(
-                &format!(
-                    "No method named '{fn_name}' found on the type '{}'",
-                    value.get_type(),
-                ),
-                span,
-            );
-        }
     }
 
     fn compile_idx(

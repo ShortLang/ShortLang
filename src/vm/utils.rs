@@ -78,11 +78,9 @@ impl FieldFnHandler {
     }
 }
 
-
 // SAFETY: We are not doing any multi-threading so it is fine
 unsafe impl Send for FnHandler {}
 unsafe impl Sync for FnHandler {}
 
 unsafe impl Send for FieldFnHandler {}
 unsafe impl Sync for FieldFnHandler {}
-

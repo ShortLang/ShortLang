@@ -1,1 +1,1 @@
-$"hello".pop()
+$"hello".pop() // prints o

@@ -1,3 +1,5 @@
+#![allow(unused)]
+
 use clap::builder::TypedValueParser;
 use clap::Parser;
 use optimizer::Optimizer;
@@ -13,9 +15,9 @@ use crate::vm::VM;
 
 mod formatter;
 mod name_generator;
+mod optimizer;
 mod parser;
 mod vm;
-mod optimizer;
 
 /// The arguments for the ShortLang compiler
 #[derive(Parser, Debug)]

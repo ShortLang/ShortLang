@@ -2,8 +2,8 @@ mod basic;
 mod file;
 
 pub(crate) use super::super::{
-    utils::allocate, utils::FieldFnHandler, value::Type, value::Value,
-    vm::VarPtr, vm::INBUILT_METHODS,
+    utils::allocate, utils::FieldFnHandler, value::Type, value::Value, vm::VarPtr,
+    vm::INBUILT_METHODS,
 };
 
 use crate::*; // macros
@@ -16,4 +16,5 @@ pub(crate) use std::ptr::NonNull;
 
 pub fn init() {
     basic::init();
+    file::init();
 }

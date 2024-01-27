@@ -5,10 +5,11 @@ pub fn init() {
 
     add_method![functions,
         "push" => [push, 1, Type::String, Type::Array],
-        "join" => [push, 1, Type::Array],
-        "split" => [push, 1, Type::String],
+        "join" => [join, 1, Type::Array],
+        "split" => [split, 1, Type::String],
 
-        "pop" => [push, 0, Type::String, Type::Array],
+        "pop" => [pop, 0, Type::String, Type::Array],
+        "clear" => [clear, 0, Type::String, Type::Array],
         "type" => [get_type, 0, Type::String, Type::Array, Type::Integer, Type::Float, Type::Nil],
     ];
 }
