@@ -4,7 +4,7 @@ mod math;
 mod os;
 
 pub(crate) use super::utils::allocate;
-pub(crate) use super::utils::Handler;
+pub(crate) use super::utils::FnHandler;
 pub(crate) use super::value::Value;
 pub(crate) use super::vm::{VarPtr, INBUILT_FUNCTIONS};
 

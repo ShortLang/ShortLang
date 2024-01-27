@@ -31,7 +31,10 @@ pub type VarPtr = Option<NonNull<Value>>;
 pub(crate) type CallStack = Vec<FnStackData>;
 
 lazy_static::lazy_static! {
-    pub static ref INBUILT_FUNCTIONS: Mutex<HashMap<(String, usize), Handler>> = Mutex::new(HashMap::new());
+    pub static ref INBUILT_FUNCTIONS: Mutex<HashMap<(String, usize), FnHandler>> = Mutex::new(HashMap::new());
+
+    pub static ref INBUILT_METHODS: Mutex<HashMap<(String, Type, usize), MethodFnHandler>> = Mutex::new(HashMap::new());
+    pub static ref INBUILT_FIELDS: Mutex<HashMap<(String, Type, usize), MethodFnHandler>> = Mutex::new(HashMap::new());
 }
 
 pub struct VM {
@@ -358,53 +361,64 @@ impl VM {
 
                     BinaryOp::Attr => match b.inner {
                         ExprKind::Call(name, args) => {
-                            inbuilt_methods!(self, name.as_str(), args,
-                                [ "push"  => [Type::Array, Type::String], 1, expr.span, { self.compile_expr(*a); } ],
-                                [ "pop"   => [Type::Array, Type::String], 0, expr.span, { self.compile_expr(*a); } ],
-                                [ "clear" => [Type::Array, Type::String], 0, expr.span, { self.compile_expr(*a); } ],
-                                [ "join"  => [Type::Array],               1, expr.span, { self.compile_expr(*a); } ],
-                                [ "split" => [Type::String],              1, expr.span, { self.compile_expr(*a); } ],
+                            let num_args = args.as_ref().map(|i| i.len()).unwrap_or(0);
 
-                                // File methods
-                                [ "r" => [Type::File], 0, expr.span, { self.compile_expr(*a); } ],
-                                [ "w" => [Type::File], 1, expr.span, { self.compile_expr(*a); } ],
-                                [ "a" => [Type::File], 1, expr.span, { self.compile_expr(*a); } ],
+                            self.compile_expr(*a);
 
-                                _ => {
-                                    for arg in args.unwrap_or_else(|| vec![]) {
-                                        self.compile_expr(arg);
-                                    }
+                            for_each_arg!(args,
+                                e => { self.compile_expr(e) }
+                            );
 
-                                    self.compile_expr(*a);
+                            self.instructions
+                                .push((Instr(Bytecode::Method(name, num_args), vec![]), expr.span));
 
-                                    self.instructions.push((
-                                        Instr(
-                                            Bytecode::Method(MethodFunction {
-                                                name: name,
-                                                on_types: vec![],
-                                                num_args: 0,
-                                                in_built: false
-                                            }),
-                                            vec![]
-                                        ),
-                                        expr.span
-                                    ));
-                                }
-                            )
+                            //     inbuilt_methods!(self, name.as_str(), args,
+                            //         [ "push"  => [Type::Array, Type::String], 1, expr.span, { self.compile_expr(*a); } ],
+                            //         [ "pop"   => [Type::Array, Type::String], 0, expr.span, { self.compile_expr(*a); } ],
+                            //         [ "clear" => [Type::Array, Type::String], 0, expr.span, { self.compile_expr(*a); } ],
+                            //         [ "join"  => [Type::Array],               1, expr.span, { self.compile_expr(*a); } ],
+                            //         [ "split" => [Type::String],              1, expr.span, { self.compile_expr(*a); } ],
+
+                            //         // File methods
+                            //         [ "r" => [Type::File], 0, expr.span, { self.compile_expr(*a); } ],
+                            //         [ "w" => [Type::File], 1, expr.span, { self.compile_expr(*a); } ],
+                            //         [ "a" => [Type::File], 1, expr.span, { self.compile_expr(*a); } ],
+
+                            //         _ => {
+                            //             for arg in args.unwrap_or_else(|| vec![]) {
+                            //                 self.compile_expr(arg);
+                            //             }
+
+                            //             self.compile_expr(*a);
+
+                            //             self.instructions.push((
+                            //                 Instr(
+                            //                     Bytecode::Method(MethodFunction {
+                            //                         name: name,
+                            //                         on_types: vec![],
+                            //                         num_args: 0,
+                            //                         in_built: false
+                            //                     }),
+                            //                     vec![]
+                            //                 ),
+                            //                 expr.span
+                            //             ));
+                            //         }
+                            //     )
                         }
 
                         // properties
-                        ExprKind::Ident(name) => match name.as_str() {
-                            "type" => {
-                                self.compile_expr(*a);
-                                self.instructions.push((
-                                    Instr(Bytecode::BuiltInFunction("type".to_owned(), 1), vec![]),
-                                    expr.span,
-                                ));
-                            }
+                        ExprKind::Ident(name) => {
+                            //     "type" => {
+                            //         self.compile_expr(*a);
+                            //         self.instructions.push((
+                            //             Instr(Bytecode::BuiltInFunction("type".to_owned(), 1), vec![]),
+                            //             expr.span,
+                            //         ));
+                            //     }
 
-                            _ => {}
-                        },
+                            //     _ => {}
+                        }
 
                         _ => self.runtime_error("Expected an attribute", expr.span),
                     },
@@ -1320,6 +1334,7 @@ impl VM {
             Bytecode::Or => self.compare_values(span, |a, b| a.or(b)),
 
             Bytecode::BuiltInFunction(name, num_args) => {
+                // Collect function args
                 let mut fn_args = (0..num_args)
                     .map(|_| {
                         memory::retain(self.stack.pop().unwrap_or_else(|| allocate(Value::Nil)))
@@ -1341,206 +1356,229 @@ impl VM {
                 }
             }
 
-            Bytecode::Method(MethodFunction {
-                name,
-                on_types,
-                in_built,
-                ..
-            }) => match name.as_str() {
-                "push" if in_built => unsafe {
-                    let src = memory::release(self.stack.pop().unwrap());
-                    memory::retain(src);
-                    let dest = memory::release(self.stack.pop().unwrap()).as_mut();
+            Bytecode::Method(name, num_args) => unsafe {
+                // Collect function args
+                let mut fn_args = (0..num_args)
+                    .map(|_| {
+                        memory::retain(self.stack.pop().unwrap_or_else(|| allocate(Value::Nil)))
+                    })
+                    .collect::<Vec<_>>();
 
-                    self.check_type(&name, on_types, dest, span);
+                fn_args.reverse();
 
-                    *dest = dest.binary_add(src.as_ref()).unwrap();
-                    self.stack
-                        .push(memory::retain(NonNull::new_unchecked(dest as *mut Value)));
-                },
+                // Get the actual data on which the function is called
+                let data = memory::release(self.stack.pop().unwrap());
+                let data_type = Type::try_from(data.as_ref().get_type()).unwrap(); // safe
 
-                "pop" if in_built => unsafe {
-                    let dest = memory::release(self.stack.pop().unwrap()).as_mut();
+                // Check if a built-in method exists
+                if let Some(method_fn) = INBUILT_METHODS.lock().unwrap().get(&(name.clone(), data_type, num_args)) {
+                    method_fn.call(data, &fn_args);
+                } else {
+                    todo!("Custom impl functions are not implemented yet");
+                }
+            }
 
-                    self.check_type(&name, on_types, dest, span.clone());
+            _ => {} // old impl
+                    // Bytecode::Method(MethodFunction {
+                    //     name,
+                    //     on_types,
+                    //     in_built,
+                    //     ..
+                    // }) => match name.as_str() {
+                    // "push" if in_built => unsafe {
+                    //     let src = memory::release(self.stack.pop().unwrap());
+                    //     memory::retain(src);
+                    //     let dest = memory::release(self.stack.pop().unwrap()).as_mut();
 
-                    let Some(val) = (match dest {
-                        Value::Array(a) => a.pop(),
-                        Value::String(s) => s.pop().map(|i| Value::String(i.to_string())),
-                        _ => unreachable!(),
-                    }) else {
-                        self.runtime_error("Cannot pop empty array", span);
-                    };
+                    //     self.check_type(&name, on_types, dest, span);
 
-                    self.stack.push(memory::retain(allocate(val)));
-                },
+                    //     *dest = dest.binary_add(src.as_ref()).unwrap();
+                    //     self.stack
+                    //         .push(memory::retain(NonNull::new_unchecked(dest as *mut Value)));
+                    // },
 
-                "clear" if in_built => unsafe {
-                    let var = memory::release(self.stack.pop().unwrap()).as_mut();
+                    // "pop" if in_built => unsafe {
+                    //     let dest = memory::release(self.stack.pop().unwrap()).as_mut();
 
-                    self.check_type(&name, on_types, var, span);
+                    //     self.check_type(&name, on_types, dest, span.clone());
 
-                    if !var.clear() {
-                        panic!();
-                    }
-                },
+                    //     let Some(val) = (match dest {
+                    //         Value::Array(a) => a.pop(),
+                    //         Value::String(s) => s.pop().map(|i| Value::String(i.to_string())),
+                    //         _ => unreachable!(),
+                    //     }) else {
+                    //         self.runtime_error("Cannot pop empty array", span);
+                    //     };
 
-                "join" if in_built => unsafe {
-                    let separator = memory::release(self.stack.pop().unwrap()).as_ref();
-                    let dest = memory::release(self.stack.pop().unwrap()).as_ref();
+                    //     self.stack.push(memory::retain(allocate(val)));
+                    // },
 
-                    self.check_type(&name, on_types, dest, span.clone());
+                    // "clear" if in_built => unsafe {
+                    //     let var = memory::release(self.stack.pop().unwrap()).as_mut();
 
-                    let array = dest.as_array();
-                    let result_string = array
-                        .iter()
-                        .map(|i| i.to_string())
-                        .collect::<Vec<_>>()
-                        .join(match separator {
-                            Value::Nil => "",
-                            Value::String(s) => s,
+                    //     self.check_type(&name, on_types, var, span);
 
-                            _ => self.runtime_error(
-                                &format!(
-                                    "Cannot join with the value of type '{}'",
-                                    separator.get_type()
-                                ),
-                                span,
-                            ),
-                        });
+                    //     if !var.clear() {
+                    //         panic!();
+                    //     }
+                    // },
 
-                    self.stack
-                        .push(memory::retain(allocate(result_string.into())));
-                },
+                    // "join" if in_built => unsafe {
+                    //     let separator = memory::release(self.stack.pop().unwrap()).as_ref();
+                    //     let dest = memory::release(self.stack.pop().unwrap()).as_ref();
 
-                "split" if in_built => unsafe {
-                    let split = memory::release(self.stack.pop().unwrap()).as_ref();
-                    let val = memory::release(self.stack.pop().unwrap()).as_ref();
-                    let empty = String::new();
-                    let (val_str, split_str) = match (val, split) {
-                        (Value::String(val_str), Value::String(split_str)) => (val_str, split_str),
-                        (Value::Nil, Value::String(split_str)) => (split_str, &empty),
-                        (Value::String(val_str), Value::Nil) => (val_str, &empty),
-                        _ => self.runtime_error(
-                            &format!(
-                                "Expected 'str' as argument of split, found '{}'",
-                                val.get_type()
-                            ),
-                            span,
-                        ),
-                    };
+                    //     self.check_type(&name, on_types, dest, span.clone());
 
-                    let split = if split_str.is_empty() {
-                        val_str
-                            .chars()
-                            .map(|i| i.to_string().into())
-                            .collect::<Vec<Value>>()
-                    } else {
-                        val_str
-                            .split(split_str)
-                            .map(|i| i.into())
-                            .collect::<Vec<Value>>()
-                    };
+                    //     let array = dest.as_array();
+                    //     let result_string = array
+                    //         .iter()
+                    //         .map(|i| i.to_string())
+                    //         .collect::<Vec<_>>()
+                    //         .join(match separator {
+                    //             Value::Nil => "",
+                    //             Value::String(s) => s,
 
-                    self.stack
-                        .push(memory::retain(allocate(Value::Array(split))));
-                },
+                    //             _ => self.runtime_error(
+                    //                 &format!(
+                    //                     "Cannot join with the value of type '{}'",
+                    //                     separator.get_type()
+                    //                 ),
+                    //                 span,
+                    //             ),
+                    //         });
 
-                // File methods
-                "r" if in_built => unsafe {
-                    let val = memory::release(self.stack.pop().unwrap()).as_ref();
-                    self.check_type(&name, on_types, val, span.clone());
-                    self.stack.push(memory::retain(allocate(Value::String(
-                        fs::read_to_string(val.to_string()).unwrap_or_else(|e| {
-                            self.runtime_error(
-                                &format!("Failed to read '{}': {}", val.to_string(), e.kind()),
-                                span.clone(),
-                            );
-                        }),
-                    ))));
-                },
-                "w" if in_built => unsafe {
-                    let content = memory::release(self.stack.pop().unwrap()).as_ref();
-                    let val = memory::release(self.stack.pop().unwrap()).as_ref();
-                    self.check_type(&name, on_types, val, span.clone());
-                    fs::write(val.to_string(), content.to_string()).unwrap_or_else(|e| {
-                        self.runtime_error(
-                            &format!("Failed to write to '{}': {}", val.to_string(), e.kind()),
-                            span.clone(),
-                        );
-                    });
-                },
-                "a" if in_built => unsafe {
-                    let content = memory::release(self.stack.pop().unwrap()).as_ref();
-                    let val = memory::release(self.stack.pop().unwrap()).as_ref();
-                    self.check_type(&name, on_types, val, span.clone());
-                    let mut file = OpenOptions::new()
-                        .write(true)
-                        .append(true)
-                        .open(val.to_string())
-                        .unwrap_or_else(|e| {
-                            self.runtime_error(
-                                &format!("Failed to open '{}': {}", val.to_string(), e.kind()),
-                                span.clone(),
-                            );
-                        });
+                    //     self.stack
+                    //         .push(memory::retain(allocate(result_string.into())));
+                    // },
 
-                    file.write_all(content.to_string().as_bytes())
-                        .unwrap_or_else(|e| {
-                            self.runtime_error(
-                                &format!("Failed to append to '{}': {}", val.to_string(), e.kind()),
-                                span.clone(),
-                            );
-                        })
-                },
+                    // "split" if in_built => unsafe {
+                    //     let split = memory::release(self.stack.pop().unwrap()).as_ref();
+                    //     let val = memory::release(self.stack.pop().unwrap()).as_ref();
+                    //     let empty = String::new();
+                    //     let (val_str, split_str) = match (val, split) {
+                    //         (Value::String(val_str), Value::String(split_str)) => (val_str, split_str),
+                    //         (Value::Nil, Value::String(split_str)) => (split_str, &empty),
+                    //         (Value::String(val_str), Value::Nil) => (val_str, &empty),
+                    //         _ => self.runtime_error(
+                    //             &format!(
+                    //                 "Expected 'str' as argument of split, found '{}'",
+                    //                 val.get_type()
+                    //             ),
+                    //             span,
+                    //         ),
+                    //     };
 
-                _ => unsafe {
-                    let object = memory::release(self.stack.pop().unwrap());
-                    let object_type = Type::try_from(object.as_ref().get_type()).unwrap();
+                    //     let split = if split_str.is_empty() {
+                    //         val_str
+                    //             .chars()
+                    //             .map(|i| i.to_string().into())
+                    //             .collect::<Vec<Value>>()
+                    //     } else {
+                    //         val_str
+                    //             .split(split_str)
+                    //             .map(|i| i.into())
+                    //             .collect::<Vec<Value>>()
+                    //     };
 
-                    let Some(fn_obj) = self.impl_methods.get(&(name.clone(), object_type)) else {
-                        self.runtime_error(
-                            &format!(
-                                "No method named '{name}' found on the type '{}'",
-                                object_type.get_type()
-                            ),
-                            span,
-                        );
-                    };
+                    //     self.stack
+                    //         .push(memory::retain(allocate(Value::Array(split))));
+                    // },
 
-                    let FunctionData {
-                        parameters,
-                        scope_idx,
-                        // returns,
-                        ..
-                    } = fn_obj;
+                    // // File methods
+                    // "r" if in_built => unsafe {
+                    //     let val = memory::release(self.stack.pop().unwrap()).as_ref();
+                    //     self.check_type(&name, on_types, val, span.clone());
+                    //     self.stack.push(memory::retain(allocate(Value::String(
+                    //         fs::read_to_string(val.to_string()).unwrap_or_else(|e| {
+                    //             self.runtime_error(
+                    //                 &format!("Failed to read '{}': {}", val.to_string(), e.kind()),
+                    //                 span.clone(),
+                    //             );
+                    //         }),
+                    //     ))));
+                    // },
+                    // "w" if in_built => unsafe {
+                    //     let content = memory::release(self.stack.pop().unwrap()).as_ref();
+                    //     let val = memory::release(self.stack.pop().unwrap()).as_ref();
+                    //     self.check_type(&name, on_types, val, span.clone());
+                    //     fs::write(val.to_string(), content.to_string()).unwrap_or_else(|e| {
+                    //         self.runtime_error(
+                    //             &format!("Failed to write to '{}': {}", val.to_string(), e.kind()),
+                    //             span.clone(),
+                    //         );
+                    //     });
+                    // },
+                    // "a" if in_built => unsafe {
+                    //     let content = memory::release(self.stack.pop().unwrap()).as_ref();
+                    //     let val = memory::release(self.stack.pop().unwrap()).as_ref();
+                    //     self.check_type(&name, on_types, val, span.clone());
+                    //     let mut file = OpenOptions::new()
+                    //         .write(true)
+                    //         .append(true)
+                    //         .open(val.to_string())
+                    //         .unwrap_or_else(|e| {
+                    //             self.runtime_error(
+                    //                 &format!("Failed to open '{}': {}", val.to_string(), e.kind()),
+                    //                 span.clone(),
+                    //             );
+                    //         });
 
-                    let mut fn_args = (1..parameters.len())
-                        .map(|_| self.stack.pop().unwrap_or_else(|| allocate(Value::Nil)))
-                        .collect::<Vec<_>>();
+                    //     file.write_all(content.to_string().as_bytes())
+                    //         .unwrap_or_else(|e| {
+                    //             self.runtime_error(
+                    //                 &format!("Failed to append to '{}': {}", val.to_string(), e.kind()),
+                    //                 span.clone(),
+                    //             );
+                    //         })
+                    // },
 
-                    fn_args.reverse();
+                    // _ => unsafe {
+                    //     let object = memory::release(self.stack.pop().unwrap());
+                    //     let object_type = Type::try_from(object.as_ref().get_type()).unwrap();
 
-                    let variables = self.variables[*scope_idx].clone();
+                    //     let Some(fn_obj) = self.impl_methods.get(&(name.clone(), object_type)) else {
+                    //         self.runtime_error(
+                    //             &format!(
+                    //                 "No method named '{name}' found on the type '{}'",
+                    //                 object_type.get_type()
+                    //             ),
+                    //             span,
+                    //         );
+                    //     };
 
-                    let mut arg_iter = fn_obj.get_var_ids().into_iter().enumerate();
+                    //     let FunctionData {
+                    //         parameters,
+                    //         scope_idx,
+                    //         // returns,
+                    //         ..
+                    //     } = fn_obj;
 
-                    let (_, self_var_idx) = arg_iter.next().unwrap();
-                    *self.variables[*scope_idx].get_mut(&self_var_idx).unwrap() = Some(object);
+                    //     let mut fn_args = (1..parameters.len())
+                    //         .map(|_| self.stack.pop().unwrap_or_else(|| allocate(Value::Nil)))
+                    //         .collect::<Vec<_>>();
 
-                    for (idx, param_var_idx) in arg_iter {
-                        *self.variables[*scope_idx].get_mut(&param_var_idx).unwrap() =
-                            Some(fn_args[idx - 1]);
-                    }
+                    //     fn_args.reverse();
 
-                    // let returns = *returns;
-                    self.push_call_stack(fn_obj.instruction_range.start, *scope_idx, variables);
+                    //     let variables = self.variables[*scope_idx].clone();
 
-                    // if !returns {
-                    // self.stack.push(allocate(Value::Nil));
-                    // }
-                },
-            },
+                    //     let mut arg_iter = fn_obj.get_var_ids().into_iter().enumerate();
+
+                    //     let (_, self_var_idx) = arg_iter.next().unwrap();
+                    //     *self.variables[*scope_idx].get_mut(&self_var_idx).unwrap() = Some(object);
+
+                    //     for (idx, param_var_idx) in arg_iter {
+                    //         *self.variables[*scope_idx].get_mut(&param_var_idx).unwrap() =
+                    //             Some(fn_args[idx - 1]);
+                    //     }
+
+                    //     // let returns = *returns;
+                    //     self.push_call_stack(fn_obj.instruction_range.start, *scope_idx, variables);
+
+                    //     // if !returns {
+                    //     // self.stack.push(allocate(Value::Nil));
+                    //     // }
+                    // },
+                    // },
         }
 
         memory::free_marked();

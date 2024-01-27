@@ -46,11 +46,11 @@ pub(crate) struct FnStackData {
 
 type Output = Result<VarPtr, String>;
 
-pub struct Handler {
+pub struct FnHandler {
     func: Box<dyn Fn(&[NonNull<Value>]) -> Output>,
 }
 
-impl Handler {
+impl FnHandler {
     pub fn new<F: Fn(&[NonNull<Value>]) -> Output + 'static>(func: F) -> Self {
         Self {
             func: Box::new(func),
@@ -62,6 +62,25 @@ impl Handler {
     }
 }
 
+pub struct MethodFnHandler {
+    func: Box<dyn Fn(NonNull<Value>, &[NonNull<Value>]) -> Output>,
+}
+
+impl MethodFnHandler {
+    pub fn new<F: Fn(NonNull<Value>, &[NonNull<Value>]) -> Output + 'static>(func: F) -> Self {
+        Self {
+            func: Box::new(func),
+        }
+    }
+
+    pub fn call(&self, data: NonNull<Value>, params: &[NonNull<Value>]) -> Output {
+        self.func.as_ref()(data, params)
+    }
+}
+
 // SAFETY: We are not doing any multi-threading so it is fine
-unsafe impl Send for Handler {}
-unsafe impl Sync for Handler {}
+unsafe impl Send for FnHandler {}
+unsafe impl Sync for FnHandler {}
+
+unsafe impl Send for MethodFnHandler {}
+unsafe impl Sync for MethodFnHandler {}

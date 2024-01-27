@@ -31,7 +31,9 @@ pub enum Bytecode {
     BuiltInFunction(String, usize), // name, num_args
 
     // Method functions
-    Method(MethodFunction),
+    Method(String, usize), // name, num_args
+    Field(String, usize), // name, num_args
+    // Method(MethodFunction),
 
     // Push,
     // Split,
@@ -89,14 +91,6 @@ pub enum Bytecode {
 
     // Misc
     ConcatUpTo,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct MethodFunction {
-    pub name: String,
-    pub on_types: Vec<Type>,
-    pub num_args: usize,
-    pub in_built: bool,
 }
 
 #[derive(Clone, Debug)]
