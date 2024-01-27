@@ -4,6 +4,12 @@ macro_rules! ret {
         return Ok(None)
     };
 
+    [ ptr: $ptr:expr ] => {
+        return Ok(Some(unsafe {
+            NonNull::new_unchecked($ptr as *mut _)
+        }))
+    };
+
     [ $val:expr ] => {
         return Ok(Some(allocate($val)))
     };
@@ -17,7 +23,7 @@ macro_rules! ret {
 macro_rules! add_fn {
     [ $set:expr, $( $name:expr => [$placeholder:ident; $n:expr] { $($tt:tt)* } ),* $(,)? ] => {
         $(
-            $set.insert((String::from($name), $n), Handler::new(
+            $set.insert((String::from($name), $n), FnHandler::new(
                 |$placeholder| unsafe {
                     $($tt)*
                 }
@@ -27,7 +33,7 @@ macro_rules! add_fn {
 
     [ $set:expr, $( $name:expr => [ $func:expr, $n:expr ] ),* $(,)? ] => {
         $(
-            $set.insert((String::from($name), $n), Handler::new($func));
+            $set.insert((String::from($name), $n), FnHandler::new($func));
         )*
     }
 }
