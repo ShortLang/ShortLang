@@ -17,29 +17,21 @@ pub fn init() {
 fn push(mut data: Data, args: Args) -> Output {
     let src = unsafe { args[0].as_ref() };
     let data = unsafe { data.as_mut() };
-
     *data = data.binary_add(src).unwrap();
-
     ret!(ptr: data);
 }
 
 fn pop(mut data: Data, _: Args) -> Output {
-    let Some(val) = (match unsafe { data.as_mut() } {
+    let val = match unsafe { data.as_mut() } {
         Value::Array(a) => a.pop(),
         Value::String(s) => s.pop().map(|i| Value::String(i.to_string())),
         _ => unreachable!(),
-    }) else {
-        ret!(err: "Cannot pop empty array");
     };
-
-    ret!(val);
+    ret!(val.unwrap_or(Value::Nil))
 }
 
 fn clear(mut data: Data, _: Args) -> Output {
-    if !unsafe { data.as_mut().clear() } {
-        ret!(err: "Attempt to pop an empty value")
-    }
-
+    unsafe { data.as_mut().clear(); }
     ret!()
 }
 
