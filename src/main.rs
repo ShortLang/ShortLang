@@ -10,6 +10,8 @@ use formatter::Formatter;
 use logos::Logos;
 use miette::{miette, Severity};
 use parser::{LogosToken, PParser};
+use rustyline::error::ReadlineError;
+use rustyline::DefaultEditor;
 
 use crate::vm::VM;
 
@@ -23,13 +25,13 @@ mod vm;
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
 pub struct Args {
-    /// Take input from stdin
+    /// The input file to use
+    #[clap(name = "FILE", default_value = "")]
+    file: String,
+
+    /// Take input from stdin instead of a file
     #[clap(name = "stdin", short, long)]
     input_from_stdin: bool,
-
-    /// The input file to use
-    #[clap(name = "FILE", default_value = "main.sl")]
-    file: String,
 
     /// Prints the AST of the input file
     #[clap(short, long)]
@@ -100,17 +102,54 @@ fn main() {
     let src = if args.input_from_stdin {
         io::stdin().lines().map(Result::unwrap).collect::<String>()
     } else {
-        fs::read_to_string(&args.file).expect("Failed to read the file")
-    };
+        if !args.file.is_empty() {
+            fs::read_to_string(&args.file).unwrap_or_else(|_| {
+                eprintln!("Error: Input file could not be read");
+                std::process::exit(1);
+            })
+        } else {
+            // No input file or stdin specified, start the repl
+            let mut rl = DefaultEditor::new().unwrap();
+            let mut lines = Vec::new();
 
-    // let src = fs::read_to_string(&args.file).unwrap_or_else(|_| {
-    // let mut buffer = String::new();
-    // io::stdin().read_to_string(&mut buffer).unwrap_or_else(|_| {
-    // println!("Error: Failed to read from stdin");
-    // std::process::exit(1);
-    // });
-    // buffer
-    // });
+            loop {
+                let readline = rl.readline(">>> ");
+                match readline {
+                    Ok(input) => {
+                        rl.add_history_entry(input.as_str()); // Add the line to the history
+                        if input.trim().is_empty() {
+                            continue;
+                        } else {
+                            lines.push(input);
+                        }
+
+                        let src = lines.join("\n");
+                        let mut ast_std = PParser::new(&std_lib, tokenize(&std_lib)).parse();
+                        let mut ast_src = PParser::new(&src, tokenize(&src)).parse();
+                        ast_std.append(&mut ast_src);
+
+                        let ast = Optimizer::new(ast_std).optimize_all();
+                        let mut vm = VM::new(&src, ast);
+
+                        vm.compile();
+                        vm.run();
+                    }
+                    Err(ReadlineError::Interrupted) => {
+                        println!("CTRL-C");
+                        std::process::exit(0);
+                    }
+                    Err(ReadlineError::Eof) => {
+                        println!("CTRL-D");
+                        std::process::exit(0);
+                    }
+                    Err(err) => {
+                        eprintln!("Error: {:?}", err);
+                        std::process::exit(1);
+                    }
+                }
+            }
+        }
+    };
 
     if args.format {
         println!("Formatting: {}", args.file);

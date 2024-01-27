@@ -31,7 +31,9 @@ fn pop(mut data: Data, _: Args) -> Output {
 }
 
 fn clear(mut data: Data, _: Args) -> Output {
-    unsafe { data.as_mut().clear(); }
+    unsafe {
+        data.as_mut().clear();
+    }
     ret!()
 }
 
