@@ -23,6 +23,10 @@ mod vm;
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
 pub struct Args {
+    /// Take input from stdin
+    #[clap(name = "stdin", short, long)]
+    input_from_stdin: bool,
+
     /// The input file to use
     #[clap(name = "FILE", default_value = "main.sl")]
     file: String,
@@ -92,14 +96,21 @@ fn tokenize(input: &str) -> Vec<(LogosToken, std::ops::Range<usize>)> {
 fn main() {
     let args = Args::parse();
     let std_lib = include_str!("../std/std.sl").to_owned();
-    let src = fs::read_to_string(&args.file).unwrap_or_else(|_| {
-        let mut buffer = String::new();
-        io::stdin().read_to_string(&mut buffer).unwrap_or_else(|_| {
-            println!("Error: Failed to read from stdin");
-            std::process::exit(1);
-        });
-        buffer
-    });
+
+    let src = if args.input_from_stdin {
+        io::stdin().lines().map(Result::unwrap).collect::<String>()
+    } else {
+        fs::read_to_string(&args.file).expect("Failed to read the file")
+    };
+
+    // let src = fs::read_to_string(&args.file).unwrap_or_else(|_| {
+        // let mut buffer = String::new();
+        // io::stdin().read_to_string(&mut buffer).unwrap_or_else(|_| {
+            // println!("Error: Failed to read from stdin");
+            // std::process::exit(1);
+        // });
+        // buffer
+    // });
 
     if args.format {
         println!("Formatting: {}", args.file);
