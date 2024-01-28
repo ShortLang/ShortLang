@@ -130,6 +130,8 @@ pub fn deallocate_all() {
         let ptr: *mut Value = *ptr as *mut usize as _;
         dealloc(ptr);
     }
+
+    ALL_ALLOCATIONS.lock().unwrap().clear();
 }
 
 #[inline(always)]
