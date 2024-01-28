@@ -389,7 +389,8 @@ impl VM {
 
             ExprKind::MultilineFunction(name, param_names, body) => {
                 let old_id = self.variables_id.clone();
-                self.variables_id.clear();
+
+                // FIXME: arbitrary variable access?
 
                 let mut scope = HashMap::new();
                 let mut fn_params = vec![];

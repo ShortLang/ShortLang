@@ -1,6 +1,5 @@
-$round(1.314134344141)
-$round(1.314134344141, 10)
+name = "wizard"
 
-a = [1]
-$a.pop()
-$a.pop()
+say_hello: $f"hello, {name}!"
+
+say_hello()
