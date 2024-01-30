@@ -3,7 +3,7 @@
 use clap::builder::TypedValueParser;
 use clap::Parser;
 use optimizer::Optimizer;
-use std::io::{Read, Write};
+use std::io::Write;
 use std::{fs, io};
 
 use formatter::Formatter;
@@ -105,15 +105,50 @@ fn main() {
         let mut rl = DefaultEditor::new().unwrap();
         let mut lines = Vec::new();
 
+        println!(
+            "ShortLang v{} on {}",
+            env!("CARGO_PKG_VERSION"),
+            std::env::consts::OS
+        );
+        println!("Type 'help', 'credits' or 'license' for more information");
+
         loop {
             let readline = rl.readline(">>> ");
             match readline {
                 Ok(input) => {
                     rl.add_history_entry(input.as_str()); // Add the line to the history
-                    if input.trim().is_empty() {
-                        continue;
-                    } else {
-                        lines.push(input);
+                    match input.trim() {
+                        "" => continue,
+                        "help" => {
+                            println!(
+                                "ShortLang v{} on {}",
+                                env!("CARGO_PKG_VERSION"),
+                                std::env::consts::OS
+                            );
+                            println!("Type 'help', 'credits' or 'license' for more information");
+                            println!("Type 'exit()' or CTRL-C to exit");
+                            continue;
+                        }
+                        "credits" => {
+                            println!(
+                                "ShortLang was created by {}",
+                                env!("CARGO_PKG_AUTHORS").replace(":", ", ")
+                            );
+                            println!(
+                                "For a full list of contributors, visit {}",
+                                env!("CARGO_PKG_REPOSITORY")
+                            );
+                            continue;
+                        }
+                        "license" => {
+                            println!(
+                                "ShortLang is licensed under the {} license",
+                                env!("CARGO_PKG_LICENSE")
+                            );
+                            println!("For more information, view the LICENSE file in the root directory of the project");
+                            continue;
+                        }
+                        _ => lines.push(input),
                     }
 
                     let src = lines.join("\n");

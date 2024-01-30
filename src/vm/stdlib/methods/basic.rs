@@ -1,4 +1,7 @@
 use super::*;
+use rug::Float;
+use rug::Integer;
+use std::ops::{AddAssign, MulAssign, SubAssign};
 
 pub fn init() {
     let mut functions = INBUILT_METHODS.lock().unwrap();
@@ -7,6 +10,12 @@ pub fn init() {
         "push" => [push, 1, Type::String, Type::Array],
         "join" => [join, 1, Type::Array],
         "split" => [split, 1, Type::String],
+        "sum" => [sum, 0, Type::Array],
+        "sub" => [sub, 0, Type::Array],
+        "mul" => [mul, 0, Type::Array],
+        "min" => [min, 0, Type::Array],
+        "max" => [max, 0, Type::Array],
+        "sort" => [sort, 0, Type::Array],
 
         "pop" => [pop, 0, Type::String, Type::Array],
         "clear" => [clear, 0, Type::String, Type::Array],
@@ -87,6 +96,95 @@ fn split(data: Data, args: Args) -> Output {
     };
 
     ret!(Value::Array(split))
+}
+
+fn sum(data: Data, _: Args) -> Output {
+    let array = unsafe { data.as_ref().as_array() };
+    let mut sum = Float::new(53);
+    for i in array.iter() {
+        match i {
+            Value::Int(i) => sum.add_assign(i),
+            Value::Float(f) => sum.add_assign(f),
+            Value::String(s) => sum.add_assign(s.len()),
+            Value::Array(a) => sum.add_assign(a.len()),
+            _ => (),
+        }
+    }
+    ret!(Value::Float(sum))
+}
+
+fn sub(data: Data, args: Args) -> Output {
+    let array = unsafe { data.as_ref().as_array() };
+    let mut sum = Float::new(53);
+    for i in array.iter() {
+        match i {
+            Value::Int(i) => sum.sub_assign(i),
+            Value::Float(f) => sum.sub_assign(f),
+            Value::String(s) => sum.sub_assign(s.len()),
+            Value::Array(a) => sum.sub_assign(a.len()),
+            _ => (),
+        }
+    }
+    ret!(Value::Float(sum))
+}
+
+fn mul(data: Data, args: Args) -> Output {
+    let array = unsafe { data.as_ref().as_array() };
+    let mut sum = Float::new(53);
+    for i in array.iter() {
+        match i {
+            Value::Int(i) => sum.mul_assign(i),
+            Value::Float(f) => sum.mul_assign(f),
+            Value::String(s) => sum.mul_assign(s.len()),
+            Value::Array(a) => sum.mul_assign(a.len()),
+            _ => (),
+        }
+    }
+    ret!(Value::Float(sum))
+}
+
+fn min(data: Data, args: Args) -> Output {
+    let array = unsafe { data.as_ref().as_array() };
+    let mut min = float!(rug::float::Special::Infinity);
+    for i in array.iter() {
+        match i {
+            Value::Int(i) => min.min_mut(&float!(i)),
+            Value::Float(f) => min.min_mut(f),
+            Value::String(s) => min.min_mut(&float!(s.len())),
+            Value::Array(a) => min.min_mut(&float!(a.len())),
+            _ => (),
+        }
+    }
+    ret!(Value::Float(min))
+}
+
+fn max(data: Data, args: Args) -> Output {
+    let array = unsafe { data.as_ref().as_array() };
+    let mut max = float!(rug::float::Special::NegInfinity);
+    for i in array.iter() {
+        match i {
+            Value::Int(i) => max.max_mut(&float!(i)),
+            Value::Float(f) => max.max_mut(f),
+            Value::String(s) => max.max_mut(&float!(s.len())),
+            Value::Array(a) => max.max_mut(&float!(a.len())),
+            _ => (),
+        }
+    }
+    ret!(Value::Float(max))
+}
+
+fn sort(data: Data, _: Args) -> Output {
+    let mut array = unsafe { data.as_ref().as_array().to_vec() };
+    array.sort_by(|a, b| match (a, b) {
+        (Value::Float(f), _) if f.is_infinite() && f.is_sign_negative() => std::cmp::Ordering::Less,
+        (_, Value::Float(f)) if f.is_infinite() && f.is_sign_negative() => {
+            std::cmp::Ordering::Greater
+        }
+        (Value::Int(i), Value::Float(f)) => float!(i).partial_cmp(f).unwrap(),
+        (Value::Float(f), Value::Int(i)) => f.partial_cmp(&float!(i)).unwrap(),
+        _ => a.partial_cmp(b).unwrap(),
+    });
+    ret!(Value::Array(array))
 }
 
 fn get_type(data: Data, _: Args) -> Output {

@@ -1,4 +1,5 @@
 use az::SaturatingCast;
+use rug::integer::IsPrime;
 use rug::{ops::CompleteRound, Complete, Float, Integer};
 
 use super::*;
@@ -10,6 +11,10 @@ pub fn init() {
         "lcm" => [lcm, 2],
         "gcd" => [gcd, 2],
         "fib" => [fib, 1],
+        "prime" => [nth_prime, 1],
+        "isprime" => [is_prime, 1],
+        "lprime" => [last_prime, 1],
+        "nprime" => [next_prime, 1],
         "abs" => [abs, 1],
         "ceil" => [ceil, 1],
         "floor" => [floor, 1],
@@ -43,15 +48,6 @@ fn lcm(val: Input) -> Output {
     ret!(Value::Int(lcm));
 }
 
-fn fib(val: Input) -> Output {
-    let n = unsafe { val[0].as_ref() };
-    match n {
-        Value::Int(n) => ret!(Value::Int(Integer::fibonacci(n.saturating_cast()).into())),
-        Value::Float(n) => ret!(Value::Int(Integer::fibonacci(n.saturating_cast()).into())),
-        _ => ret!(err: "Expected a number"),
-    }
-}
-
 fn gcd(val: Input) -> Output {
     let &[a, b] = val else { unreachable!() };
     let [a, b] = unsafe { [a.as_ref(), b.as_ref()] };
@@ -71,6 +67,79 @@ fn gcd(val: Input) -> Output {
     };
 
     ret!(Value::Int(gcd))
+}
+
+fn fib(val: Input) -> Output {
+    let n = unsafe { val[0].as_ref() };
+    match n {
+        Value::Int(n) => ret!(Value::Int(Integer::fibonacci(n.saturating_cast()).into())),
+        Value::Float(n) => ret!(Value::Int(Integer::fibonacci(n.saturating_cast()).into())),
+        _ => ret!(err: "Expected a number"),
+    }
+}
+
+fn nth_prime(val: Input) -> Output {
+    let n = unsafe { val[0].as_ref() };
+    match n {
+        Value::Int(n) => {
+            let mut current = Integer::from(1);
+            for _ in 0..n.saturating_cast() {
+                current.next_prime_mut();
+            }
+            ret!(Value::Int(current))
+        }
+        Value::Float(n) => {
+            let mut current = Integer::from(1);
+            for _ in 0..n.to_integer().unwrap_or(Integer::from(0)).saturating_cast() {
+                current.next_prime_mut();
+            }
+            ret!(Value::Int(current))
+        }
+        _ => ret!(err: "Expected a number"),
+    }
+}
+
+fn is_prime(val: Input) -> Output {
+    let n = unsafe { val[0].as_ref() };
+    match n {
+        Value::Int(n) => match n.is_probably_prime(30) {
+            IsPrime::Yes | IsPrime::Probably => ret!(Value::Bool(true)),
+            _ => ret!(Value::Bool(false)),
+        },
+        Value::Float(n) => {
+            match n
+                .to_integer()
+                .unwrap_or(Integer::from(0))
+                .is_probably_prime(30)
+            {
+                IsPrime::Yes | IsPrime::Probably => ret!(Value::Bool(true)),
+                _ => ret!(Value::Bool(false)),
+            }
+        }
+        _ => ret!(err: "Expected a number"),
+    }
+}
+
+fn last_prime(val: Input) -> Output {
+    let n = unsafe { val[0].as_ref() };
+    match n {
+        Value::Int(n) => ret!(Value::Int(n.prev_prime_ref().complete())),
+        Value::Float(n) => ret!(Value::Int(
+            n.to_integer().unwrap_or(Integer::from(0)).prev_prime()
+        )),
+        _ => ret!(err: "Expected a number"),
+    }
+}
+
+fn next_prime(val: Input) -> Output {
+    let n = unsafe { val[0].as_ref() };
+    match n {
+        Value::Int(n) => ret!(Value::Int(n.next_prime_ref().complete())),
+        Value::Float(n) => ret!(Value::Int(
+            n.to_integer().unwrap_or(Integer::from(0)).next_prime()
+        )),
+        _ => ret!(err: "Expected a number"),
+    }
 }
 
 fn abs(val: Input) -> Output {
