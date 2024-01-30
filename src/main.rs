@@ -5,6 +5,7 @@ use clap::Parser;
 use optimizer::Optimizer;
 use std::io::Write;
 use std::{fs, io};
+use atty::Stream;
 
 use formatter::Formatter;
 use logos::Logos;
@@ -105,12 +106,15 @@ fn main() {
         let mut rl = DefaultEditor::new().unwrap();
         let mut lines = Vec::new();
 
-        println!(
-            "ShortLang v{} on {}",
-            env!("CARGO_PKG_VERSION"),
-            std::env::consts::OS
-        );
-        println!("Type 'help', 'credits' or 'license' for more information");
+        // Only print information if we aren't piping input
+        if atty::is(Stream::Stdin) {
+            println!(
+                "ShortLang v{} on {}",
+                env!("CARGO_PKG_VERSION"),
+                std::env::consts::OS
+            );
+            println!("Type 'help', 'credits' or 'license' for more information");
+        }
 
         loop {
             let readline = rl.readline(">>> ");
@@ -165,8 +169,13 @@ fn main() {
                 Err(ReadlineError::Interrupted) => {
                     println!("CTRL-C");
                     std::process::exit(0);
-                }
-                Err(ReadlineError::Eof) => std::process::exit(0),
+                },
+                Err(ReadlineError::Eof) => {
+                    if atty::is(Stream::Stdin) {
+                        println!("CTRL-D");
+                    }
+                    std::process::exit(0)
+                },
                 Err(err) => {
                     eprintln!("Error: {:?}", err);
                     std::process::exit(1);

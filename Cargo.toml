@@ -16,6 +16,7 @@ miette = { version = "5.10.0", features = ["fancy"] }
 fastrand = "2.0.1"
 az = "1.2.1"
 rustyline = "13.0.0"
+atty = "0.2.14"
 
 [dependencies.rug]
 version = "1.24.0"
