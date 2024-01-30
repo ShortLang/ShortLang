@@ -21,3 +21,7 @@ rustyline = "13.0.0"
 version = "1.24.0"
 default-features = false
 features = ["integer", "float"]
+
+[dependencies.gmp-mpfr-sys]
+version = "1.6.2"
+features = ["force-cross"]
