@@ -414,14 +414,11 @@ impl VM {
                 let body_start = self.instructions.len();
                 let mut returns = false;
                 for expr in body {
-                    if matches![expr.inner, ExprKind::Return(..)] {
-                        returns = true;
-                    }
-
                     self.compile_expr(expr);
                 }
 
-                self.instructions.push((Instr(Bytecode::Ret, vec![]), 0..0));
+                self.instructions
+                    .push((Instr(Bytecode::FnEnd, vec![]), 0..0));
 
                 let body_end = self.instructions.len();
                 self.instructions[jmp_instr_ptr].0 .1.push(body_end);
@@ -433,7 +430,6 @@ impl VM {
                         parameters: fn_params,
                         instruction_range: body_start..body_end,
                         scope_idx,
-                        returns,
                     },
                 );
                 self.variables_id = old_id;
@@ -681,12 +677,7 @@ impl VM {
                         .push((Instr(Bytecode::Jmp, vec![]), e.span));
 
                     let body_start = self.instructions.len();
-                    let mut returns = false;
                     for expr in body {
-                        if matches![expr.inner, ExprKind::Return(..)] {
-                            returns = true;
-                        }
-
                         self.compile_expr(expr);
                     }
 
@@ -702,7 +693,6 @@ impl VM {
                             parameters: fn_params,
                             instruction_range: body_start..body_end,
                             scope_idx,
-                            returns,
                         },
                     );
 
@@ -1013,7 +1003,6 @@ impl VM {
                 let fn_obj @ FunctionData {
                     parameters,
                     scope_idx,
-                    returns,
                     ..
                 } = fn_obj_option.unwrap();
 
@@ -1032,15 +1021,21 @@ impl VM {
                         Some(fn_args[idx]);
                 }
 
-                let returns = *returns;
                 self.push_call_stack(fn_obj.instruction_range.start, *scope_idx, variables);
-
-                if !returns {
-                    self.stack.push(memory::retain(allocate(Value::Nil)));
-                }
             },
 
-            Bytecode::Ret => self.pop_call_stack(),
+            Bytecode::Ret => {
+                let return_value = self.stack.pop().unwrap();
+                self.pop_call_stack();
+                self.stack.push(return_value);
+            }
+
+            // If the function is terminated by FnEnd.
+            // that means it doesn't return anything.
+            Bytecode::FnEnd => {
+                self.pop_call_stack();
+                self.stack.push(memory::retain(allocate(Value::Nil)));
+            }
 
             Bytecode::Array => unsafe {
                 let items = args[0];

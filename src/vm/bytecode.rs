@@ -41,6 +41,7 @@ pub enum Bytecode {
     // Function,
     FnCall(usize),
     Ret,
+    FnEnd,
 
     Mod,
     BinaryPow,
