@@ -1,5 +1,6 @@
 mod basic;
 mod file;
+mod math;
 
 pub(crate) use super::super::{
     utils::allocate, utils::FieldFnHandler, value::Type, value::Value, vm::VarPtr,
@@ -17,4 +18,5 @@ pub(crate) use std::ptr::NonNull;
 pub fn init() {
     basic::init();
     file::init();
+    math::init();
 }
