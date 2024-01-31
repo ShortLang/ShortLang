@@ -28,8 +28,8 @@ pub type VarPtr = Option<NonNull<Value>>;
 pub(crate) type CallStack = Vec<FnStackData>;
 
 lazy_static::lazy_static! {
-    pub static ref INBUILT_FUNCTIONS: Mutex<HashMap<(String, usize), FnHandler>> = Mutex::new(HashMap::new());
-    pub static ref INBUILT_METHODS: Mutex<HashMap<(String, Type, usize), FieldFnHandler>> = Mutex::new(HashMap::new());
+    pub static ref INBUILT_FUNCTIONS: Mutex<HashMap<(String, usize), (FnHandler, String)>> = Mutex::new(HashMap::new());
+    pub static ref INBUILT_METHODS: Mutex<HashMap<(String, Type, usize), (FieldFnHandler, String)>> = Mutex::new(HashMap::new());
 }
 
 pub struct VM {
@@ -1290,7 +1290,7 @@ impl VM {
                 fn_args.reverse();
 
                 let ib_fn = INBUILT_FUNCTIONS.lock().unwrap();
-                let Some(ib_fn) = ib_fn.get(&(name, num_args)) else {
+                let Some((ib_fn, _)) = ib_fn.get(&(name, num_args)) else {
                     self.runtime_error("What the...", span);
                 };
 
@@ -1317,7 +1317,7 @@ impl VM {
                 let data_type = Type::try_from(data.as_ref().get_type()).unwrap(); // safe
 
                 // Check if a built-in method exists
-                if let Some(method_fn) =
+                if let Some((method_fn, _)) =
                     INBUILT_METHODS
                         .lock()
                         .unwrap()
@@ -1718,7 +1718,6 @@ mod tests {
                 parameters: vec![("x".to_string(), 0)],
                 instruction_range: 0..0,
                 scope_idx: 0,
-                returns: false,
             },
         );
         vm.compile_expr(Expr {
@@ -1747,7 +1746,6 @@ mod tests {
                 parameters: vec![("x".to_string(), 0)],
                 instruction_range: 0..0,
                 scope_idx: 0,
-                returns: true,
             },
         );
         let instr = Instr(Bytecode::FnCall(0), vec![0]);

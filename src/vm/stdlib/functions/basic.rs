@@ -12,27 +12,58 @@ pub fn init() {
     let mut ib = INBUILT_FUNCTIONS.lock().unwrap();
 
     add_fn![ib,
+        help: "Print to stdout with a newline character at the end.",
         "$" => [println, 1],
+
+        help: "Print to stdout without a newline character at the end.",
         "$$" => [print, 1],
 
-        "inp" => [input, 1],
+        help: "Read a line from stdin without any prompt.",
+        "inp" => [input, 0],
+
+        help: "Read a line from stdin, with a prompt.",
+        "inp" => [input_with_prompt, 1],
+
+        help: "Returns the ascii value associated with a character.",
         "chr" => [char, 1],
+
+        help: "Returns the character associated with the ascii value.",
         "ord" => [ord, 1],
 
+        help: "Returns the lenght of string/array.",
         "len" => [len, 1],
+
+        help: "Terminates the program at any given time.",
         "exit" => [exit, 0],
+
+        help: "Returns the type of the value.",
         "type" => [get_type, 1],
+
+        help: "Opens a file and returns a file object.",
         "open" => [open, 1],
 
+        help: "Returns an array with values from 0 to x",
         "rng" => [rng_1, 1],
+
+        help: "Returns an array with values from a to b",
         "rng" => [rng_2, 2],
 
+        help: "Returns a random number.",
         "rnd" => [rnd_0, 0],
+
+        help: "Returns a random number between 0 and x",
         "rnd" => [rnd_1, 1],
+
+        help: "Returns a random number between a and b",
         "rnd" => [rnd_2, 2],
 
+        help: "Tries to convert a value to floating point value, returns an error if conversion is not possible.",
         "flt" => [to_float, 1],
+
+        help: "Tries to convert a value to string value, this function never fails.",
         "str" => [to_str, 1],
+
+        help: "Tries to convert a value to integer value, returns an error if conversion is not possible.",
         "int" => [to_int, 1],
     ];
 }
@@ -171,6 +202,18 @@ fn to_int(val: Input) -> Output {
 }
 
 fn input(val: Input) -> Output {
+    use std::io::*;
+
+    let mut s = String::new();
+    match stdin().read_line(&mut s) {
+        Err(x) => ret!(err: &x.to_string()),
+        Ok(_) => {}
+    };
+
+    ret!(Value::String(s.trim().to_string()));
+}
+
+fn input_with_prompt(val: Input) -> Output {
     use std::io::*;
     let prompt = unsafe { val[0].as_ref() };
 

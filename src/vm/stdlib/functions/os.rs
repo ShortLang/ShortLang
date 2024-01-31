@@ -8,11 +8,19 @@ pub fn init() {
     let mut ib = INBUILT_FUNCTIONS.lock().unwrap();
 
     add_fn![ib,
+        help: "Executes a shell command.",
         "run" => [run, 1],
+
+        help: "Returns the command-line arguments given to the program.",
         "arg" => [args, 0],
 
+        help: "Gets all the environment variables as a key-value pair.",
         "env" => [list_vars, 0],
+
+        help: "Gets the value of the specified environment variable",
         "env" => [get_env, 1],
+
+        help: "Sets the value of the specified environment variable.",
         "env" => [set_env, 2],
     ];
 }

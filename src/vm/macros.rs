@@ -71,12 +71,15 @@ macro_rules! to_usize {
 
 #[macro_export]
 macro_rules! add_method {
-    [ $set:expr, $( $name:expr => [ $func:expr, $n:expr, $( $type:expr ),* $(,)? ] ),* $(,)? ] => {
+    [ $set:expr, $(help: $help_msg:expr, $name:expr => [ $func:expr, $n:expr, $( $type:expr ),* $(,)? ] ),* $(,)? ] => {
         $(
             $(
                 $set.insert(
                     (String::from($name), $type, $n),
-                    FieldFnHandler::new($func)
+                    (
+                        FieldFnHandler::new($func),
+                        String::from($help_msg)
+                    )
                 );
             )*
         )*
@@ -106,19 +109,19 @@ macro_rules! ret {
 
 #[macro_export]
 macro_rules! add_fn {
-    [ $set:expr, $( $name:expr => [$placeholder:ident; $n:expr] { $($tt:tt)* } ),* $(,)? ] => {
-        $(
-            $set.insert((String::from($name), $n), FnHandler::new(
-                |$placeholder| unsafe {
-                    $($tt)*
-                }
-            ));
-        )*
-    };
+    // [ $set:expr, $( $name:expr => [$placeholder:ident; $n:expr] { $($tt:tt)* } ),* $(,)? ] => {
+    //     $(
+    //         $set.insert((String::from($name), $n), FnHandler::new(
+    //             |$placeholder| unsafe {
+    //                 $($tt)*
+    //             }
+    //         ));
+    //     )*
+    // };
 
-    [ $set:expr, $( $name:expr => [ $func:expr, $n:expr ] ),* $(,)? ] => {
+    [ $set:expr, $(help: $help_msg:expr, $name:expr => [ $func:expr, $n:expr ] ),* $(,)? ] => {
         $(
-            $set.insert((String::from($name), $n), FnHandler::new($func));
+            $set.insert((String::from($name), $n), (FnHandler::new($func), String::from($help_msg)));
         )*
     }
 }

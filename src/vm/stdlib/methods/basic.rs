@@ -7,18 +7,40 @@ pub fn init() {
     let mut functions = INBUILT_METHODS.lock().unwrap();
 
     add_method![functions,
+        help: "Pushes a value in a string or an array.",
         "push" => [push, 1, Type::String, Type::Array],
+
+        help: "Flattens an array a single value string, placing a given separator between each element.",
         "join" => [join, 1, Type::Array],
+
+        help: "Returns an array containing the substrings of a string, separated by specified character.",
         "split" => [split, 1, Type::String],
+
+        help: "Calculates the sum of all the values inside an array.",
         "sum" => [sum, 0, Type::Array],
+
+        help: "Subtracts all the elements from the first one.",
         "sub" => [sub, 0, Type::Array],
+
+        help: "Calculates the product of all the values of the array.",
         "mul" => [mul, 0, Type::Array],
+
+        help: "Finds the smallest element in the array.",
         "min" => [min, 0, Type::Array],
+
+        help: "Finds the largest element in the array.",
         "max" => [max, 0, Type::Array],
+
+        help: "Sorts the array.",
         "sort" => [sort, 0, Type::Array],
 
+        help: "Returns and removes the last element of the array.",
         "pop" => [pop, 0, Type::String, Type::Array],
+
+        help: "Removes all the elemements of the array.",
         "clear" => [clear, 0, Type::String, Type::Array],
+
+        help: "Returns the type of the value.",
         "type" => [get_type, 0, Type::String, Type::Array, Type::Integer, Type::Float, Type::Nil],
     ];
 }

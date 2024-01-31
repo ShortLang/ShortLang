@@ -4,8 +4,13 @@ pub fn init() {
     let mut set = INBUILT_METHODS.lock().unwrap();
 
     add_method![set,
+        help: "Reads everything from the file.",
         "r" => [read, 0, Type::File],
+
+        help: "Overwrites the contents of the file with the sepcified one.",
         "w" => [write, 1, Type::File],
+
+        help: "Appends the contents to the file.",
         "a" => [append, 1, Type::File],
     ];
 }

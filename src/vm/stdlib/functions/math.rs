@@ -8,21 +8,46 @@ pub fn init() {
     let mut ib = INBUILT_FUNCTIONS.lock().unwrap();
 
     add_fn![ib,
+        help: "Returns the lcm (least common multiple) of two values.",
         "lcm" => [lcm, 2],
+
+        help: "Returns the gcd (greatest common divisor) of two values.",
         "gcd" => [gcd, 2],
+
+        help: "Returns the nth fibonacci number.",
         "fib" => [fib, 1],
+
+        help: "Returns the nth prime number.",
         "prime" => [nth_prime, 1],
+
+        help: "Checks whether a number is prime or not.",
         "isprime" => [is_prime, 1],
+
+        help: "Finds the previous prime number.",
         "lprime" => [last_prime, 1],
+
+        help: "Finds the next prime number.",
         "nprime" => [next_prime, 1],
+
+        help: "Calculates the absolute value.",
         "abs" => [abs, 1],
+
+        help: "Rounds up to the next integer.",
         "ceil" => [ceil, 1],
+
+        help: "Rounds down to the previous integer.",
         "floor" => [floor, 1],
 
+        help: "Calculates the square root of a number",
         "sqrt" => [sqrt, 1],
+
+        help: "Calculates the nth root of a number",
         "root" => [root, 2],
 
+        help: "Rounds to the nearest integer, rounding half-way cases away from zero.",
         "round" => [round_1, 1],
+
+        help: "Rounds to the specified precision.",
         "round" => [round_2, 2],
     ];
 }

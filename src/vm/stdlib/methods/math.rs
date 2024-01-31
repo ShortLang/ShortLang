@@ -4,11 +4,22 @@ pub fn init() {
     let mut set = INBUILT_METHODS.lock().unwrap();
 
     add_method![set,
+        help: "Computes the sine",
         "sin" => [sine, 0, Type::Integer, Type::Float],
+
+        help: "Computes the cosine",
         "cos" => [cosine, 0, Type::Integer, Type::Float],
+
+        help: "Computes the tangent",
         "tan" => [tangent, 0, Type::Integer, Type::Float],
+
+        help: "Computes the cotangent",
         "cot" => [cotangent, 0, Type::Integer, Type::Float],
+
+        help: "Computes the secant",
         "sec" => [secant, 0, Type::Integer, Type::Float],
+
+        help: "Computes the cosecant",
         "csc" => [cosecant, 0, Type::Integer, Type::Float],
     ];
 }
