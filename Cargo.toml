@@ -2,23 +2,24 @@
 name = "shortlang"
 version = "0.4.0"
 edition = "2021"
-authors = ["Pranjal Patel <pranjalpatel@duck.com>", "Hamza <hamzaoubrahim51@gmail.com>", "FirePlank <contact@fireplank.xyz>"]
+authors = ["The ShortLang Team"]
 description = "A programming language designed for code golfing."
 repository = "https://github.com/ShortLang/ShortLang/"
 license = "GPL-3.0-only"
 readme = "README.md"
 
 [dependencies]
-clap = { version = "4.4.12", features = ["derive"] }
+clap = { version = "4.4.18", features = ["derive"] }
 lazy_static = "1.4.0"
 logos = "0.13.0"
 miette = { version = "5.10.0", features = ["fancy"] }
 fastrand = "2.0.1"
 az = "1.2.1"
 rustyline = "13.0.0"
+atty = "0.2.14"
 
 [dependencies.rug]
-version = "1.22.0"
+version = "1.24.0"
 default-features = false
 features = ["integer", "float"]
 

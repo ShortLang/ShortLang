@@ -1335,7 +1335,16 @@ impl VM {
                         _ => {}
                     }
                 } else {
-                    let object = memory::release(self.stack.pop().unwrap());
+                    let object = memory::release(self.stack.pop().unwrap_or_else(|| {
+                        self.runtime_error(
+                            &format!(
+                                "No method named '{name}' found on the type '{}' that takes: {} arguments",
+                                data_type.get_type(),
+                                num_args
+                            ),
+                            span.clone(),
+                        );
+                    }));
                     let object_type = Type::try_from(object.as_ref().get_type()).unwrap();
 
                     let Some(fn_obj) = self.impl_methods.get(&(name.clone(), object_type)) else {
