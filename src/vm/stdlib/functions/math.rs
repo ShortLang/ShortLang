@@ -54,7 +54,7 @@ pub fn init() {
 
 fn lcm(val: Input) -> Output {
     let &[a, b] = val else { unreachable!() };
-    let [a, b] = unsafe { [a.as_ref(), b.as_ref()] };
+    let [a, b] = [nth_arg!(val, 0), nth_arg!(val, 1)];
 
     let lcm = match (a, b) {
         (Value::Int(a), Value::Int(b)) => a.lcm_ref(b).complete(),
@@ -95,16 +95,18 @@ fn gcd(val: Input) -> Output {
 }
 
 fn fib(val: Input) -> Output {
-    let n = unsafe { val[0].as_ref() };
+    let n = nth_arg!(val, 0);
     match n {
         Value::Int(n) => ret!(Value::Int(Integer::fibonacci(n.saturating_cast()).into())),
         Value::Float(n) => ret!(Value::Int(Integer::fibonacci(n.saturating_cast()).into())),
+
         _ => ret!(err: "Expected a number"),
     }
 }
 
 fn nth_prime(val: Input) -> Output {
-    let n = unsafe { val[0].as_ref() };
+    let n = nth_arg!(val, 0);
+
     match n {
         Value::Int(n) => {
             let mut current = Integer::from(1);
@@ -125,7 +127,7 @@ fn nth_prime(val: Input) -> Output {
 }
 
 fn is_prime(val: Input) -> Output {
-    let n = unsafe { val[0].as_ref() };
+    let n = nth_arg!(val, 0);
     match n {
         Value::Int(n) => match n.is_probably_prime(30) {
             IsPrime::Yes | IsPrime::Probably => ret!(Value::Bool(true)),
@@ -146,7 +148,7 @@ fn is_prime(val: Input) -> Output {
 }
 
 fn last_prime(val: Input) -> Output {
-    let n = unsafe { val[0].as_ref() };
+    let n = nth_arg!(val, 0);
     match n {
         Value::Int(n) => ret!(Value::Int(n.prev_prime_ref().complete())),
         Value::Float(n) => ret!(Value::Int(
@@ -157,7 +159,7 @@ fn last_prime(val: Input) -> Output {
 }
 
 fn next_prime(val: Input) -> Output {
-    let n = unsafe { val[0].as_ref() };
+    let n = nth_arg!(val, 0);
     match n {
         Value::Int(n) => ret!(Value::Int(n.next_prime_ref().complete())),
         Value::Float(n) => ret!(Value::Int(
@@ -168,7 +170,7 @@ fn next_prime(val: Input) -> Output {
 }
 
 fn abs(val: Input) -> Output {
-    let n = unsafe { val[0].as_ref() };
+    let n = nth_arg!(val, 0);
     match n {
         Value::Int(n) => ret!(Value::Int(n.abs_ref().complete())),
         Value::Float(n) => ret!(Value::Float(n.abs_ref().complete(53))),
@@ -178,15 +180,16 @@ fn abs(val: Input) -> Output {
 
 /// Takes 1 parameter
 fn round_1(val: Input) -> Output {
-    let n = unsafe { val[0].as_ref().as_float() };
+    let n = cast_nth_arg!(val, 0, Float);
     ret!(Value::Int(
         n.round().to_integer().unwrap_or(Integer::from(0))
     ))
 }
 
 fn round_2(val: Input) -> Output {
-    let n = unsafe { val[0].as_ref().as_float() };
-    let precision = unsafe { val[1].as_ref().as_int() };
+    let n = cast_nth_arg!(val, 0, Float);
+    let precision = cast_nth_arg!(val, 1, Int);
+
     ret!(Value::Float(
         Float::parse(format!("{:.1$}", n, precision.to_usize_wrapping()))
             .unwrap()
@@ -195,7 +198,7 @@ fn round_2(val: Input) -> Output {
 }
 
 fn floor(val: Input) -> Output {
-    let n = unsafe { val[0].as_ref() };
+    let n = nth_arg!(val, 0);
     match n {
         Value::Int(n) => ret!(Value::Int(Integer::from(n))),
         Value::Float(n) => ret!(Value::Float(n.floor_ref().complete(53))),
@@ -205,7 +208,7 @@ fn floor(val: Input) -> Output {
 }
 
 fn ceil(val: Input) -> Output {
-    let n = unsafe { val[0].as_ref() };
+    let n = nth_arg!(val, 0);
     match n {
         Value::Int(n) => ret!(Value::Int(Integer::from(n))),
         Value::Float(n) => ret!(Value::Float(n.ceil_ref().complete(53))),
@@ -214,12 +217,12 @@ fn ceil(val: Input) -> Output {
 }
 
 fn sqrt(val: Input) -> Output {
-    let n = float!(unsafe { val[0].as_ref().as_int() });
+    let n = float!(cast_nth_arg!(val, 0, Int));
     Ok(Some(allocate(Value::Float(n.sqrt()))))
 }
 
 fn root(val: Input) -> Output {
-    let [n, th_root] = unsafe { [val[0].as_ref().as_int(), val[1].as_ref().as_int()] };
+    let [n, th_root] = [cast_nth_arg!(val, 0, Int), cast_nth_arg!(val, 1, Int)];
     let root = float!(n).root(th_root.saturating_cast());
     Ok(Some(allocate(Value::Float(root))))
 }

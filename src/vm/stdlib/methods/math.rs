@@ -25,31 +25,31 @@ pub fn init() {
 }
 
 fn sine(number: Data, _: Args) -> Output {
-    let number = unsafe { number.as_ref().as_float() };
+    let number = unsafe { number.as_ref().clone().as_float() };
     ret!(number.sin().into())
 }
 
 fn cosine(number: Data, _: Args) -> Output {
-    let number = unsafe { number.as_ref().as_float() };
+    let number = unsafe { number.as_ref().clone().as_float() };
     ret!(number.cos().into())
 }
 
 fn tangent(number: Data, _: Args) -> Output {
-    let number = unsafe { number.as_ref().as_float() };
+    let number = unsafe { number.as_ref().clone().as_float() };
     ret!(number.tan().into())
 }
 
 fn cotangent(number: Data, _: Args) -> Output {
-    let number = unsafe { number.as_ref().as_float() };
+    let number = unsafe { number.as_ref().clone().as_float() };
     ret!(number.cot().into())
 }
 
 fn secant(number: Data, _: Args) -> Output {
-    let number = unsafe { number.as_ref().as_float() };
+    let number = unsafe { number.as_ref().clone().as_float() };
     ret!(number.sec().into())
 }
 
 fn cosecant(number: Data, _: Args) -> Output {
-    let number = unsafe { number.as_ref().as_float() };
+    let number = unsafe { number.as_ref().clone().as_float() };
     ret!(number.csc().into())
 }

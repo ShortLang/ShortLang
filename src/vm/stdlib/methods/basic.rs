@@ -46,7 +46,7 @@ pub fn init() {
 }
 
 fn push(mut data: Data, args: Args) -> Output {
-    let src = unsafe { args[0].as_ref() };
+    let src = nth_arg!(args, 0);
     let data = unsafe { data.as_mut() };
     *data = data.binary_add(src).unwrap();
     ret!(ptr: data);
@@ -58,20 +58,19 @@ fn pop(mut data: Data, _: Args) -> Output {
         Value::String(s) => s.pop().map(|i| Value::String(i.to_string())),
         _ => unreachable!(),
     };
+
     ret!(val.unwrap_or(Value::Nil))
 }
 
 fn clear(mut data: Data, _: Args) -> Output {
-    unsafe {
-        data.as_mut().clear();
-    }
+    unsafe { data.as_mut().clear() };
     ret!()
 }
 
 fn join(data: Data, args: Args) -> Output {
-    let separator = unsafe { args[0].as_ref() };
+    let separator = nth_arg!(args, 0);
 
-    let array = unsafe { data.as_ref().as_array() };
+    let array = cast!(unsafe { data.as_ref() } => Array);
     let result_string = array
         .iter()
         .map(|i| i.to_string())
@@ -90,7 +89,7 @@ fn join(data: Data, args: Args) -> Output {
 }
 
 fn split(data: Data, args: Args) -> Output {
-    let split = unsafe { args[0].as_ref() };
+    let split = nth_arg!(args, 0);
 
     let data = unsafe { data.as_ref() };
 
@@ -99,6 +98,7 @@ fn split(data: Data, args: Args) -> Output {
         (Value::String(val_str), Value::String(split_str)) => (val_str, split_str),
         (Value::Nil, Value::String(split_str)) => (split_str, &empty),
         (Value::String(val_str), Value::Nil) => (val_str, &empty),
+
         _ => ret!(err: &format!(
             "Expected 'str' as an argument of 'split' function, found '{}'",
             data.get_type()
@@ -121,8 +121,9 @@ fn split(data: Data, args: Args) -> Output {
 }
 
 fn sum(data: Data, _: Args) -> Output {
-    let array = unsafe { data.as_ref().as_array() };
+    let array = unsafe { data.as_ref().clone().as_array() };
     let mut sum = Float::new(53);
+
     for i in array.iter() {
         match i {
             Value::Int(i) => sum.add_assign(i),
@@ -132,12 +133,14 @@ fn sum(data: Data, _: Args) -> Output {
             _ => (),
         }
     }
+
     ret!(Value::Float(sum))
 }
 
 fn sub(data: Data, args: Args) -> Output {
-    let array = unsafe { data.as_ref().as_array() };
+    let array = unsafe { data.as_ref().clone().as_array() };
     let mut sum = Float::new(53);
+
     for i in array.iter() {
         match i {
             Value::Int(i) => sum.sub_assign(i),
@@ -147,12 +150,14 @@ fn sub(data: Data, args: Args) -> Output {
             _ => (),
         }
     }
+
     ret!(Value::Float(sum))
 }
 
 fn mul(data: Data, args: Args) -> Output {
-    let array = unsafe { data.as_ref().as_array() };
+    let array = unsafe { data.as_ref().clone().as_array() };
     let mut sum = Float::new(53);
+
     for i in array.iter() {
         match i {
             Value::Int(i) => sum.mul_assign(i),
@@ -162,12 +167,14 @@ fn mul(data: Data, args: Args) -> Output {
             _ => (),
         }
     }
+
     ret!(Value::Float(sum))
 }
 
 fn min(data: Data, args: Args) -> Output {
-    let array = unsafe { data.as_ref().as_array() };
+    let array = unsafe { data.as_ref().clone().as_array() };
     let mut min = float!(rug::float::Special::Infinity);
+
     for i in array.iter() {
         match i {
             Value::Int(i) => min.min_mut(&float!(i)),
@@ -177,12 +184,14 @@ fn min(data: Data, args: Args) -> Output {
             _ => (),
         }
     }
+
     ret!(Value::Float(min))
 }
 
 fn max(data: Data, args: Args) -> Output {
-    let array = unsafe { data.as_ref().as_array() };
+    let array = unsafe { data.as_ref().clone().as_array() };
     let mut max = float!(rug::float::Special::NegInfinity);
+
     for i in array.iter() {
         match i {
             Value::Int(i) => max.max_mut(&float!(i)),
@@ -196,7 +205,7 @@ fn max(data: Data, args: Args) -> Output {
 }
 
 fn sort(data: Data, _: Args) -> Output {
-    let mut array = unsafe { data.as_ref().as_array().to_vec() };
+    let mut array = unsafe { data.as_ref().clone().as_array().to_vec() };
     array.sort_by(|a, b| match (a, b) {
         (Value::Float(f), _) if f.is_infinite() && f.is_sign_negative() => std::cmp::Ordering::Less,
         (_, Value::Float(f)) if f.is_infinite() && f.is_sign_negative() => {
@@ -206,6 +215,7 @@ fn sort(data: Data, _: Args) -> Output {
         (Value::Float(f), Value::Int(i)) => f.partial_cmp(&float!(i)).unwrap(),
         _ => a.partial_cmp(b).unwrap(),
     });
+
     ret!(Value::Array(array))
 }
 

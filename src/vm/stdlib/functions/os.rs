@@ -26,7 +26,7 @@ pub fn init() {
 }
 
 fn run(val: Input) -> Output {
-    let input = unsafe { val[0].as_ref().as_str() };
+    let input = cast_nth_arg!(val, 0, String);
     let status = unsafe { system(input.as_ptr() as *mut _) };
 
     ret!(Value::Int(status.into()))
@@ -39,21 +39,24 @@ fn args(_: Input) -> Output {
 }
 
 fn get_env(val: Input) -> Output {
-    let var_name = unsafe { val[0].as_ref().as_str() };
+    let var_name = cast_nth_arg!(val, 0, String);
     let env = std::env::var(var_name).unwrap_or("".to_owned());
     if env.is_empty() {
         ret!(Value::Nil)
     }
+
     ret!(Value::String(env))
 }
 
 fn set_env(val: Input) -> Output {
-    let [key, value] = unsafe { [val[0].as_ref().as_str(), val[1].as_ref().as_str()] };
-    let old_value = std::env::var(key).unwrap_or("".to_owned());
-    std::env::set_var(key, value);
+    let [key, value] = [cast_nth_arg!(val, 0, String), cast_nth_arg!(val, 1, String)];
+    let old_value = std::env::var(&key).unwrap_or("".to_owned());
+    std::env::set_var(&key, value);
+
     if old_value.is_empty() {
         ret!(Value::Nil)
     }
+
     ret!(Value::String(old_value))
 }
 

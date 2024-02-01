@@ -30,7 +30,7 @@ pub fn read(data: Data, _: Args) -> Output {
 }
 
 pub fn write(data: Data, args: Args) -> Output {
-    let content = unsafe { args[0].as_ref() };
+    let content = nth_arg!(args, 0);
     let path = unsafe { data.as_ref() };
 
     match fs::write(path.to_string(), content.to_string()) {
@@ -42,7 +42,7 @@ pub fn write(data: Data, args: Args) -> Output {
 }
 
 pub fn append(data: Data, args: Args) -> Output {
-    let content = unsafe { args[0].as_ref() };
+    let content = nth_arg!(args, 0);
     let path = unsafe { data.as_ref() };
 
     let mut file = match fs::OpenOptions::new()

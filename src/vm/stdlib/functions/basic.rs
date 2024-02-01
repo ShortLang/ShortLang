@@ -33,8 +33,11 @@ pub fn init() {
         help: "Returns the lenght of string/array.",
         "len" => [len, 1],
 
-        help: "Terminates the program at any given time.",
+        help: "Terminates the program at any given time. Returns with exit code 0",
         "exit" => [exit, 0],
+
+        help: "Terminates the program at any given time. Returns with the specified exit code.",
+        "exit" => [exit_code, 1],
 
         help: "Returns the type of the value.",
         "type" => [get_type, 1],
@@ -69,18 +72,18 @@ pub fn init() {
 }
 
 fn len(val: Input) -> Output {
-    let len = unsafe { val[0].as_ref().as_array().len() };
+    let len = cast!(nth_arg!(val, 0) => Array).len();
     ret!(Value::Int(len.into()))
 }
 
 fn print(val: Input) -> Output {
-    print!("{}", unsafe { val[0].as_ref() });
+    print!("{}", nth_arg!(val, 0));
     std::io::Write::flush(&mut std::io::stdout()).expect("Failed to flush stdout");
     ret!()
 }
 
 fn println(val: Input) -> Output {
-    println!("{}", unsafe { val[0].as_ref() });
+    println!("{}", nth_arg!(val, 0));
     ret!()
 }
 
@@ -88,28 +91,29 @@ fn exit(_: Input) -> Output {
     std::process::exit(0);
 }
 
+fn exit_code(val: Input) -> Output {
+    std::process::exit(cast_nth_arg!(val, 0, Int).to_i32_wrapping());
+}
+
 fn to_str(val: Input) -> Output {
-    ret!(Value::String(unsafe { val[0].as_ref().to_string() }))
+    ret!(Value::String(cast_nth_arg!(val, 0, String).to_owned()))
 }
 
 fn ord(val: Input) -> Output {
     ret!(Value::Int(
-        unsafe { val[0].as_ref().as_str().chars().next().unwrap() as u8 }.into(),
+        (cast_nth_arg!(val, 0, String).chars().next().unwrap() as u8).into()
     ))
 }
 
 fn char(val: Input) -> Output {
     ret!(Value::String(
-        String::from_utf8(vec![unsafe {
-            val[0].as_ref().as_int().to_u8().unwrap_or(b'\0')
-        }])
-        .unwrap(),
+        String::from_utf8(vec![cast_nth_arg!(val, 0, Int).to_u8().unwrap_or(b'\0')]).unwrap(),
     ))
 }
 
 /// Takes 1 parameter, 0..n or n..=0 if n < 0
 fn rng_1(val: Input) -> Output {
-    let upper_lim: i128 = convert_to_i128!(unsafe { val[0].as_ref() });
+    let upper_lim: i128 = convert_to_i128!(nth_arg!(val, 0));
     let mut array = Vec::new();
     if 0 > upper_lim {
         for i in (upper_lim..0).rev() {
@@ -120,14 +124,16 @@ fn rng_1(val: Input) -> Output {
             array.push(Value::Int(i.into()));
         }
     }
+
     ret!(Value::Array(array));
 }
 
 /// Takes 2 parameters, 0..n or n..=0 if n < 0
 fn rng_2(val: Input) -> Output {
-    let [lower_lim, upper_lim] = unsafe { [val[0].as_ref(), val[1].as_ref()] };
+    let [lower_lim, upper_lim] = [nth_arg!(val, 0), nth_arg!(val, 1)];
     let lower_lim: i128 = convert_to_i128!(lower_lim);
     let upper_lim: i128 = convert_to_i128!(upper_lim);
+
     let mut array = Vec::new();
     if lower_lim > upper_lim {
         for i in (upper_lim..lower_lim).rev() {
@@ -138,6 +144,7 @@ fn rng_2(val: Input) -> Output {
             array.push(Value::Int(i.into()));
         }
     }
+
     ret!(Value::Array(array));
 }
 
@@ -148,7 +155,7 @@ fn rnd_0(_val: Input) -> Output {
 
 /// Takes 1 parameter
 fn rnd_1(val: Input) -> Output {
-    let upper_limit: i128 = unsafe { convert_to_i128!(val[0].as_ref()) };
+    let upper_limit: i128 = unsafe { convert_to_i128!(nth_arg!(val, 0)) };
     ret!(Value::Int(RAND.lock().unwrap().i128(0..upper_limit).into()));
 }
 
@@ -156,17 +163,18 @@ fn rnd_1(val: Input) -> Output {
 fn rnd_2(val: Input) -> Output {
     let [lower_lim, upper_lim]: [i128; 2] = unsafe {
         [
-            convert_to_i128!(val[0].as_ref()),
-            convert_to_i128!(val[1].as_ref()),
+            convert_to_i128!(nth_arg!(val, 0)),
+            convert_to_i128!(nth_arg!(val, 1)),
         ]
     };
+
     ret!(Value::Int(
         RAND.lock().unwrap().i128(lower_lim..upper_lim).into()
     ));
 }
 
 fn to_float(val: Input) -> Output {
-    let val = unsafe { val[0].as_ref() };
+    let val = nth_arg!(val, 0);
     ret!(Value::Float(match val {
         Value::Int(i) => float!(i),
         Value::Float(f) => f.clone(),
@@ -184,7 +192,7 @@ fn to_float(val: Input) -> Output {
 }
 
 fn to_int(val: Input) -> Output {
-    let val = unsafe { val[0].as_ref() };
+    let val = nth_arg!(val, 0);
     ret!(Value::Int(match val {
         Value::Int(i) => i.clone(),
         Value::Float(f) => f.to_integer().unwrap(),
@@ -215,15 +223,10 @@ fn input(val: Input) -> Output {
 
 fn input_with_prompt(val: Input) -> Output {
     use std::io::*;
-    let prompt = unsafe { val[0].as_ref() };
+    let prompt = cast_nth_arg!(val, 0, String);
 
-    match prompt {
-        Value::Nil => {}
-        _ => {
-            print!("{}", prompt.to_string());
-            stdout().flush().unwrap();
-        }
-    }
+    print!("{}", prompt);
+    stdout().flush().unwrap();
 
     let mut s = String::new();
     match stdin().read_line(&mut s) {
@@ -235,11 +238,11 @@ fn input_with_prompt(val: Input) -> Output {
 }
 
 fn get_type(val: Input) -> Output {
-    let t = unsafe { val[0].as_ref().get_type() };
+    let t = nth_arg!(val, 0).get_type();
     ret!(Value::String(t.to_owned()));
 }
 
 fn open(val: Input) -> Output {
-    let path = unsafe { val[0].as_ref().to_string() };
+    let path = cast_nth_arg!(val, 0, String);
     ret!(Value::File(path))
 }
