@@ -960,6 +960,7 @@ impl VM {
             } => unsafe {
                 let array = memory::release(self.stack.pop().unwrap())
                     .as_ref()
+                    .clone()
                     .as_array();
 
                 if *ran_once {
@@ -988,8 +989,9 @@ impl VM {
                     .pop()
                     .unwrap_or_else(|| allocate(Value::Nil))
                     .as_ref()
+                    .clone()
                     .as_str();
-                let fn_obj_option = self.functions.get(fn_name);
+                let fn_obj_option = self.functions.get(&fn_name);
                 if fn_obj_option.is_none() {
                     self.runtime_error(
                         format!(
@@ -1056,9 +1058,13 @@ impl VM {
             },
 
             Bytecode::Index => unsafe {
-                let index = memory::release(self.stack.pop().unwrap()).as_ref().as_int();
+                let index = memory::release(self.stack.pop().unwrap())
+                    .as_ref()
+                    .clone()
+                    .as_int();
                 let array = memory::release(self.stack.pop().unwrap())
                     .as_ref()
+                    .clone()
                     .as_array();
 
                 self.stack.push(memory::retain(allocate({
@@ -1084,12 +1090,13 @@ impl VM {
                     self.stack.pop().unwrap(),
                 ]);
 
-                let arr = value.as_ref().as_array();
+                let arr = value.as_ref().clone().as_array();
 
-                let step = step.as_ref().try_as_int().unwrap_or(1.into());
-                let mut start = start.as_ref().try_as_int().unwrap_or(0.into());
+                let step = step.as_ref().clone().try_as_int().unwrap_or(1.into());
+                let mut start = start.as_ref().clone().try_as_int().unwrap_or(0.into());
                 let mut end = end
                     .as_ref()
+                    .clone()
                     .try_as_int()
                     .unwrap_or_else(|| arr.len().into());
 
@@ -1129,7 +1136,10 @@ impl VM {
 
             Bytecode::SetIndex => unsafe {
                 let value = memory::release(self.stack.pop().unwrap()).as_ref();
-                let index = memory::release(self.stack.pop().unwrap()).as_ref().as_int();
+                let index = memory::release(self.stack.pop().unwrap())
+                    .as_ref()
+                    .clone()
+                    .as_int();
                 match memory::release(self.stack.pop().unwrap()).as_mut() {
                     Value::Array(arr) => {
                         let index = to_usize!(index, arr.len());
@@ -1510,7 +1520,13 @@ impl VM {
         span: Range<usize>,
     ) {
         let value = unsafe { memory::release(self.stack.pop().unwrap()).as_ref() };
-        let index = unsafe { memory::release(self.stack.pop().unwrap()).as_ref().as_int() };
+        let index = unsafe {
+            memory::release(self.stack.pop().unwrap())
+                .as_ref()
+                .clone()
+                .as_int()
+        };
+
         match unsafe { memory::release(self.stack.pop().unwrap()).as_mut() } {
             Value::Array(arr) => {
                 let index = to_usize!(index, arr.len());
