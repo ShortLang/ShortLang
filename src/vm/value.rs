@@ -70,21 +70,21 @@ pub enum Value {
 }
 
 impl Value {
-    pub fn as_int(&self) -> Integer {
+    pub fn as_int(self) -> Integer {
         match self {
-            Self::Int(i) => i.clone(),
+            Self::Int(i) => i,
             _ => panic!("Expected an int value, found: {}", self.get_type()),
         }
     }
 
-    pub fn try_as_int(&self) -> Option<Integer> {
+    pub fn try_as_int(self) -> Option<Integer> {
         match self {
-            Self::Int(i) => Some(i.clone()),
+            Self::Int(i) => Some(i),
             _ => None,
         }
     }
 
-    pub fn as_float(&self) -> Float {
+    pub fn as_float(self) -> Float {
         match self.clone() {
             Self::Float(f) => f,
             Self::Int(i) => float!(i),
@@ -93,17 +93,40 @@ impl Value {
         }
     }
 
-    pub fn as_bool(&self) -> bool {
+    pub fn try_as_float(self) -> Option<Float> {
+        match self.clone() {
+            Self::Float(f) => Some(f),
+            Self::Int(i) => Some(float!(i)),
+
+            _ => None,
+        }
+    }
+
+    pub fn as_bool(self) -> bool {
         match self {
-            &Self::Bool(i) => i,
+            Self::Bool(i) => i,
             _ => panic!("Expected an bool value, found: {}", self.get_type()),
         }
     }
 
-    pub fn as_str(&self) -> &str {
+    pub fn try_as_bool(self) -> Option<bool> {
+        match self {
+            Self::Bool(i) => Some(i),
+            _ => None,
+        }
+    }
+
+    pub fn as_str(self) -> String {
         match self {
             Self::String(i) => i,
             _ => panic!("Expected an string value, found: {}", self.get_type()),
+        }
+    }
+
+    pub fn try_as_str(self) -> Option<String> {
+        match self {
+            Self::String(i) => Some(i),
+            _ => None,
         }
     }
 
@@ -111,17 +134,49 @@ impl Value {
         matches!(self, Value::Nil)
     }
 
-    pub fn as_array(&self) -> Cow<Vec<Value>> {
+    pub fn as_array(self) -> Vec<Value> {
         match self {
-            Self::Array(arr) => Cow::Borrowed(arr),
-            Self::String(s) => Cow::Owned(
+            Self::Array(arr) => arr,
+            Self::String(s) => s
+                .chars()
+                .map(|i| Value::String(i.to_string()))
+                .collect::<Vec<Value>>(),
+
+            _ => panic!("Expected an array value, found, {}", self.get_type()),
+        }
+    }
+
+    pub fn try_as_array(self) -> Option<Vec<Value>> {
+        match self {
+            Self::Array(arr) => Some(arr),
+            Self::String(s) => Some(
                 s.chars()
                     .map(|i| Value::String(i.to_string()))
                     .collect::<Vec<Value>>(),
             ),
 
-            _ => panic!("Expected an array value, found, {}", self.get_type()),
+            _ => None,
         }
+    }
+
+    pub fn try_as_file(&self) -> Option<&str> {
+        match self {
+            Self::File(s) | Self::String(s) => Some(s.as_str()),
+            _ => None,
+        }
+    }
+
+    pub fn try_cast(self, ty: Type) -> Option<Value> {
+        Some(match ty {
+            Type::Integer => self.try_as_int()?.into(),
+            Type::Float => self.try_as_float()?.into(),
+            Type::Array => self.try_as_array()?.into(),
+            Type::Bool => self.try_as_bool()?.into(),
+            Type::Float => self.try_as_float()?.into(),
+            Type::File => self.try_as_file()?.into(),
+
+            _ => return None,
+        })
     }
 
     pub fn binary_add(&self, rhs: &Value) -> Option<Value> {
@@ -422,9 +477,28 @@ impl From<bool> for Value {
         Value::Bool(value)
     }
 }
+
 impl From<&bool> for Value {
     fn from(value: &bool) -> Self {
         Value::Bool(*value)
+    }
+}
+
+impl From<Integer> for Value {
+    fn from(value: Integer) -> Self {
+        Value::Int(value)
+    }
+}
+
+impl From<Vec<Value>> for Value {
+    fn from(value: Vec<Value>) -> Self {
+        Value::Array(value)
+    }
+}
+
+impl<'a> From<Cow<'a, Vec<Value>>> for Value {
+    fn from(value: Cow<Vec<Value>>) -> Self {
+        Value::Array(value.into_owned())
     }
 }
 
