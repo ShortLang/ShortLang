@@ -109,16 +109,6 @@ macro_rules! ret {
 
 #[macro_export]
 macro_rules! add_fn {
-    // [ $set:expr, $( $name:expr => [$placeholder:ident; $n:expr] { $($tt:tt)* } ),* $(,)? ] => {
-    //     $(
-    //         $set.insert((String::from($name), $n), FnHandler::new(
-    //             |$placeholder| unsafe {
-    //                 $($tt)*
-    //             }
-    //         ));
-    //     )*
-    // };
-
     [ $set:expr, $(help: $help_msg:expr, $name:expr => [ $func:expr, $n:expr ] ),* $(,)? ] => {
         $(
             $set.insert((String::from($name), $n), (FnHandler::new($func), String::from($help_msg)));
@@ -128,7 +118,7 @@ macro_rules! add_fn {
 
 #[macro_export]
 macro_rules! convert_to_i128 {
-    ($value:expr) => {
+    [ $value:expr ] => {
         match $value {
             Value::Int(i) => i.saturating_cast(),
             Value::Float(f) => f
@@ -144,5 +134,49 @@ macro_rules! convert_to_i128 {
                 .saturating_cast(),
             _ => ret!(err: "Expected a number"),
         }
+    };
+}
+
+#[macro_export]
+macro_rules! cast {
+    [ $val:expr, $ty:expr ] => {
+        match $val.clone().try_cast($ty) { // TODO: ugh please remove this clone
+            Some(val) => val,
+            _ => ret!(err: &format!("Cannot cast '{}' type to '{}' type", $val.get_type(), $ty)),
+        }
+    };
+
+    [ $val:expr => Array ] => {
+        cast!($val, Type::Array).as_array()
+    };
+
+    [ $val:expr => String ] => {
+        cast!($val, Type::String).as_str()
+    };
+
+    [ $val:expr => Int ] => {
+        cast!($val, Type::Integer).as_int()
+    };
+
+    [ $val:expr => Float ] => {
+        cast!($val, Type::Float).as_float()
+    };
+
+    [ $val:expr => Bool ] => {
+        cast!($val, Type::Bool).as_bool()
+    };
+}
+
+#[macro_export]
+macro_rules! cast_nth_arg {
+    [ $val:expr, $n:expr, $t:tt ] => {
+        cast!(nth_arg!($val, $n) => $t)
+    };
+}
+
+#[macro_export]
+macro_rules! nth_arg {
+    [ $args:expr, $n:expr ] => {
+        unsafe { $args[$n].as_ref() }
     };
 }
