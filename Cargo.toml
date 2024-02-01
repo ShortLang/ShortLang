@@ -17,6 +17,7 @@ fastrand = "2.0.1"
 az = "1.2.1"
 rustyline = "13.0.0"
 atty = "0.2.14"
+macros = { version = "0.1.0", path = "macros" }
 
 [dependencies.rug]
 version = "1.24.0"
@@ -26,3 +27,8 @@ features = ["integer", "float"]
 [dependencies.gmp-mpfr-sys]
 version = "1.6.2"
 features = ["force-cross"]
+
+[workspace]
+members = [
+  "macros"
+]

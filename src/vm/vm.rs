@@ -1,5 +1,7 @@
 #![allow(unreachable_patterns)]
 
+use macros::{for_each_arg, process_placeholder, to_usize};
+
 use az::SaturatingCast;
 use logos::Logos;
 use miette::{miette, LabeledSpan};
@@ -12,11 +14,9 @@ use std::string::ToString;
 use std::sync::Mutex;
 
 use super::value::{Type, Value};
-use crate::for_each_arg;
 use crate::parser::{BinaryOp, Expr, ExprKind};
 use crate::parser::{LogosToken, PParser, PostfixOp, UnaryOp};
 use crate::vm::memory;
-use crate::*; // macros
 
 use super::{
     bytecode::{Bytecode, Instr},
@@ -1619,6 +1619,8 @@ impl Drop for VM {
 
 #[cfg(test)]
 mod tests {
+    use macros::float;
+
     use super::*;
     use crate::parser::ExprKind;
 

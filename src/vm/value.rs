@@ -1,4 +1,4 @@
-use crate::float;
+use macros::float;
 use rug::ops::Pow;
 use rug::{Float, Integer};
 use std::borrow::Cow;

@@ -1,4 +1,4 @@
-use crate::float;
+use macros::float;
 use crate::parser::{BinaryOp, Expr, ExprKind};
 
 pub struct Optimizer {

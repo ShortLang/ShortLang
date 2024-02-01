@@ -1,5 +1,8 @@
 use super::*;
 
+use std::fs;
+use std::io::Write;
+
 pub fn init() {
     let mut set = INBUILT_METHODS.lock().unwrap();
 

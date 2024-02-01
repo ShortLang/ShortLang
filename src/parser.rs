@@ -2,7 +2,7 @@ use miette::{miette, LabeledSpan};
 use std::hint::unreachable_unchecked;
 use std::{fmt, ops::Range};
 
-use crate::float;
+use macros::float;
 use logos::Logos;
 use rug::ops::CompleteRound;
 use rug::{Complete, Float, Integer};
