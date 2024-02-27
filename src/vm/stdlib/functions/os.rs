@@ -4,41 +4,23 @@ extern "C" {
     fn system(_: *mut u8) -> i32;
 }
 
-pub fn init() {
-    let mut ib = INBUILT_FUNCTIONS.lock().unwrap();
-
-    add_fn![ib,
-        help: "Executes a shell command.",
-        "run" => [run, 1],
-
-        help: "Returns the command-line arguments given to the program.",
-        "arg" => [args, 0],
-
-        help: "Gets all the environment variables as a key-value pair.",
-        "env" => [list_vars, 0],
-
-        help: "Gets the value of the specified environment variable",
-        "env" => [get_env, 1],
-
-        help: "Sets the value of the specified environment variable.",
-        "env" => [set_env, 2],
-    ];
-}
-
-fn run(val: Input) -> Output {
+#[shortlang_fn(args = 1, help = "Executes a shell command.")]
+pub fn run(val: Input) -> Output {
     let input = cast_nth_arg!(val, 0, String);
     let status = unsafe { system(input.as_ptr() as *mut _) };
 
     ret!(Value::Int(status.into()))
 }
 
-fn args(_: Input) -> Output {
+#[shortlang_fn(args = 0, help = "Returns the command-line arguments given to the program.")]
+pub fn args(_: Input) -> Output {
     ret!(Value::Array(
         std::env::args().map(|i| i.into()).collect::<Vec<Value>>()
     ))
 }
 
-fn get_env(val: Input) -> Output {
+#[shortlang_fn(name = "env", args = 1, help = "Gets the value of the specified environment variable")]
+pub fn get_env(val: Input) -> Output {
     let var_name = cast_nth_arg!(val, 0, String);
     let env = std::env::var(var_name).unwrap_or("".to_owned());
     if env.is_empty() {
@@ -48,7 +30,8 @@ fn get_env(val: Input) -> Output {
     ret!(Value::String(env))
 }
 
-fn set_env(val: Input) -> Output {
+#[shortlang_fn(name = "env", args = 2, help = "Sets the value of the specified environment variable.")]
+pub fn set_env(val: Input) -> Output {
     let [key, value] = [cast_nth_arg!(val, 0, String), cast_nth_arg!(val, 1, String)];
     let old_value = std::env::var(&key).unwrap_or("".to_owned());
     std::env::set_var(&key, value);
@@ -60,7 +43,8 @@ fn set_env(val: Input) -> Output {
     ret!(Value::String(old_value))
 }
 
-fn list_vars(_: Input) -> Output {
+#[shortlang_fn(name = "env", args = 0, help = "Gets all the environment variables as a key-value pair.")]
+pub fn list_vars(_: Input) -> Output {
     let vars = std::env::vars_os()
         .into_iter()
         .map(|(key, value)| {

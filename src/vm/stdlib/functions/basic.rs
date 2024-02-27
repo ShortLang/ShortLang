@@ -8,111 +8,57 @@ lazy_static::lazy_static! {
     static ref RAND: Mutex<fastrand::Rng> = Mutex::new(fastrand::Rng::new());
 }
 
-pub fn init() {
-    let mut ib = INBUILT_FUNCTIONS.lock().unwrap();
-
-    add_fn![ib,
-        help: "Print to stdout with a newline character at the end.",
-        "$" => [println, 1],
-
-        help: "Print to stdout without a newline character at the end.",
-        "$$" => [print, 1],
-
-        help: "Read a line from stdin without any prompt.",
-        "inp" => [input, 0],
-
-        help: "Read a line from stdin, with a prompt.",
-        "inp" => [input_with_prompt, 1],
-
-        help: "Returns the ascii value associated with a character.",
-        "chr" => [char, 1],
-
-        help: "Returns the character associated with the ascii value.",
-        "ord" => [ord, 1],
-
-        help: "Returns the lenght of string/array.",
-        "len" => [len, 1],
-
-        help: "Terminates the program at any given time. Returns with exit code 0",
-        "exit" => [exit, 0],
-
-        help: "Terminates the program at any given time. Returns with the specified exit code.",
-        "exit" => [exit_code, 1],
-
-        help: "Returns the type of the value.",
-        "type" => [get_type, 1],
-
-        help: "Opens a file and returns a file object.",
-        "open" => [open, 1],
-
-        help: "Returns an array with values from 0 to x",
-        "rng" => [rng_1, 1],
-
-        help: "Returns an array with values from a to b",
-        "rng" => [rng_2, 2],
-
-        help: "Returns a random number.",
-        "rnd" => [rnd_0, 0],
-
-        help: "Returns a random number between 0 and x",
-        "rnd" => [rnd_1, 1],
-
-        help: "Returns a random number between a and b",
-        "rnd" => [rnd_2, 2],
-
-        help: "Tries to convert a value to floating point value, returns an error if conversion is not possible.",
-        "flt" => [to_float, 1],
-
-        help: "Tries to convert a value to string value, this function never fails.",
-        "str" => [to_str, 1],
-
-        help: "Tries to convert a value to integer value, returns an error if conversion is not possible.",
-        "int" => [to_int, 1],
-    ];
-}
-
-fn len(val: Input) -> Output {
+#[shortlang_fn(args = 1, help = "Returns the length of array or string.")]
+pub fn len(val: Input) -> Output {
     let len = cast!(nth_arg!(val, 0) => Array).len();
     ret!(Value::Int(len.into()))
 }
 
-fn print(val: Input) -> Output {
+#[shortlang_fn(name = "$$", args = 1, help = "Print to stdout without a newline character at the end.")]
+pub fn print(val: Input) -> Output {
     print!("{}", nth_arg!(val, 0));
     std::io::Write::flush(&mut std::io::stdout()).expect("Failed to flush stdout");
     ret!()
 }
 
-fn println(val: Input) -> Output {
+#[shortlang_fn(name = "$", args = 1, help = "Print to stdout with a newline character at the end.")]
+pub fn println(val: Input) -> Output {
     println!("{}", nth_arg!(val, 0));
     ret!()
 }
 
-fn exit(_: Input) -> Output {
+#[shortlang_fn(args = 0, help = "Terminates the program at any given time. Returns with exit code 0")]
+pub fn exit(_: Input) -> Output {
     std::process::exit(0);
 }
 
-fn exit_code(val: Input) -> Output {
+#[shortlang_fn(name = "exit", args = 1, help = "Terminates the program at any given time. Returns with the specified exit code.")]
+pub fn exit_code(val: Input) -> Output {
     std::process::exit(cast_nth_arg!(val, 0, Int).to_i32_wrapping());
 }
 
-fn to_str(val: Input) -> Output {
+#[shortlang_fn(name = "str", args = 1, help = "Tries to convert a value to string value, this function never fails.")]
+pub fn to_str(val: Input) -> Output {
     ret!(Value::String(cast_nth_arg!(val, 0, String).to_owned()))
 }
 
-fn ord(val: Input) -> Output {
+#[shortlang_fn(args = 1, help = "Returns the character associated with the ascii value.")]
+pub fn ord(val: Input) -> Output {
     ret!(Value::Int(
         (cast_nth_arg!(val, 0, String).chars().next().unwrap() as u8).into()
     ))
 }
 
-fn char(val: Input) -> Output {
+#[shortlang_fn(args = 1, help = "Returns the ascii value associated with a character.")]
+pub fn chr(val: Input) -> Output {
     ret!(Value::String(
         String::from_utf8(vec![cast_nth_arg!(val, 0, Int).to_u8().unwrap_or(b'\0')]).unwrap(),
     ))
 }
 
 /// Takes 1 parameter, 0..n or n..=0 if n < 0
-fn rng_1(val: Input) -> Output {
+#[shortlang_fn(args = 1, help = "Returns an array with values from 0 to x")]
+pub fn rng(val: Input) -> Output {
     let upper_lim: i128 = convert_to_i128!(nth_arg!(val, 0));
     let mut array = Vec::new();
     if 0 > upper_lim {
@@ -129,7 +75,8 @@ fn rng_1(val: Input) -> Output {
 }
 
 /// Takes 2 parameters, 0..n or n..=0 if n < 0
-fn rng_2(val: Input) -> Output {
+#[shortlang_fn(name = "rng", args = 2, help = "Returns an array with values from a to b")]
+pub fn rng_2(val: Input) -> Output {
     let [lower_lim, upper_lim] = [nth_arg!(val, 0), nth_arg!(val, 1)];
     let lower_lim: i128 = convert_to_i128!(lower_lim);
     let upper_lim: i128 = convert_to_i128!(upper_lim);
@@ -149,18 +96,21 @@ fn rng_2(val: Input) -> Output {
 }
 
 /// Takes 0 parameters
-fn rnd_0(_val: Input) -> Output {
+#[shortlang_fn(args = 0, help = "Returns a random number.")]
+pub fn rnd(_val: Input) -> Output {
     ret!(Value::Int(RAND.lock().unwrap().i128(..).into()));
 }
 
 /// Takes 1 parameter
-fn rnd_1(val: Input) -> Output {
+#[shortlang_fn(name = "rnd", args = 1, help = "Returns a random number between 0 and x")]
+pub fn rnd_1(val: Input) -> Output {
     let upper_limit: i128 = unsafe { convert_to_i128!(nth_arg!(val, 0)) };
     ret!(Value::Int(RAND.lock().unwrap().i128(0..upper_limit).into()));
 }
 
 /// Takes 2 parameters
-fn rnd_2(val: Input) -> Output {
+#[shortlang_fn(name = "rnd", args = 2, help = "Returns a random number between a and b")]
+pub fn rnd_2(val: Input) -> Output {
     let [lower_lim, upper_lim]: [i128; 2] = unsafe {
         [
             convert_to_i128!(nth_arg!(val, 0)),
@@ -173,7 +123,8 @@ fn rnd_2(val: Input) -> Output {
     ));
 }
 
-fn to_float(val: Input) -> Output {
+#[shortlang_fn(name = "flt", args = 1, help = "Tries to convert a value to floating point value, returns an error if conversion is not possible.")]
+pub fn to_float(val: Input) -> Output {
     let val = nth_arg!(val, 0);
     ret!(Value::Float(match val {
         Value::Int(i) => float!(i),
@@ -191,7 +142,8 @@ fn to_float(val: Input) -> Output {
     }));
 }
 
-fn to_int(val: Input) -> Output {
+#[shortlang_fn(name = "int", args = 1, help = "Tries to convert a value to integer value, returns an error if conversion is not possible.")]
+pub fn to_int(val: Input) -> Output {
     let val = nth_arg!(val, 0);
     ret!(Value::Int(match val {
         Value::Int(i) => i.clone(),
@@ -209,7 +161,8 @@ fn to_int(val: Input) -> Output {
     }));
 }
 
-fn input(val: Input) -> Output {
+#[shortlang_fn(name = "inp", args = 0, help = "Read a line from stdin without any prompt.")]
+pub fn input(val: Input) -> Output {
     use std::io::*;
 
     let mut s = String::new();
@@ -221,7 +174,8 @@ fn input(val: Input) -> Output {
     ret!(Value::String(s.trim().to_string()));
 }
 
-fn input_with_prompt(val: Input) -> Output {
+#[shortlang_fn(name = "inp", args = 1, help = "Read a line from stdin, with a prompt.")]
+pub fn input_with_prompt(val: Input) -> Output {
     use std::io::*;
     let prompt = cast_nth_arg!(val, 0, String);
 
@@ -237,12 +191,14 @@ fn input_with_prompt(val: Input) -> Output {
     ret!(Value::String(s.trim().to_string()));
 }
 
-fn get_type(val: Input) -> Output {
+#[shortlang_fn(name = "type", args = 1, help = "Returns the type of the value.")]
+pub fn get_type(val: Input) -> Output {
     let t = nth_arg!(val, 0).get_type();
     ret!(Value::String(t.to_owned()));
 }
 
-fn open(val: Input) -> Output {
+#[shortlang_fn(args = 1, help = "Opens a file and returns a file object.")]
+pub fn open(val: Input) -> Output {
     let path = cast_nth_arg!(val, 0, String);
     ret!(Value::File(path))
 }

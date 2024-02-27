@@ -4,56 +4,8 @@ use rug::{ops::CompleteRound, Complete, Float, Integer};
 
 use super::*;
 
-pub fn init() {
-    let mut ib = INBUILT_FUNCTIONS.lock().unwrap();
-
-    add_fn![ib,
-        help: "Returns the lcm (least common multiple) of two values.",
-        "lcm" => [lcm, 2],
-
-        help: "Returns the gcd (greatest common divisor) of two values.",
-        "gcd" => [gcd, 2],
-
-        help: "Returns the nth fibonacci number.",
-        "fib" => [fib, 1],
-
-        help: "Returns the nth prime number.",
-        "prime" => [nth_prime, 1],
-
-        help: "Checks whether a number is prime or not.",
-        "isprime" => [is_prime, 1],
-
-        help: "Finds the previous prime number.",
-        "lprime" => [last_prime, 1],
-
-        help: "Finds the next prime number.",
-        "nprime" => [next_prime, 1],
-
-        help: "Calculates the absolute value.",
-        "abs" => [abs, 1],
-
-        help: "Rounds up to the next integer.",
-        "ceil" => [ceil, 1],
-
-        help: "Rounds down to the previous integer.",
-        "floor" => [floor, 1],
-
-        help: "Calculates the square root of a number",
-        "sqrt" => [sqrt, 1],
-
-        help: "Calculates the nth root of a number",
-        "root" => [root, 2],
-
-        help: "Rounds to the nearest integer, rounding half-way cases away from zero.",
-        "round" => [round_1, 1],
-
-        help: "Rounds to the specified precision.",
-        "round" => [round_2, 2],
-    ];
-}
-
-fn lcm(val: Input) -> Output {
-    let &[a, b] = val else { unreachable!() };
+#[shortlang_fn(args = 2, help = "Returns the lcm (least common multiple) of two values.")]
+pub fn lcm(val: Input) -> Output {
     let [a, b] = [nth_arg!(val, 0), nth_arg!(val, 1)];
 
     let lcm = match (a, b) {
@@ -73,7 +25,8 @@ fn lcm(val: Input) -> Output {
     ret!(Value::Int(lcm));
 }
 
-fn gcd(val: Input) -> Output {
+#[shortlang_fn(args = 2, help= "Returns the gcd (greatest common divisor) of two values.")]
+pub fn gcd(val: Input) -> Output {
     let &[a, b] = val else { unreachable!() };
     let [a, b] = unsafe { [a.as_ref(), b.as_ref()] };
 
@@ -94,7 +47,8 @@ fn gcd(val: Input) -> Output {
     ret!(Value::Int(gcd))
 }
 
-fn fib(val: Input) -> Output {
+#[shortlang_fn(args = 1, help = "Returns the nth fibonacci number.")]
+pub fn fib(val: Input) -> Output {
     let n = nth_arg!(val, 0);
     match n {
         Value::Int(n) => ret!(Value::Int(Integer::fibonacci(n.saturating_cast()).into())),
@@ -104,7 +58,8 @@ fn fib(val: Input) -> Output {
     }
 }
 
-fn nth_prime(val: Input) -> Output {
+#[shortlang_fn(name = "prime", args = 1, help = "Returns the nth prime number.")]
+pub fn nth_prime(val: Input) -> Output {
     let n = nth_arg!(val, 0);
 
     match n {
@@ -126,7 +81,8 @@ fn nth_prime(val: Input) -> Output {
     }
 }
 
-fn is_prime(val: Input) -> Output {
+#[shortlang_fn(name = "isprime", args = 1, help = "Checks whether a number is prime or not.")]
+pub fn is_prime(val: Input) -> Output {
     let n = nth_arg!(val, 0);
     match n {
         Value::Int(n) => match n.is_probably_prime(30) {
@@ -147,7 +103,8 @@ fn is_prime(val: Input) -> Output {
     }
 }
 
-fn last_prime(val: Input) -> Output {
+#[shortlang_fn(name = "lprime", args = 1, help = "Finds the previous prime number.")]
+pub fn last_prime(val: Input) -> Output {
     let n = nth_arg!(val, 0);
     match n {
         Value::Int(n) => ret!(Value::Int(n.prev_prime_ref().complete())),
@@ -158,7 +115,8 @@ fn last_prime(val: Input) -> Output {
     }
 }
 
-fn next_prime(val: Input) -> Output {
+#[shortlang_fn(name = "nprime", args = 1, help = "Finds the next prime number.")]
+pub fn next_prime(val: Input) -> Output {
     let n = nth_arg!(val, 0);
     match n {
         Value::Int(n) => ret!(Value::Int(n.next_prime_ref().complete())),
@@ -169,7 +127,8 @@ fn next_prime(val: Input) -> Output {
     }
 }
 
-fn abs(val: Input) -> Output {
+#[shortlang_fn(args = 1,  help = "Calculates the absolute value.")]
+pub fn abs(val: Input) -> Output {
     let n = nth_arg!(val, 0);
     match n {
         Value::Int(n) => ret!(Value::Int(n.abs_ref().complete())),
@@ -179,14 +138,16 @@ fn abs(val: Input) -> Output {
 }
 
 /// Takes 1 parameter
-fn round_1(val: Input) -> Output {
+#[shortlang_fn(args = 1, help = "Rounds to the nearest integer, rounding half-way cases away from zero.")]
+pub fn round(val: Input) -> Output {
     let n = cast_nth_arg!(val, 0, Float);
     ret!(Value::Int(
         n.round().to_integer().unwrap_or(Integer::from(0))
     ))
 }
 
-fn round_2(val: Input) -> Output {
+#[shortlang_fn(name = "round", args = 2, help = "Rounds to the specified precision.")]
+pub fn round_2(val: Input) -> Output {
     let n = cast_nth_arg!(val, 0, Float);
     let precision = cast_nth_arg!(val, 1, Int);
 
@@ -197,7 +158,8 @@ fn round_2(val: Input) -> Output {
     ));
 }
 
-fn floor(val: Input) -> Output {
+#[shortlang_fn(args = 1, help = "Rounds down to the previous integer.")]
+pub fn floor(val: Input) -> Output {
     let n = nth_arg!(val, 0);
     match n {
         Value::Int(n) => ret!(Value::Int(Integer::from(n))),
@@ -207,7 +169,8 @@ fn floor(val: Input) -> Output {
     }
 }
 
-fn ceil(val: Input) -> Output {
+#[shortlang_fn(args = 1, help = "Rounds up to the next integer.")]
+pub fn ceil(val: Input) -> Output {
     let n = nth_arg!(val, 0);
     match n {
         Value::Int(n) => ret!(Value::Int(Integer::from(n))),
@@ -216,12 +179,14 @@ fn ceil(val: Input) -> Output {
     }
 }
 
-fn sqrt(val: Input) -> Output {
+#[shortlang_fn(args = 1, help = "Calculates the square root of a number")]
+pub fn sqrt(val: Input) -> Output {
     let n = float!(cast_nth_arg!(val, 0, Int));
     Ok(Some(allocate(Value::Float(n.sqrt()))))
 }
 
-fn root(val: Input) -> Output {
+#[shortlang_fn(args = 2, help = "Calculates the nth root of a number")]
+pub fn root(val: Input) -> Output {
     let [n, th_root] = [cast_nth_arg!(val, 0, Int), cast_nth_arg!(val, 1, Int)];
     let root = float!(n).root(th_root.saturating_cast());
     Ok(Some(allocate(Value::Float(root))))
