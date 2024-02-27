@@ -180,3 +180,12 @@ macro_rules! nth_arg {
         unsafe { $args[$n].as_ref() }
     };
 }
+
+#[macro_export]
+macro_rules! hook {
+    [ $set:expr, $fns:expr ] => {
+        for (ptr, name, n, help) in $fns {
+             $set.insert((name, n), (FnHandler::new(ptr), help));
+        }
+    };
+}
