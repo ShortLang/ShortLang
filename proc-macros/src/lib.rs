@@ -64,7 +64,13 @@ pub fn shortlang_fn(args: TokenStream, input: TokenStream) -> TokenStream {
 pub fn get_functions(args: TokenStream) -> TokenStream {
     let mut fn_ptrs = vec![];
 
-    for FnData { help, name, ident_name, args } in NAMES.lock().unwrap().iter() {
+    for FnData {
+        help,
+        name,
+        ident_name,
+        args,
+    } in NAMES.lock().unwrap().iter()
+    {
         let ident_name = quote::format_ident!("{ident_name}");
 
         // #(#path_segments)::*

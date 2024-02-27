@@ -1,9 +1,9 @@
 mod bytecode;
 mod macros;
 mod memory;
+mod stdlib;
 mod utils;
 mod vm;
-mod stdlib;
 
 pub use vm::VM;
 

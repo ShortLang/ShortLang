@@ -2,8 +2,8 @@ use miette::{miette, LabeledSpan};
 use std::hint::unreachable_unchecked;
 use std::{fmt, ops::Range};
 
-use macros::float;
 use logos::Logos;
+use macros::float;
 use rug::ops::CompleteRound;
 use rug::{Complete, Float, Integer};
 

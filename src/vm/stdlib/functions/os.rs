@@ -12,14 +12,21 @@ pub fn run(val: Input) -> Output {
     ret!(Value::Int(status.into()))
 }
 
-#[shortlang_fn(args = 0, help = "Returns the command-line arguments given to the program.")]
+#[shortlang_fn(
+    args = 0,
+    help = "Returns the command-line arguments given to the program."
+)]
 pub fn args(_: Input) -> Output {
     ret!(Value::Array(
         std::env::args().map(|i| i.into()).collect::<Vec<Value>>()
     ))
 }
 
-#[shortlang_fn(name = "env", args = 1, help = "Gets the value of the specified environment variable")]
+#[shortlang_fn(
+    name = "env",
+    args = 1,
+    help = "Gets the value of the specified environment variable"
+)]
 pub fn get_env(val: Input) -> Output {
     let var_name = cast_nth_arg!(val, 0, String);
     let env = std::env::var(var_name).unwrap_or("".to_owned());
@@ -30,7 +37,11 @@ pub fn get_env(val: Input) -> Output {
     ret!(Value::String(env))
 }
 
-#[shortlang_fn(name = "env", args = 2, help = "Sets the value of the specified environment variable.")]
+#[shortlang_fn(
+    name = "env",
+    args = 2,
+    help = "Sets the value of the specified environment variable."
+)]
 pub fn set_env(val: Input) -> Output {
     let [key, value] = [cast_nth_arg!(val, 0, String), cast_nth_arg!(val, 1, String)];
     let old_value = std::env::var(&key).unwrap_or("".to_owned());
@@ -43,7 +54,11 @@ pub fn set_env(val: Input) -> Output {
     ret!(Value::String(old_value))
 }
 
-#[shortlang_fn(name = "env", args = 0, help = "Gets all the environment variables as a key-value pair.")]
+#[shortlang_fn(
+    name = "env",
+    args = 0,
+    help = "Gets all the environment variables as a key-value pair."
+)]
 pub fn list_vars(_: Input) -> Output {
     let vars = std::env::vars_os()
         .into_iter()

@@ -1,11 +1,11 @@
 #![allow(unused)]
 
+use atty::Stream;
 use clap::builder::TypedValueParser;
 use clap::Parser;
 use optimizer::Optimizer;
 use std::io::Write;
 use std::{fs, io};
-use atty::Stream;
 
 use formatter::Formatter;
 use logos::Logos;
@@ -14,8 +14,8 @@ use parser::{LogosToken, PParser};
 use rustyline::error::ReadlineError;
 use rustyline::DefaultEditor;
 
-use vm::VM;
 use shortlang::*;
+use vm::VM;
 
 /// The arguments for the ShortLang compiler
 #[derive(Parser, Debug)]
@@ -164,13 +164,13 @@ fn main() {
                 Err(ReadlineError::Interrupted) => {
                     println!("CTRL-C");
                     std::process::exit(0);
-                },
+                }
                 Err(ReadlineError::Eof) => {
                     if atty::is(Stream::Stdin) {
                         println!("CTRL-D");
                     }
                     std::process::exit(0)
-                },
+                }
                 Err(err) => {
                     eprintln!("Error: {:?}", err);
                     std::process::exit(1);

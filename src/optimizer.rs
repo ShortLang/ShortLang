@@ -1,5 +1,5 @@
-use macros::float;
 use crate::parser::{BinaryOp, Expr, ExprKind};
+use macros::float;
 
 pub struct Optimizer {
     ast: Vec<Expr>,

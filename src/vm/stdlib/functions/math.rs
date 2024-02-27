@@ -4,7 +4,10 @@ use rug::{ops::CompleteRound, Complete, Float, Integer};
 
 use super::*;
 
-#[shortlang_fn(args = 2, help = "Returns the lcm (least common multiple) of two values.")]
+#[shortlang_fn(
+    args = 2,
+    help = "Returns the lcm (least common multiple) of two values."
+)]
 pub fn lcm(val: Input) -> Output {
     let [a, b] = [nth_arg!(val, 0), nth_arg!(val, 1)];
 
@@ -25,7 +28,10 @@ pub fn lcm(val: Input) -> Output {
     ret!(Value::Int(lcm));
 }
 
-#[shortlang_fn(args = 2, help= "Returns the gcd (greatest common divisor) of two values.")]
+#[shortlang_fn(
+    args = 2,
+    help = "Returns the gcd (greatest common divisor) of two values."
+)]
 pub fn gcd(val: Input) -> Output {
     let &[a, b] = val else { unreachable!() };
     let [a, b] = unsafe { [a.as_ref(), b.as_ref()] };
@@ -81,7 +87,11 @@ pub fn nth_prime(val: Input) -> Output {
     }
 }
 
-#[shortlang_fn(name = "isprime", args = 1, help = "Checks whether a number is prime or not.")]
+#[shortlang_fn(
+    name = "isprime",
+    args = 1,
+    help = "Checks whether a number is prime or not."
+)]
 pub fn is_prime(val: Input) -> Output {
     let n = nth_arg!(val, 0);
     match n {
@@ -127,7 +137,7 @@ pub fn next_prime(val: Input) -> Output {
     }
 }
 
-#[shortlang_fn(args = 1,  help = "Calculates the absolute value.")]
+#[shortlang_fn(args = 1, help = "Calculates the absolute value.")]
 pub fn abs(val: Input) -> Output {
     let n = nth_arg!(val, 0);
     match n {
@@ -138,7 +148,10 @@ pub fn abs(val: Input) -> Output {
 }
 
 /// Takes 1 parameter
-#[shortlang_fn(args = 1, help = "Rounds to the nearest integer, rounding half-way cases away from zero.")]
+#[shortlang_fn(
+    args = 1,
+    help = "Rounds to the nearest integer, rounding half-way cases away from zero."
+)]
 pub fn round(val: Input) -> Output {
     let n = cast_nth_arg!(val, 0, Float);
     ret!(Value::Int(
