@@ -1,0 +1,12 @@
+[package]
+name = "value-ty"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+macros = { version = "0.1.0", path = "../macros" }
+
+[dependencies.rug]
+version = "1.24.0"
+default-features = false
+features = ["integer", "float"]
