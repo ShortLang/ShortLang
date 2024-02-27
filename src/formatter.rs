@@ -2,12 +2,24 @@ use core::panic;
 use std::collections::HashMap;
 use std::io::Write;
 
+use logos::Logos;
+
 use crate::name_generator::NameGenerator;
 use crate::optimizer;
 use crate::parser::Expr;
 use crate::parser::ExprKind;
+use crate::parser::LogosToken;
 use crate::parser::PParser;
-use crate::tokenize;
+
+fn tokenize(input: &str) -> Vec<(LogosToken, std::ops::Range<usize>)> {
+    LogosToken::lexer(input)
+        .spanned()
+        .map(|(tok, span)| match tok {
+            Ok(tok) => (tok, span.into()),
+            Err(()) => (LogosToken::Error, span.into()),
+        })
+        .collect::<Vec<_>>()
+}
 
 macro_rules! is_single_value {
     [ $val:expr ] => {

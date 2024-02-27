@@ -14,13 +14,8 @@ use parser::{LogosToken, PParser};
 use rustyline::error::ReadlineError;
 use rustyline::DefaultEditor;
 
-use crate::vm::VM;
-
-mod formatter;
-mod name_generator;
-mod optimizer;
-mod parser;
-mod vm;
+use vm::VM;
+use shortlang::*;
 
 /// The arguments for the ShortLang compiler
 #[derive(Parser, Debug)]

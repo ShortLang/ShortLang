@@ -17,7 +17,10 @@ fastrand = "2.0.1"
 az = "1.2.1"
 rustyline = "13.0.0"
 atty = "0.2.14"
+
 macros = { version = "0.1.0", path = "macros" }
+proc-macros = { version = "0.1.0", path = "proc-macros" }
+value-ty = { version = "0.1.0", path = "value-ty" }
 
 [dependencies.rug]
 version = "1.24.0"
@@ -30,5 +33,6 @@ features = ["force-cross"]
 
 [workspace]
 members = [
-  "macros"
-]
+  "macros",
+  "proc-macros"
+, "value-ty"]

@@ -100,7 +100,7 @@ impl VM {
             .push((Instr(Bytecode::Halt, vec![]), 0..0));
 
         // for (idx, (Instr(bytecode, args), _)) in self.instructions.iter().enumerate() {
-        // println!("instr[{idx}] = ({bytecode}, {args:?})");
+            // println!("instr[{idx}] = ({bytecode}, {args:?})");
         // }
     }
 
