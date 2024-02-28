@@ -15,9 +15,16 @@ pub enum Type {
     Nil,
 }
 
-impl TryFrom<&str> for Type {
-    type Error = ();
-    fn try_from(value: &str) -> Result<Self, Self::Error> {
+impl Type {
+    pub fn all_types() -> &'static [Type; 7] {
+        use Type::*;
+        &[Integer, Float, String, Bool, Array, File, Nil]
+    }
+}
+
+impl<'a> TryFrom<&'a str> for Type {
+    type Error = &'a str;
+    fn try_from(value: &'a str) -> Result<Self, Self::Error> {
         Ok(match value {
             "int" => Type::Integer,
             "float" => Type::Float,
@@ -27,7 +34,7 @@ impl TryFrom<&str> for Type {
             "file" => Type::File,
             "nil" => Type::Nil,
 
-            _ => return Err(()),
+            _ => return Err(value),
         })
     }
 }
@@ -536,14 +543,14 @@ impl std::fmt::Display for Value {
             "{}",
             match self {
                 Self::Int(i) => i.to_string(),
-                Self::Float(f) => {
-                    // a temporary hack to remove trailing zeros that rug adds to floats
+                Self::Float(f) if f != &float!(0.0) => {
                     let mut s = f.to_string().trim_end_matches('0').to_owned();
                     if s.ends_with('.') {
                         s.push('0');
                     }
                     s
                 }
+                Self::Float(_) => "0".to_string(),
                 Self::Bool(b) => b.to_string(),
                 Self::String(s) => s.to_string(),
                 Self::Array(arr) => format!(
