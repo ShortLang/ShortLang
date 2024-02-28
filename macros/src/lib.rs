@@ -182,10 +182,42 @@ macro_rules! nth_arg {
 }
 
 #[macro_export]
-macro_rules! hook {
+macro_rules! hook_fn {
     [ $set:expr, $fns:expr ] => {
         for (ptr, name, n, help) in $fns {
              $set.insert((name, n), (FnHandler::new(ptr), help));
+        }
+    };
+}
+
+#[macro_export]
+macro_rules! hook_method {
+    [ $set:expr, $methods:expr ] => {
+        for (ptr, name, types, n, help) in $methods {
+            let leaked = Box::leak(ptr); // Memory leaks are cool, sometimes
+
+            if types == "*" {
+                for i in Type::all_types() {
+                    $set.insert(
+                        (name.clone(), i.clone(), n),
+                        (FieldFnHandler::new(leaked), help.clone())
+                    );
+                }
+
+                continue;
+            }
+
+            for i in types
+                .split(",")
+                .map(|i| i.trim())
+                .filter(|i| !i.is_empty())
+                .map(|i| Type::try_from(i).expect("Invalid type"))
+            {
+                $set.insert(
+                    (name.clone(), i, n),
+                    (FieldFnHandler::new(leaked), help.clone())
+                );
+            }
         }
     };
 }
