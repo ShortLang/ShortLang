@@ -6,7 +6,7 @@ use std::ops::{AddAssign, MulAssign, SubAssign};
 #[shortlang_method(
     args = 1,
     types = "array, str",
-    help = "Pushes a value in a string or an array."
+    help = "Pushes a value to the end of the array or string."
 )]
 pub fn push(mut data: Data, args: Args) -> Output {
     let src = nth_arg!(args, 0);
@@ -18,7 +18,7 @@ pub fn push(mut data: Data, args: Args) -> Output {
 #[shortlang_method(
     args = 0,
     types = "array, str",
-    help = "Returns and removes the last element of the array."
+    help = "Pops the last element and returns it."
 )]
 pub fn pop(mut data: Data, _: Args) -> Output {
     let val = match unsafe { data.as_mut() } {
@@ -33,7 +33,7 @@ pub fn pop(mut data: Data, _: Args) -> Output {
 #[shortlang_method(
     args = 0,
     types = "array, str",
-    help = "Removes all the elemements of the array."
+    help = "Removes all the elements from the array or string."
 )]
 pub fn clear(mut data: Data, _: Args) -> Output {
     unsafe { data.as_mut().clear() };
@@ -232,7 +232,7 @@ pub fn sort(data: Data, _: Args) -> Output {
     name = "type",
     args = 0,
     types = "*",
-    help = "Returns the type of the value."
+    help = "Returns the value type."
 )]
 pub fn get_type(data: Data, _: Args) -> Output {
     let t = unsafe { data.as_ref().get_type() };

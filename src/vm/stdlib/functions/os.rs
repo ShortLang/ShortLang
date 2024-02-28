@@ -25,7 +25,7 @@ pub fn args(_: Input) -> Output {
 #[shortlang_fn(
     name = "env",
     args = 1,
-    help = "Gets the value of the specified environment variable"
+    help = "Gets the value of the specified environment variable."
 )]
 pub fn get_env(val: Input) -> Output {
     let var_name = cast_nth_arg!(val, 0, String);
@@ -57,7 +57,7 @@ pub fn set_env(val: Input) -> Output {
 #[shortlang_fn(
     name = "env",
     args = 0,
-    help = "Gets all the environment variables as a key-value pair."
+    help = "Gets all the environment variables as an array of key-value pairs."
 )]
 pub fn list_vars(_: Input) -> Output {
     let vars = std::env::vars_os()

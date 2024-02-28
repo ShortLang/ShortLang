@@ -4,7 +4,7 @@ use super::*;
     name = "sin",
     args = 0,
     types = "int, float",
-    help = "Computes the sine"
+    help = "Computes the sine."
 )]
 pub fn sine(number: Data, _: Args) -> Output {
     let number = unsafe { number.as_ref().clone().as_float() };
@@ -15,7 +15,7 @@ pub fn sine(number: Data, _: Args) -> Output {
     name = "cos",
     args = 0,
     types = "int, float",
-    help = "Computes the cosine"
+    help = "Computes the cosine."
 )]
 pub fn cosine(number: Data, _: Args) -> Output {
     let number = unsafe { number.as_ref().clone().as_float() };
@@ -26,7 +26,7 @@ pub fn cosine(number: Data, _: Args) -> Output {
     name = "tan",
     args = 0,
     types = "int, float",
-    help = "Computes the tangent"
+    help = "Computes the tangent."
 )]
 pub fn tangent(number: Data, _: Args) -> Output {
     let number = unsafe { number.as_ref().clone().as_float() };
@@ -37,7 +37,7 @@ pub fn tangent(number: Data, _: Args) -> Output {
     name = "cot",
     args = 0,
     types = "int, float",
-    help = "Computes the cotangent"
+    help = "Computes the cotangent."
 )]
 pub fn cotangent(number: Data, _: Args) -> Output {
     let number = unsafe { number.as_ref().clone().as_float() };
@@ -48,7 +48,7 @@ pub fn cotangent(number: Data, _: Args) -> Output {
     name = "sec",
     args = 0,
     types = "int, float",
-    help = "Computes the secant"
+    help = "Computes the secant."
 )]
 pub fn secant(number: Data, _: Args) -> Output {
     let number = unsafe { number.as_ref().clone().as_float() };
@@ -59,7 +59,7 @@ pub fn secant(number: Data, _: Args) -> Output {
     name = "csc",
     args = 0,
     types = "int, float",
-    help = "Computes the cosecant"
+    help = "Computes the cosecant."
 )]
 pub fn cosecant(number: Data, _: Args) -> Output {
     let number = unsafe { number.as_ref().clone().as_float() };

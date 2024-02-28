@@ -23,7 +23,7 @@ pub fn read(data: Data, _: Args) -> Output {
 #[shortlang_method(
     name = "w",
     args = 1,
-    help = "Overwrites the contents of the file with the sepcified one.",
+    help = "Writes the contents to the file.",
     types = "file"
 )]
 pub fn write(data: Data, args: Args) -> Output {

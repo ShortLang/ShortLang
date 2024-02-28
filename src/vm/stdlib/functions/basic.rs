@@ -8,7 +8,7 @@ lazy_static::lazy_static! {
     static ref RAND: Mutex<fastrand::Rng> = Mutex::new(fastrand::Rng::new());
 }
 
-#[shortlang_fn(args = 1, help = "Returns the length of array or string.")]
+#[shortlang_fn(args = 1, help = "Returns the length of an array or string.")]
 pub fn len(val: Input) -> Output {
     let len = cast!(nth_arg!(val, 0) => Array).len();
     ret!(Value::Int(len.into()))
@@ -17,7 +17,7 @@ pub fn len(val: Input) -> Output {
 #[shortlang_fn(
     name = "$$",
     args = 1,
-    help = "Print to stdout without a newline character at the end."
+    help = "Prints to stdout without a newline at the end."
 )]
 pub fn print(val: Input) -> Output {
     print!("{}", nth_arg!(val, 0));
@@ -28,7 +28,7 @@ pub fn print(val: Input) -> Output {
 #[shortlang_fn(
     name = "$",
     args = 1,
-    help = "Print to stdout with a newline character at the end."
+    help = "Prints to stdout with a newline at the end."
 )]
 pub fn println(val: Input) -> Output {
     println!("{}", nth_arg!(val, 0));
@@ -37,7 +37,7 @@ pub fn println(val: Input) -> Output {
 
 #[shortlang_fn(
     args = 0,
-    help = "Terminates the program at any given time. Returns with exit code 0"
+    help = "Terminates the program with exit code 0."
 )]
 pub fn exit(_: Input) -> Output {
     std::process::exit(0);
@@ -46,7 +46,7 @@ pub fn exit(_: Input) -> Output {
 #[shortlang_fn(
     name = "exit",
     args = 1,
-    help = "Terminates the program at any given time. Returns with the specified exit code."
+    help = "Terminates the program with the specified exit code."
 )]
 pub fn exit_code(val: Input) -> Output {
     std::process::exit(cast_nth_arg!(val, 0, Int).to_i32_wrapping());
@@ -55,7 +55,7 @@ pub fn exit_code(val: Input) -> Output {
 #[shortlang_fn(
     name = "str",
     args = 1,
-    help = "Tries to convert a value to string value, this function never fails."
+    help = "Converts a value to a string."
 )]
 pub fn to_str(val: Input) -> Output {
     ret!(Value::String(cast_nth_arg!(val, 0, String).to_owned()))
@@ -82,7 +82,7 @@ pub fn chr(val: Input) -> Output {
 }
 
 /// Takes 1 parameter, 0..n or n..=0 if n < 0
-#[shortlang_fn(args = 1, help = "Returns an array with values from 0 to x")]
+#[shortlang_fn(args = 1, help = "Returns an array with values from 0 to n.")]
 pub fn rng(val: Input) -> Output {
     let upper_lim: i128 = convert_to_i128!(nth_arg!(val, 0));
     let mut array = Vec::new();
@@ -103,7 +103,7 @@ pub fn rng(val: Input) -> Output {
 #[shortlang_fn(
     name = "rng",
     args = 2,
-    help = "Returns an array with values from a to b"
+    help = "Returns an array with values from a to b."
 )]
 pub fn rng_2(val: Input) -> Output {
     let [lower_lim, upper_lim] = [nth_arg!(val, 0), nth_arg!(val, 1)];
@@ -134,7 +134,7 @@ pub fn rnd(_val: Input) -> Output {
 #[shortlang_fn(
     name = "rnd",
     args = 1,
-    help = "Returns a random number between 0 and x"
+    help = "Returns a random number between 0 and x."
 )]
 pub fn rnd_1(val: Input) -> Output {
     let upper_limit: i128 = unsafe { convert_to_i128!(nth_arg!(val, 0)) };
@@ -145,7 +145,7 @@ pub fn rnd_1(val: Input) -> Output {
 #[shortlang_fn(
     name = "rnd",
     args = 2,
-    help = "Returns a random number between a and b"
+    help = "Returns a random number between a and b."
 )]
 pub fn rnd_2(val: Input) -> Output {
     let [lower_lim, upper_lim]: [i128; 2] = unsafe {
@@ -163,7 +163,7 @@ pub fn rnd_2(val: Input) -> Output {
 #[shortlang_fn(
     name = "flt",
     args = 1,
-    help = "Tries to convert a value to floating point value, returns an error if conversion is not possible."
+    help = "Tries to convert a value to a float, returns an error if it fails."
 )]
 pub fn to_float(val: Input) -> Output {
     let val = nth_arg!(val, 0);
@@ -186,7 +186,7 @@ pub fn to_float(val: Input) -> Output {
 #[shortlang_fn(
     name = "int",
     args = 1,
-    help = "Tries to convert a value to integer value, returns an error if conversion is not possible."
+    help = "Tries to convert a value to an integer, returns an error if it fails."
 )]
 pub fn to_int(val: Input) -> Output {
     let val = nth_arg!(val, 0);
@@ -209,7 +209,7 @@ pub fn to_int(val: Input) -> Output {
 #[shortlang_fn(
     name = "inp",
     args = 0,
-    help = "Read a line from stdin without any prompt."
+    help = "Read a line from stdin."
 )]
 pub fn input(val: Input) -> Output {
     use std::io::*;
@@ -244,13 +244,13 @@ pub fn input_with_prompt(val: Input) -> Output {
     ret!(Value::String(s.trim().to_string()));
 }
 
-#[shortlang_fn(name = "type", args = 1, help = "Returns the type of the value.")]
+#[shortlang_fn(name = "type", args = 1, help = "Returns the value type.")]
 pub fn get_type(val: Input) -> Output {
     let t = nth_arg!(val, 0).get_type();
     ret!(Value::String(t.to_owned()));
 }
 
-#[shortlang_fn(args = 1, help = "Opens a file and returns a file object.")]
+#[shortlang_fn(args = 1, help = "Opens a file.")]
 pub fn open(val: Input) -> Output {
     let path = cast_nth_arg!(val, 0, String);
     ret!(Value::File(path))
