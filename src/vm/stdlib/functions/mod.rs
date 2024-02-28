@@ -15,5 +15,5 @@ pub(crate) type Output = Result<VarPtr, String>;
 
 pub fn init() {
     let mut ib = INBUILT_FUNCTIONS.lock().unwrap();
-    hook!(ib, proc_macros::get_functions!());
+    hook_fn!(ib, proc_macros::get_functions!());
 }

@@ -66,7 +66,9 @@ pub struct FieldFnHandler {
 }
 
 impl FieldFnHandler {
-    pub fn new<F: Fn(NonNull<Value>, &[NonNull<Value>]) -> Output + 'static + ?Sized>(func: &'static F) -> Self {
+    pub fn new<F: Fn(NonNull<Value>, &[NonNull<Value>]) -> Output + 'static + ?Sized>(
+        func: &'static F,
+    ) -> Self {
         Self {
             func: Box::new(func),
         }

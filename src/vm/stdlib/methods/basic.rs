@@ -3,56 +3,24 @@ use rug::Float;
 use rug::Integer;
 use std::ops::{AddAssign, MulAssign, SubAssign};
 
-pub fn init() {
-    let mut functions = INBUILT_METHODS.lock().unwrap();
-
-    add_method![functions,
-        help: "Pushes a value in a string or an array.",
-        "push" => [push, 1, Type::String, Type::Array],
-
-        help: "Flattens an array a single value string, placing a given separator between each element.",
-        "join" => [join, 1, Type::Array],
-
-        help: "Returns an array containing the substrings of a string, separated by specified character.",
-        "split" => [split, 1, Type::String],
-
-        help: "Calculates the sum of all the values inside an array.",
-        "sum" => [sum, 0, Type::Array],
-
-        help: "Subtracts all the elements from the first one.",
-        "sub" => [sub, 0, Type::Array],
-
-        help: "Calculates the product of all the values of the array.",
-        "mul" => [mul, 0, Type::Array],
-
-        help: "Finds the smallest element in the array.",
-        "min" => [min, 0, Type::Array],
-
-        help: "Finds the largest element in the array.",
-        "max" => [max, 0, Type::Array],
-
-        help: "Sorts the array.",
-        "sort" => [sort, 0, Type::Array],
-
-        help: "Returns and removes the last element of the array.",
-        "pop" => [pop, 0, Type::String, Type::Array],
-
-        help: "Removes all the elemements of the array.",
-        "clear" => [clear, 0, Type::String, Type::Array],
-
-        help: "Returns the type of the value.",
-        "type" => [get_type, 0, Type::String, Type::Array, Type::Integer, Type::Float, Type::Nil],
-    ];
-}
-
-fn push(mut data: Data, args: Args) -> Output {
+#[shortlang_method(
+    args = 1,
+    types = "array, str",
+    help = "Pushes a value in a string or an array."
+)]
+pub fn push(mut data: Data, args: Args) -> Output {
     let src = nth_arg!(args, 0);
     let data = unsafe { data.as_mut() };
     *data = data.binary_add(src).unwrap();
     ret!(ptr: data);
 }
 
-fn pop(mut data: Data, _: Args) -> Output {
+#[shortlang_method(
+    args = 0,
+    types = "array, str",
+    help = "Returns and removes the last element of the array."
+)]
+pub fn pop(mut data: Data, _: Args) -> Output {
     let val = match unsafe { data.as_mut() } {
         Value::Array(a) => a.pop(),
         Value::String(s) => s.pop().map(|i| Value::String(i.to_string())),
@@ -62,12 +30,22 @@ fn pop(mut data: Data, _: Args) -> Output {
     ret!(val.unwrap_or(Value::Nil))
 }
 
-fn clear(mut data: Data, _: Args) -> Output {
+#[shortlang_method(
+    args = 0,
+    types = "array, str",
+    help = "Removes all the elemements of the array."
+)]
+pub fn clear(mut data: Data, _: Args) -> Output {
     unsafe { data.as_mut().clear() };
     ret!()
 }
 
-fn join(data: Data, args: Args) -> Output {
+#[shortlang_method(
+    args = 1,
+    types = "array",
+    help = "Flattens an array a single value string, placing a given separator between each element."
+)]
+pub fn join(data: Data, args: Args) -> Output {
     let separator = nth_arg!(args, 0);
 
     let array = cast!(unsafe { data.as_ref() } => Array);
@@ -88,7 +66,12 @@ fn join(data: Data, args: Args) -> Output {
     ret!(result_string.into())
 }
 
-fn split(data: Data, args: Args) -> Output {
+#[shortlang_method(
+    args = 1,
+    types = "str",
+    help = "Returns an array containing the substrings of a string, separated by specified character."
+)]
+pub fn split(data: Data, args: Args) -> Output {
     let split = nth_arg!(args, 0);
 
     let data = unsafe { data.as_ref() };
@@ -120,7 +103,12 @@ fn split(data: Data, args: Args) -> Output {
     ret!(Value::Array(split))
 }
 
-fn sum(data: Data, _: Args) -> Output {
+#[shortlang_method(
+    args = 0,
+    types = "array",
+    help = "Calculates the sum of all the values inside an array."
+)]
+pub fn sum(data: Data, _: Args) -> Output {
     let array = unsafe { data.as_ref().clone().as_array() };
     let mut sum = Float::new(53);
 
@@ -137,7 +125,12 @@ fn sum(data: Data, _: Args) -> Output {
     ret!(Value::Float(sum))
 }
 
-fn sub(data: Data, args: Args) -> Output {
+#[shortlang_method(
+    args = 0,
+    types = "array",
+    help = "Subtracts all the elements from the first one."
+)]
+pub fn sub(data: Data, args: Args) -> Output {
     let array = unsafe { data.as_ref().clone().as_array() };
     let mut sum = Float::new(53);
 
@@ -154,7 +147,12 @@ fn sub(data: Data, args: Args) -> Output {
     ret!(Value::Float(sum))
 }
 
-fn mul(data: Data, args: Args) -> Output {
+#[shortlang_method(
+    args = 0,
+    types = "array",
+    help = "Calculates the product of all the values of the array."
+)]
+pub fn mul(data: Data, args: Args) -> Output {
     let array = unsafe { data.as_ref().clone().as_array() };
     let mut sum = Float::new(53);
 
@@ -171,7 +169,12 @@ fn mul(data: Data, args: Args) -> Output {
     ret!(Value::Float(sum))
 }
 
-fn min(data: Data, args: Args) -> Output {
+#[shortlang_method(
+    args = 0,
+    types = "array",
+    help = "Finds the smallest element in the array."
+)]
+pub fn min(data: Data, args: Args) -> Output {
     let array = unsafe { data.as_ref().clone().as_array() };
     let mut min = float!(rug::float::Special::Infinity);
 
@@ -188,7 +191,12 @@ fn min(data: Data, args: Args) -> Output {
     ret!(Value::Float(min))
 }
 
-fn max(data: Data, args: Args) -> Output {
+#[shortlang_method(
+    args = 0,
+    types = "array",
+    help = "Finds the largest element in the array."
+)]
+pub fn max(data: Data, args: Args) -> Output {
     let array = unsafe { data.as_ref().clone().as_array() };
     let mut max = float!(rug::float::Special::NegInfinity);
 
@@ -204,7 +212,8 @@ fn max(data: Data, args: Args) -> Output {
     ret!(Value::Float(max))
 }
 
-fn sort(data: Data, _: Args) -> Output {
+#[shortlang_method(args = 0, types = "array", help = "Sorts the array.")]
+pub fn sort(data: Data, _: Args) -> Output {
     let mut array = unsafe { data.as_ref().clone().as_array().to_vec() };
     array.sort_by(|a, b| match (a, b) {
         (Value::Float(f), _) if f.is_infinite() && f.is_sign_negative() => std::cmp::Ordering::Less,
@@ -219,7 +228,13 @@ fn sort(data: Data, _: Args) -> Output {
     ret!(Value::Array(array))
 }
 
-fn get_type(data: Data, _: Args) -> Output {
+#[shortlang_method(
+    name = "type",
+    args = 0,
+    types = "*",
+    help = "Returns the type of the value."
+)]
+pub fn get_type(data: Data, _: Args) -> Output {
     let t = unsafe { data.as_ref().get_type() };
     ret!(Value::String(t.to_owned()))
 }

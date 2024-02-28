@@ -1,5 +1,4 @@
 mod bytecode;
-mod macros;
 mod memory;
 mod stdlib;
 mod utils;

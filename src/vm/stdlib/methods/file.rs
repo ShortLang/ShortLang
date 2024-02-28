@@ -3,21 +3,12 @@ use super::*;
 use std::fs;
 use std::io::Write;
 
-pub fn init() {
-    let mut set = INBUILT_METHODS.lock().unwrap();
-
-    add_method![set,
-        help: "Reads everything from the file.",
-        "r" => [read, 0, Type::File],
-
-        help: "Overwrites the contents of the file with the sepcified one.",
-        "w" => [write, 1, Type::File],
-
-        help: "Appends the contents to the file.",
-        "a" => [append, 1, Type::File],
-    ];
-}
-
+#[shortlang_method(
+    name = "r",
+    args = 0,
+    help = "Reads everything from the file.",
+    types = "file"
+)]
 pub fn read(data: Data, _: Args) -> Output {
     let path = unsafe { data.as_ref() };
 
@@ -29,6 +20,12 @@ pub fn read(data: Data, _: Args) -> Output {
     ret!(contents.into())
 }
 
+#[shortlang_method(
+    name = "w",
+    args = 1,
+    help = "Overwrites the contents of the file with the sepcified one.",
+    types = "file"
+)]
 pub fn write(data: Data, args: Args) -> Output {
     let content = nth_arg!(args, 0);
     let path = unsafe { data.as_ref() };
@@ -41,6 +38,12 @@ pub fn write(data: Data, args: Args) -> Output {
     ret!()
 }
 
+#[shortlang_method(
+    name = "a",
+    args = 1,
+    help = "Appends the contents to the file.",
+    types = "file"
+)]
 pub fn append(data: Data, args: Args) -> Output {
     let content = nth_arg!(args, 0);
     let path = unsafe { data.as_ref() };

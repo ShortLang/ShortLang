@@ -1,55 +1,67 @@
 use super::*;
 
-pub fn init() {
-    let mut set = INBUILT_METHODS.lock().unwrap();
-
-    add_method![set,
-        help: "Computes the sine",
-        "sin" => [sine, 0, Type::Integer, Type::Float],
-
-        help: "Computes the cosine",
-        "cos" => [cosine, 0, Type::Integer, Type::Float],
-
-        help: "Computes the tangent",
-        "tan" => [tangent, 0, Type::Integer, Type::Float],
-
-        help: "Computes the cotangent",
-        "cot" => [cotangent, 0, Type::Integer, Type::Float],
-
-        help: "Computes the secant",
-        "sec" => [secant, 0, Type::Integer, Type::Float],
-
-        help: "Computes the cosecant",
-        "csc" => [cosecant, 0, Type::Integer, Type::Float],
-    ];
-}
-
-fn sine(number: Data, _: Args) -> Output {
+#[shortlang_method(
+    name = "sin",
+    args = 0,
+    types = "int, float",
+    help = "Computes the sine"
+)]
+pub fn sine(number: Data, _: Args) -> Output {
     let number = unsafe { number.as_ref().clone().as_float() };
-    ret!(number.sin().into())
+    ret!(dbg!(number.sin()).into())
 }
 
-fn cosine(number: Data, _: Args) -> Output {
+#[shortlang_method(
+    name = "cos",
+    args = 0,
+    types = "int, float",
+    help = "Computes the cosine"
+)]
+pub fn cosine(number: Data, _: Args) -> Output {
     let number = unsafe { number.as_ref().clone().as_float() };
     ret!(number.cos().into())
 }
 
-fn tangent(number: Data, _: Args) -> Output {
+#[shortlang_method(
+    name = "tan",
+    args = 0,
+    types = "int, float",
+    help = "Computes the tangent"
+)]
+pub fn tangent(number: Data, _: Args) -> Output {
     let number = unsafe { number.as_ref().clone().as_float() };
     ret!(number.tan().into())
 }
 
-fn cotangent(number: Data, _: Args) -> Output {
+#[shortlang_method(
+    name = "cot",
+    args = 0,
+    types = "int, float",
+    help = "Computes the cotangent"
+)]
+pub fn cotangent(number: Data, _: Args) -> Output {
     let number = unsafe { number.as_ref().clone().as_float() };
     ret!(number.cot().into())
 }
 
-fn secant(number: Data, _: Args) -> Output {
+#[shortlang_method(
+    name = "sec",
+    args = 0,
+    types = "int, float",
+    help = "Computes the secant"
+)]
+pub fn secant(number: Data, _: Args) -> Output {
     let number = unsafe { number.as_ref().clone().as_float() };
     ret!(number.sec().into())
 }
 
-fn cosecant(number: Data, _: Args) -> Output {
+#[shortlang_method(
+    name = "csc",
+    args = 0,
+    types = "int, float",
+    help = "Computes the cosecant"
+)]
+pub fn cosecant(number: Data, _: Args) -> Output {
     let number = unsafe { number.as_ref().clone().as_float() };
     ret!(number.csc().into())
 }
