@@ -228,12 +228,7 @@ pub fn sort(data: Data, _: Args) -> Output {
     ret!(Value::Array(array))
 }
 
-#[shortlang_method(
-    name = "type",
-    args = 0,
-    types = "*",
-    help = "Returns the value type."
-)]
+#[shortlang_method(name = "type", args = 0, types = "*", help = "Returns the value type.")]
 pub fn get_type(data: Data, _: Args) -> Output {
     let t = unsafe { data.as_ref().get_type() };
     ret!(Value::String(t.to_owned()))

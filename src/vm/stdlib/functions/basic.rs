@@ -35,10 +35,7 @@ pub fn println(val: Input) -> Output {
     ret!()
 }
 
-#[shortlang_fn(
-    args = 0,
-    help = "Terminates the program with exit code 0."
-)]
+#[shortlang_fn(args = 0, help = "Terminates the program with exit code 0.")]
 pub fn exit(_: Input) -> Output {
     std::process::exit(0);
 }
@@ -52,11 +49,7 @@ pub fn exit_code(val: Input) -> Output {
     std::process::exit(cast_nth_arg!(val, 0, Int).to_i32_wrapping());
 }
 
-#[shortlang_fn(
-    name = "str",
-    args = 1,
-    help = "Converts a value to a string."
-)]
+#[shortlang_fn(name = "str", args = 1, help = "Converts a value to a string.")]
 pub fn to_str(val: Input) -> Output {
     ret!(Value::String(cast_nth_arg!(val, 0, String).to_owned()))
 }
@@ -206,11 +199,7 @@ pub fn to_int(val: Input) -> Output {
     }));
 }
 
-#[shortlang_fn(
-    name = "inp",
-    args = 0,
-    help = "Read a line from stdin."
-)]
+#[shortlang_fn(name = "inp", args = 0, help = "Read a line from stdin.")]
 pub fn input(val: Input) -> Output {
     use std::io::*;
 
