@@ -89,6 +89,8 @@ pub enum Bytecode {
 
     // Misc
     ConcatUpTo,
+
+    Help,
 }
 
 #[derive(Clone, Debug)]

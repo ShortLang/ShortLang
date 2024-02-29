@@ -28,8 +28,10 @@ pub type VarPtr = Option<NonNull<Value>>;
 pub(crate) type CallStack = Vec<FnStackData>;
 
 lazy_static::lazy_static! {
-    pub static ref INBUILT_FUNCTIONS: Mutex<HashMap<(String, usize), (FnHandler, String)>> = Mutex::new(HashMap::new());
-    pub static ref INBUILT_METHODS: Mutex<HashMap<(String, Type, usize), (FieldFnHandler, String)>> = Mutex::new(HashMap::new());
+    pub static ref INBUILT_FUNCTIONS: Mutex<HashMap<String, HashMap<usize, (FnHandler, String)>>>
+        = Mutex::new(HashMap::new());
+    pub static ref INBUILT_METHODS: Mutex<HashMap<String, HashMap<(usize, Type), (FieldFnHandler, String)>>>
+        = Mutex::new(HashMap::new());
 }
 
 pub struct VM {
@@ -449,27 +451,61 @@ impl VM {
             ExprKind::Call(name, args) => {
                 let num_args = args.as_ref().map_or(0, |v| v.len());
 
-                if INBUILT_FUNCTIONS
-                    .lock()
-                    .unwrap()
-                    .contains_key(&(name.clone(), num_args))
-                {
-                    for_each_arg!(args, num_args,
-                        Some(arg) => { self.compile_expr(arg) },
-                        None => { self.push_data(Value::Nil, 0..0) }
-                    );
+                if name == "help" {
+                    if num_args != 1 {
+                        self.runtime_error("Expected one argument", expr.span);
+                    }
 
-                    self.instructions.push((
-                        Instr(Bytecode::BuiltInFunction(name, num_args), vec![]),
-                        expr.span,
-                    ));
-                } else {
-                    for_each_arg!(args, arg => { self.compile_expr(arg) });
+                    let Expr {
+                        inner: ExprKind::String(mut fn_name),
+                        ..
+                    } = args.unwrap().first().unwrap().clone()
+                    else {
+                        self.runtime_error("Expected a string", expr.span);
+                    };
 
-                    self.push_data(name.as_str().into(), expr.span.clone());
+                    let is_fn = if fn_name.contains(".") {
+                        let (ty_name, name) = fn_name.split_once(".").unwrap();
+                        let (ty_name, name) = (ty_name.to_string(), name.to_string());
+
+                        fn_name = name.to_string();
+                        self.push_data(Value::String(ty_name.to_string()), 0..0);
+
+                        false
+                    } else {
+                        true
+                    };
+
+                    self.push_data(Value::String(fn_name), 0..0);
+                    self.push_data(Value::Bool(is_fn), 0..0);
+
                     self.instructions
-                        .push((Instr(Bytecode::FnCall(num_args), vec![]), expr.span));
-                    self.stack.push(allocate(Value::Nil));
+                        .push((Instr(Bytecode::Help, vec![]), expr.span));
+
+                    return;
+                }
+
+                match INBUILT_FUNCTIONS.lock().unwrap().get(&name) {
+                    Some(fn_data) => {
+                        for_each_arg!(args, num_args,
+                            Some(arg) => { self.compile_expr(arg) },
+                            None => { self.push_data(Value::Nil, 0..0) }
+                        );
+
+                        self.instructions.push((
+                            Instr(Bytecode::BuiltInFunction(name, num_args), vec![]),
+                            expr.span,
+                        ));
+                    }
+
+                    _ => {
+                        for_each_arg!(args, arg => { self.compile_expr(arg) });
+
+                        self.push_data(name.as_str().into(), expr.span.clone());
+                        self.instructions
+                            .push((Instr(Bytecode::FnCall(num_args), vec![]), expr.span));
+                        self.stack.push(allocate(Value::Nil));
+                    }
                 }
             }
 
@@ -995,7 +1031,7 @@ impl VM {
                 if fn_obj_option.is_none() {
                     self.runtime_error(
                         format!(
-                            "No function name `{fn_name}` found that takes: {num_args} argument(s)"
+                            "No function named `{fn_name}` found that takes: {num_args} argument(s)"
                         )
                         .as_str(),
                         span,
@@ -1299,9 +1335,29 @@ impl VM {
 
                 fn_args.reverse();
 
-                let ib_fn = INBUILT_FUNCTIONS.lock().unwrap();
-                let Some((ib_fn, _)) = ib_fn.get(&(name, num_args)) else {
-                    self.runtime_error("What the...", span);
+                // let ib_fn = INBUILT_FUNCTIONS.lock().unwrap();
+                // let Some((ib_fn, _)) = ib_fn.get(&(name, num_args)) else {
+                //     self.runtime_error("What the...", span);
+                // };
+
+                let locked = INBUILT_FUNCTIONS.lock().unwrap();
+                let ib_fn = match locked.get(&name) {
+                    Some(fn_data) if fn_data.contains_key(&num_args) => {
+                        let Some((ptr, _)) = fn_data.get(&num_args) else {
+                            unreachable!()
+                        };
+
+                        ptr
+                    }
+
+                    Some(_) => self.runtime_error(
+                        &format!(
+                            "Invalid arguments: Function {name} does not take {num_args} arguments"
+                        ),
+                        span,
+                    ),
+
+                    _ => unreachable!(),
                 };
 
                 match ib_fn.call(&fn_args) {
@@ -1326,68 +1382,129 @@ impl VM {
                 let data = memory::release(self.stack.pop().unwrap());
                 let data_type = Type::try_from(data.as_ref().get_type()).unwrap(); // safe
 
-                // Check if a built-in method exists
-                if let Some((method_fn, _)) =
-                    INBUILT_METHODS
-                        .lock()
-                        .unwrap()
-                        .get(&(name.clone(), data_type, num_args))
-                {
-                    match method_fn.call(data, &fn_args) {
-                        Ok(Some(ret_val)) => self.stack.push(memory::retain(ret_val)),
-                        Err(e) => self.runtime_error(&e, span),
+                let locked = INBUILT_METHODS.lock().unwrap();
+                match locked.get(&name) {
+                    Some(fn_data) if fn_data.contains_key(&(num_args, data_type)) => {
+                        let method_fn = &fn_data.get(&(num_args, data_type)).unwrap().0;
 
-                        _ => {}
+                        match method_fn.call(data, &fn_args) { // rust analyzer bug?
+                            Ok(Some(ret_val)) => self.stack.push(memory::retain(ret_val)),
+                            Err(e) => self.runtime_error(&e, span),
+
+                            _ => {}
+                        }
                     }
-                } else {
-                    let object = memory::release(self.stack.pop().unwrap_or_else(|| {
-                        self.runtime_error(
-                            &format!(
-                                "No method named '{name}' found on the type '{}' that takes: {} arguments",
-                                data_type.get_type(),
-                                num_args
-                            ),
-                            span.clone(),
-                        );
-                    }));
-                    let object_type = Type::try_from(object.as_ref().get_type()).unwrap();
 
-                    let Some(fn_obj) = self.impl_methods.get(&(name.clone(), object_type)) else {
+                    Some(_) =>
                         self.runtime_error(
                             &format!(
-                                "No method named '{name}' found on the type '{}' that takes: {} arguments",
-                                object_type.get_type(),
-                                num_args
+                                "No method named `{name}` found on type `{data_type}` that takes: {num_args} argument(s)"
                             ),
                             span,
-                        );
-                    };
+                        ),
 
-                    let FunctionData {
-                        parameters,
-                        scope_idx,
-                        ..
-                    } = fn_obj;
+                    _ => {
+                        let object = memory::release(self.stack.pop().unwrap_or_else(|| {
+                            self.runtime_error(
+                                &format!(
+                                    "No method named '{name}' found on the type '{}' that takes: {} arguments",
+                                    data_type.get_type(),
+                                    num_args
+                                ),
+                                span.clone(),
+                            );
+                        }));
 
-                    let mut fn_args = (1..parameters.len())
-                        .map(|_| self.stack.pop().unwrap_or_else(|| allocate(Value::Nil)))
-                        .collect::<Vec<_>>();
+                        let object_type = Type::try_from(object.as_ref().get_type()).unwrap();
 
-                    fn_args.reverse();
+                        let Some(fn_obj) = self.impl_methods.get(&(name.clone(), object_type))
+                        else {
+                            self.runtime_error(
+                                &format!(
+                                    "No method named '{name}' found on the type '{}' that takes: {} arguments",
+                                    object_type.get_type(),
+                                    num_args
+                                ),
+                                span,
+                            );
+                        };
 
-                    let variables = self.variables[*scope_idx].clone();
+                        let FunctionData {
+                            parameters,
+                            scope_idx,
+                            ..
+                        } = fn_obj;
 
-                    let mut arg_iter = fn_obj.get_var_ids().into_iter().enumerate();
+                        let mut fn_args = (1..parameters.len())
+                            .map(|_| self.stack.pop().unwrap_or_else(|| allocate(Value::Nil)))
+                            .collect::<Vec<_>>();
 
-                    let (_, self_var_idx) = arg_iter.next().unwrap();
-                    *self.variables[*scope_idx].get_mut(&self_var_idx).unwrap() = Some(object);
+                        fn_args.reverse();
 
-                    for (idx, param_var_idx) in arg_iter {
-                        *self.variables[*scope_idx].get_mut(&param_var_idx).unwrap() =
-                            Some(fn_args[idx - 1]);
+                        let variables = self.variables[*scope_idx].clone();
+
+                        let mut arg_iter = fn_obj.get_var_ids().into_iter().enumerate();
+
+                        let (_, self_var_idx) = arg_iter.next().unwrap();
+                        *self.variables[*scope_idx].get_mut(&self_var_idx).unwrap() = Some(object);
+
+                        for (idx, param_var_idx) in arg_iter {
+                            *self.variables[*scope_idx].get_mut(&param_var_idx).unwrap() =
+                                Some(fn_args[idx - 1]);
+                        }
+
+                        self.push_call_stack(fn_obj.instruction_range.start, *scope_idx, variables);
                     }
+                };
+            },
 
-                    self.push_call_stack(fn_obj.instruction_range.start, *scope_idx, variables);
+            Bytecode::Help => unsafe {
+                let (is_function, name) = (
+                    memory::release(self.stack.pop().unwrap())
+                        .as_ref()
+                        .clone()
+                        .as_bool(),
+                    memory::release(self.stack.pop().unwrap())
+                        .as_ref()
+                        .clone()
+                        .as_str(),
+                );
+
+                if is_function {
+                    if let Some(fn_data) = INBUILT_FUNCTIONS.lock().unwrap().get(&name) {
+                        for (num_args, (_, help_msg)) in fn_data.iter() {
+                            let mut arg_name_gen = crate::name_generator::NameGenerator::new();
+                            let arg_string = (0..*num_args)
+                                .map(|_| arg_name_gen.next().unwrap())
+                                .collect::<Vec<_>>()
+                                .join(", ");
+
+                            println!("- {name}({arg_string})\n\t{help_msg}");
+                        }
+                    } else {
+                        self.runtime_error(&format!("No such built-in function exists"), span);
+                    }
+                } else {
+                    let ty = memory::release(self.stack.pop().unwrap())
+                        .as_ref()
+                        .clone()
+                        .as_str();
+
+                    if let Some(fn_data) = INBUILT_METHODS.lock().unwrap().get(&name) {
+                        for (((num_args, type_name), (_, help_msg))) in fn_data.iter() {
+                            if type_name.to_string() != ty {
+                                continue;
+                            }
+
+                            let mut arg_name_gen = crate::name_generator::NameGenerator::new();
+                            let arg_string = (0..*num_args)
+                                .map(|_| arg_name_gen.next().unwrap())
+                                .collect::<Vec<_>>()
+                                .join(", ");
+
+                            println!("- {type_name}.{name}({arg_string})\n\t{help_msg}");
+                        }
+                    }
                 }
             },
 
