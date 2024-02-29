@@ -183,25 +183,28 @@ macro_rules! nth_arg {
 
 #[macro_export]
 macro_rules! hook_fn {
-    [ $set:expr, $fns:expr ] => {
+    [ $map:expr, $fns:expr ] => {
         for (ptr, name, n, help) in $fns {
-             $set.insert((name, n), (FnHandler::new(ptr), help));
+             // $map.insert((name, n), (FnHandler::new(ptr), help));
+            $map.entry(name)
+                .or_insert(std::collections::HashMap::new())
+                .insert(n, (FnHandler::new(ptr), help));
         }
     };
 }
 
 #[macro_export]
 macro_rules! hook_method {
-    [ $set:expr, $methods:expr ] => {
+    [ $map:expr, $methods:expr ] => {
         for (ptr, name, types, n, help) in $methods {
             let leaked = Box::leak(ptr); // Memory leaks are cool, sometimes
 
             if types == "*" {
                 for i in Type::all_types() {
-                    $set.insert(
-                        (name.clone(), i.clone(), n),
-                        (FieldFnHandler::new(leaked), help.clone())
-                    );
+
+                    $map.entry(name.clone())
+                        .or_insert(std::collections::HashMap::new())
+                        .insert((n, i.clone()), (FieldFnHandler::new(leaked), help.clone()));
                 }
 
                 continue;
@@ -213,10 +216,10 @@ macro_rules! hook_method {
                 .filter(|i| !i.is_empty())
                 .map(|i| Type::try_from(i).expect("Invalid type"))
             {
-                $set.insert(
-                    (name.clone(), i, n),
-                    (FieldFnHandler::new(leaked), help.clone())
-                );
+
+                $map.entry(name.clone())
+                    .or_insert(std::collections::HashMap::new())
+                    .insert((n, i), (FieldFnHandler::new(leaked), help.clone()));
             }
         }
     };
