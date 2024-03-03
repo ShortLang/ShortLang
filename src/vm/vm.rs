@@ -101,9 +101,9 @@ impl VM {
         self.instructions
             .push((Instr(Bytecode::Halt, vec![]), 0..0));
 
-        // for (idx, (Instr(bytecode, args), _)) in self.instructions.iter().enumerate() {
-        // println!("instr[{idx}] = ({bytecode}, {args:?})");
-        // }
+        for (idx, (Instr(bytecode, args), _)) in self.instructions.iter().enumerate() {
+            println!("instr[{idx}] = ({bytecode}, {args:?})");
+        }
     }
 
     fn compile_expr(&mut self, expr: Expr) {
@@ -485,8 +485,11 @@ impl VM {
                     return;
                 }
 
-                match INBUILT_FUNCTIONS.lock().unwrap().get(&name) {
-                    Some(fn_data) => {
+                let lock = INBUILT_FUNCTIONS.lock().unwrap();
+                match lock.get(&name) {
+                    Some(_) => {
+                        drop(lock);
+
                         for_each_arg!(args, num_args,
                             Some(arg) => { self.compile_expr(arg) },
                             None => { self.push_data(Value::Nil, 0..0) }
@@ -1062,18 +1065,18 @@ impl VM {
                 self.push_call_stack(fn_obj.instruction_range.start, *scope_idx, variables);
             },
 
-            Bytecode::Ret => {
+            Bytecode::Ret => unsafe {
                 let return_value = self.stack.pop().unwrap();
                 self.pop_call_stack();
-                self.stack.push(return_value);
-            }
+
+                if return_value.as_ref().get_type() != "nil" {
+                    self.stack.push(return_value);
+                }
+            },
 
             // If the function is terminated by FnEnd.
             // that means it doesn't return anything.
-            Bytecode::FnEnd => {
-                self.pop_call_stack();
-                self.stack.push(memory::retain(allocate(Value::Nil)));
-            }
+            Bytecode::FnEnd => self.pop_call_stack(),
 
             Bytecode::Array => unsafe {
                 let items = args[0];
@@ -1671,7 +1674,7 @@ impl VM {
         self.call_stack.push(FnStackData {
             pc_before: self.pc,
             scope_idx,
-            previous_stack_len: self.stack.len(),
+            // previous_stack_len: self.stack.len(),
             variables_id: self.variables_id.clone(),
             variables,
             // self_ptr: todo!(),
@@ -1684,7 +1687,7 @@ impl VM {
         let FnStackData {
             pc_before,
             scope_idx,
-            previous_stack_len,
+            // previous_stack_len,
             variables_id,
             variables,
             // self_ptr: todo!(),
@@ -1692,11 +1695,11 @@ impl VM {
 
         // Remove any extra variables that has been pushed onto the
         // stack except the return value
-        if previous_stack_len < self.stack.len().saturating_sub(1) {
-            while previous_stack_len < self.stack.len() - 1 {
-                memory::release(self.stack.remove(self.stack.len() - 2));
-            }
-        }
+        // if previous_stack_len < self.stack.len().saturating_sub(1) {
+        //     while previous_stack_len < self.stack.len() - 1 {
+        //         memory::release(self.stack.remove(self.stack.len() - 2));
+        //     }
+        // }
 
         for (_, value) in self.variables[scope_idx].iter() {
             if let &Some(value) = value {

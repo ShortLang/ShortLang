@@ -38,7 +38,7 @@ pub fn allocate(val: Value) -> NonNull<Value> {
 pub(crate) struct FnStackData {
     pub(crate) pc_before: usize,
     pub(crate) scope_idx: usize,
-    pub(crate) previous_stack_len: usize,
+    // pub(crate) previous_stack_len: usize,
     pub(crate) variables_id: HashMap<String, u32>,
     pub(crate) variables: HashMap<u32, Option<NonNull<Value>>>,
 }
