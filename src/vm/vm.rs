@@ -101,9 +101,9 @@ impl VM {
         self.instructions
             .push((Instr(Bytecode::Halt, vec![]), 0..0));
 
-        for (idx, (Instr(bytecode, args), _)) in self.instructions.iter().enumerate() {
-            println!("instr[{idx}] = ({bytecode}, {args:?})");
-        }
+        // for (idx, (Instr(bytecode, args), _)) in self.instructions.iter().enumerate() {
+        //     println!("instr[{idx}] = ({bytecode}, {args:?})");
+        // }
     }
 
     fn compile_expr(&mut self, expr: Expr) {
