@@ -48,6 +48,10 @@ pub struct Args {
             .map(|s| s.parse::<usize>().unwrap())
     )]
     format_mode: usize,
+
+    /// Generate docs for standard library
+    #[clap(long)]
+    doc: bool,
 }
 
 fn format_duration(duration: std::time::Duration) -> String {
@@ -90,6 +94,11 @@ fn tokenize(input: &str) -> Vec<(LogosToken, std::ops::Range<usize>)> {
 fn main() {
     let args = Args::parse();
     let std_lib = include_str!("../std/std.sl").to_owned();
+
+    if args.doc {
+        println!("{}", VM::get_doc());
+        return;
+    }
 
     let src = if !args.file.is_empty() {
         fs::read_to_string(&args.file).unwrap_or_else(|_| {

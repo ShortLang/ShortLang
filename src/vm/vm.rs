@@ -1745,6 +1745,43 @@ impl VM {
             self.runtime_error("Expected an index", span);
         }
     }
+
+    pub fn get_doc() -> String {
+        super::stdlib::init();
+
+        use std::io::Write;
+        let mut output = Vec::new();
+
+        // Functions
+        for (fn_name, overloads) in INBUILT_FUNCTIONS.lock().unwrap().iter() {
+            if overloads.len() == 1 {
+                let (num_args, (_, help_msg)) = overloads.iter().next().unwrap();
+                let mut arg_name_gen = crate::name_generator::NameGenerator::new();
+                let arg_string = (0..*num_args)
+                    .map(|_| arg_name_gen.next().unwrap())
+                    .collect::<Vec<_>>()
+                    .join(", ");
+
+                writeln!(output, "- ### {fn_name}({arg_string}) <br> \n\t{help_msg}");
+            } else {
+                writeln!(output, "- ### {fn_name} [{len} overloads]", len = overloads.len());
+
+                for (idx, (&num_args, (_, help_msg))) in overloads.iter().enumerate() {
+                    let mut arg_name_gen = crate::name_generator::NameGenerator::new();
+                    let arg_string = (0..num_args)
+                        .map(|_| arg_name_gen.next().unwrap())
+                        .collect::<Vec<_>>()
+                        .join(", ");
+
+                    writeln!(output, "\t- ### {fn_name}({arg_string}) <br> \n\t\t{help_msg}");
+                }
+            }
+
+            writeln!(output, "\n<hr>\n");
+        }
+
+        String::from_utf8(output).unwrap()
+    }
 }
 
 impl Drop for VM {
