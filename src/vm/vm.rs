@@ -1752,17 +1752,36 @@ impl VM {
         use std::io::Write;
         let mut output = Vec::new();
 
+        // Title and forewords
+        writeln!(output, "# ShortLang Standard Library Documentation\n");
+        writeln!(output, "This contains the documentation for the standard library of ShortLang.\n");
+        writeln!(output, "---\n");
+
         // Functions
-        for (fn_name, overloads) in INBUILT_FUNCTIONS.lock().unwrap().iter() {
+        let binding = INBUILT_FUNCTIONS.lock().unwrap();
+        let mut functions: Vec<_> = binding.iter().collect();
+        // Sort functions alphabetically
+        functions.sort_by_key(|(name, _)| name.clone());
+
+        let mut function_counter = 0;
+        for (fn_name, overloads) in functions {
+            let mut overloads: Vec<_> = overloads.iter().collect();
+            // Sort overloads by number of arguments
+            overloads.sort_by_key(|(num_args, _)| *num_args);
+
             if overloads.len() == 1 {
                 let (num_args, (_, help_msg)) = overloads.iter().next().unwrap();
                 let mut arg_name_gen = crate::name_generator::NameGenerator::new();
-                let arg_string = (0..*num_args)
+                let arg_string = (0..**num_args)
                     .map(|_| arg_name_gen.next().unwrap())
                     .collect::<Vec<_>>()
                     .join(", ");
 
-                writeln!(output, "- ### {fn_name}({arg_string}) <br> \n\t{help_msg}");
+                if function_counter < 2 {
+                    writeln!(output, "- ### {fn_name}{arg_string} <br> \n\t{help_msg}");
+                } else {
+                    writeln!(output, "- ### {fn_name}({arg_string}) <br> \n\t{help_msg}");
+                }
             } else {
                 writeln!(output, "- ### {fn_name} [{len} overloads]", len = overloads.len());
 
@@ -1778,6 +1797,7 @@ impl VM {
             }
 
             writeln!(output, "\n<hr>\n");
+            function_counter += 1;
         }
 
         String::from_utf8(output).unwrap()

@@ -8,7 +8,7 @@ lazy_static::lazy_static! {
     static ref RAND: Mutex<fastrand::Rng> = Mutex::new(fastrand::Rng::new());
 }
 
-#[shortlang_fn(args = 1, help = "Returns the length of an array or string.")]
+#[shortlang_fn(args = 1, help = "Returns the length of A.")]
 pub fn len(val: Input) -> Output {
     let len = cast!(nth_arg!(val, 0) => Array).len();
     ret!(Value::Int(len.into()))
@@ -56,7 +56,7 @@ pub fn to_str(val: Input) -> Output {
 
 #[shortlang_fn(
     args = 1,
-    help = "Returns the character associated with the ascii value."
+    help = "Returns the character associated with the ascii value of A."
 )]
 pub fn ord(val: Input) -> Output {
     ret!(Value::Int(
@@ -66,7 +66,7 @@ pub fn ord(val: Input) -> Output {
 
 #[shortlang_fn(
     args = 1,
-    help = "Returns the ascii value associated with a character."
+    help = "Returns the ascii value of A."
 )]
 pub fn chr(val: Input) -> Output {
     ret!(Value::String(
@@ -75,7 +75,7 @@ pub fn chr(val: Input) -> Output {
 }
 
 /// Takes 1 parameter, 0..n or n..=0 if n < 0
-#[shortlang_fn(args = 1, help = "Returns an array with values from 0 to n.")]
+#[shortlang_fn(args = 1, help = "Returns an array with values from 0 to A.")]
 pub fn rng(val: Input) -> Output {
     let upper_lim: i128 = convert_to_i128!(nth_arg!(val, 0));
     let mut array = Vec::new();
@@ -96,7 +96,7 @@ pub fn rng(val: Input) -> Output {
 #[shortlang_fn(
     name = "rng",
     args = 2,
-    help = "Returns an array with values from a to b."
+    help = "Returns an array with values from A to B."
 )]
 pub fn rng_2(val: Input) -> Output {
     let [lower_lim, upper_lim] = [nth_arg!(val, 0), nth_arg!(val, 1)];
@@ -127,7 +127,7 @@ pub fn rnd(_val: Input) -> Output {
 #[shortlang_fn(
     name = "rnd",
     args = 1,
-    help = "Returns a random number between 0 and x."
+    help = "Returns a random number between 0 and A."
 )]
 pub fn rnd_1(val: Input) -> Output {
     let upper_limit: i128 = unsafe { convert_to_i128!(nth_arg!(val, 0)) };
@@ -138,7 +138,7 @@ pub fn rnd_1(val: Input) -> Output {
 #[shortlang_fn(
     name = "rnd",
     args = 2,
-    help = "Returns a random number between a and b."
+    help = "Returns a random number between A and B."
 )]
 pub fn rnd_2(val: Input) -> Output {
     let [lower_lim, upper_lim]: [i128; 2] = unsafe {
@@ -156,7 +156,7 @@ pub fn rnd_2(val: Input) -> Output {
 #[shortlang_fn(
     name = "flt",
     args = 1,
-    help = "Tries to convert a value to a float, returns an error if it fails."
+    help = "Tries to convert A to a float, returns an error if it fails."
 )]
 pub fn to_float(val: Input) -> Output {
     let val = nth_arg!(val, 0);
@@ -179,7 +179,7 @@ pub fn to_float(val: Input) -> Output {
 #[shortlang_fn(
     name = "int",
     args = 1,
-    help = "Tries to convert a value to an integer, returns an error if it fails."
+    help = "Tries to convert A to an integer, returns an error if it fails."
 )]
 pub fn to_int(val: Input) -> Output {
     let val = nth_arg!(val, 0);
@@ -233,7 +233,7 @@ pub fn input_with_prompt(val: Input) -> Output {
     ret!(Value::String(s.trim().to_string()));
 }
 
-#[shortlang_fn(name = "type", args = 1, help = "Returns the value type.")]
+#[shortlang_fn(name = "type", args = 1, help = "Returns the type of A.")]
 pub fn get_type(val: Input) -> Output {
     let t = nth_arg!(val, 0).get_type();
     ret!(Value::String(t.to_owned()));

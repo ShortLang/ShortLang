@@ -4,7 +4,7 @@ use rug::{ops::CompleteRound, Complete, Float, Integer};
 
 use super::*;
 
-#[shortlang_fn(args = 2, help = "Returns the least common multiple of two values.")]
+#[shortlang_fn(args = 2, help = "Returns the least common multiple of A and B.")]
 pub fn lcm(val: Input) -> Output {
     let [a, b] = [nth_arg!(val, 0), nth_arg!(val, 1)];
 
@@ -25,7 +25,7 @@ pub fn lcm(val: Input) -> Output {
     ret!(Value::Int(lcm));
 }
 
-#[shortlang_fn(args = 2, help = "Returns the greatest common divisor of two values.")]
+#[shortlang_fn(args = 2, help = "Returns the greatest common divisor of A and B.")]
 pub fn gcd(val: Input) -> Output {
     let &[a, b] = val else { unreachable!() };
     let [a, b] = unsafe { [a.as_ref(), b.as_ref()] };
@@ -81,7 +81,7 @@ pub fn nth_prime(val: Input) -> Output {
     }
 }
 
-#[shortlang_fn(name = "isprime", args = 1, help = "Checks whether a number is prime.")]
+#[shortlang_fn(name = "isprime", args = 1, help = "Checks whether A is a prime.")]
 pub fn is_prime(val: Input) -> Output {
     let n = nth_arg!(val, 0);
     match n {
@@ -127,7 +127,7 @@ pub fn next_prime(val: Input) -> Output {
     }
 }
 
-#[shortlang_fn(args = 1, help = "Returns the absolute value of a number.")]
+#[shortlang_fn(args = 1, help = "Returns the absolute value of A.")]
 pub fn abs(val: Input) -> Output {
     let n = nth_arg!(val, 0);
     match n {
@@ -179,13 +179,13 @@ pub fn ceil(val: Input) -> Output {
     }
 }
 
-#[shortlang_fn(args = 1, help = "Calculates the square root of a number.")]
+#[shortlang_fn(args = 1, help = "Calculates the square root of A.")]
 pub fn sqrt(val: Input) -> Output {
     let n = float!(cast_nth_arg!(val, 0, Int));
     Ok(Some(allocate(Value::Float(n.sqrt()))))
 }
 
-#[shortlang_fn(args = 2, help = "Calculates the nth root of a number.")]
+#[shortlang_fn(args = 2, help = "Calculates the nth root of A.")]
 pub fn root(val: Input) -> Output {
     let [n, th_root] = [cast_nth_arg!(val, 0, Int), cast_nth_arg!(val, 1, Int)];
     let root = float!(n).root(th_root.saturating_cast());

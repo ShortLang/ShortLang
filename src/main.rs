@@ -96,7 +96,9 @@ fn main() {
     let std_lib = include_str!("../std/std.sl").to_owned();
 
     if args.doc {
-        println!("{}", VM::get_doc());
+        let mut file = fs::File::create("docs.md").unwrap();
+        file.write_all(VM::get_doc().as_bytes()).unwrap();
+        println!("Documentation generated to docs.md");
         return;
     }
 
