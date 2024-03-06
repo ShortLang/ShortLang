@@ -1757,11 +1757,11 @@ impl VM {
             output,
             "Welcome to the documentation for the standard library of ShortLang. This concise yet powerful language comes equipped with a range of functions to enhance your coding experience. Below are all the built-in functions you might need.\n"
         );
-        writeln!(output, "\n# Functions\n\n---\n");
+        writeln!(output, "\n# Functions\n");
 
         output.extend(Self::get_fn_docs().chars().map(|i| i as u8));
 
-        writeln!(output, "\n# Methods\n");
+        writeln!(output, "\n<hr>\n\n# Methods\n");
         output.extend(Self::get_method_docs().chars().map(|i| i as u8));
 
         String::from_utf8(output).unwrap()
@@ -1816,7 +1816,6 @@ impl VM {
                 }
             }
 
-            writeln!(output, "<hr>\n");
             function_counter += 1;
         }
 
@@ -1845,8 +1844,7 @@ impl VM {
         methods.sort_by_key(|(ty, _)| ty.to_string());
 
         for (on_type, methods) in methods.into_iter() {
-            writeln!(output, "---\n## {on_type} [{} methods]\n", methods.len()).unwrap();
-
+            writeln!(output, "## {on_type}\n").unwrap();
             let mut methods = Vec::from_iter(methods.into_iter());
 
             // Sort alphabetically according to function names
@@ -1885,8 +1883,6 @@ impl VM {
                         );
                     }
                 }
-
-                // writeln!(output, "\n<hr>\n");
             }
         }
 
