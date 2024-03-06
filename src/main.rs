@@ -96,7 +96,10 @@ fn main() {
     let std_lib = include_str!("../std/std.sl").to_owned();
 
     if args.doc {
-        println!("{}", VM::get_doc());
+        println!("# Functions\n");
+        println!("{}", VM::get_fn_docs());
+        println!("\n# Methods\n");
+        println!("{}", VM::get_method_docs());
         return;
     }
 
