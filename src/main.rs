@@ -97,7 +97,7 @@ fn main() {
 
     if args.doc {
         let mut file = fs::File::create("docs.md").unwrap();
-        file.write_all(VM::get_doc().as_bytes()).unwrap();
+        file.write_all(VM::get_docs().as_bytes()).unwrap();
         println!("Documentation generated to docs.md");
         return;
     }

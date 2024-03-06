@@ -8,6 +8,7 @@ use miette::{miette, LabeledSpan};
 use rug::ops::CompleteRound;
 use rug::{Complete, Float, Integer};
 use std::collections::HashMap;
+use std::io::Write;
 use std::ops::Range;
 use std::ptr::NonNull;
 use std::string::ToString;
@@ -1746,22 +1747,35 @@ impl VM {
         }
     }
 
-    pub fn get_fn_docs() -> String {
+    pub fn get_docs() -> String {
         super::stdlib::init();
 
-        use std::io::Write;
         let mut output = Vec::new();
 
         // Title and forewords
         writeln!(output, "# ShortLang Standard Library Documentation\n");
-        writeln!(output, "This contains the documentation for the standard library of ShortLang.\n");
-        writeln!(output, "---\n");
+        writeln!(
+            output,
+            "This contains the documentation for the standard library of ShortLang.\n"
+        );
+        writeln!(output, "---\n\n# Functions\n");
 
-        // Functions
+        output.extend(Self::get_fn_docs().chars().map(|i| i as u8));
+
+        writeln!(output, "\n# Methods\n");
+        output.extend(Self::get_method_docs().chars().map(|i| i as u8));
+
+        String::from_utf8(output).unwrap()
+    }
+
+    fn get_fn_docs() -> String {
+        let mut output = Vec::with_capacity(10_000);
+
         let binding = INBUILT_FUNCTIONS.lock().unwrap();
         let mut functions: Vec<_> = binding.iter().collect();
+
         // Sort functions alphabetically
-        functions.sort_by_key(|(name, _)| name.clone());
+        functions.sort_by_key(|(name, _)| (*name).clone());
 
         let mut function_counter = 0;
         for (fn_name, overloads) in functions {
@@ -1803,18 +1817,13 @@ impl VM {
                 }
             }
 
-            writeln!(output, "\n<hr>\n");
             function_counter += 1;
         }
 
         String::from_utf8(output).unwrap()
     }
 
-    pub fn get_method_docs() -> String {
-        use std::io::Write;
-
-        super::stdlib::init();
-
+    fn get_method_docs() -> String {
         let locked = INBUILT_METHODS.lock().unwrap();
         let mut methods: HashMap<Type, HashMap<String, Vec<(usize, &String)>>> = HashMap::new();
         let mut output = Vec::new();
@@ -1830,8 +1839,18 @@ impl VM {
             }
         }
 
+        let mut methods = Vec::from_iter(methods.into_iter());
+
+        // Sort alphabetically according to type names
+        methods.sort_by_key(|(ty, _)| ty.to_string());
+
         for (on_type, methods) in methods.into_iter() {
             writeln!(output, "## {on_type} [{} methods]\n", methods.len()).unwrap();
+
+            let mut methods = Vec::from_iter(methods.into_iter());
+
+            // Sort alphabetically according to function names
+            methods.sort_by_key(|(name, _)| name.clone());
 
             for (fn_name, overloads) in methods.into_iter() {
                 if overloads.len() == 1 {
@@ -1849,6 +1868,9 @@ impl VM {
                         "- ### {fn_name} [{len} overloads]",
                         len = overloads.len()
                     );
+
+                    let mut overloads = Vec::from_iter(overloads.into_iter());
+                    overloads.sort_by_key(|(num_args, _)| *num_args);
 
                     for (idx, (num_args, help_msg)) in overloads.iter().enumerate() {
                         let mut arg_name_gen = crate::name_generator::NameGenerator::new();
