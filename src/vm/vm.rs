@@ -1752,13 +1752,12 @@ impl VM {
 
         let mut output = Vec::new();
 
-        // Title and forewords
-        writeln!(output, "# ShortLang Standard Library Documentation\n");
+        // Forewords
         writeln!(
             output,
-            "This contains the documentation for the standard library of ShortLang.\n"
+            "Welcome to the documentation for the standard library of ShortLang. This concise yet powerful language comes equipped with a range of functions to enhance your coding experience. Below are all the built-in functions you might need.\n"
         );
-        writeln!(output, "---\n\n# Functions\n");
+        writeln!(output, "\n# Functions\n\n---\n");
 
         output.extend(Self::get_fn_docs().chars().map(|i| i as u8));
 
@@ -1792,14 +1791,14 @@ impl VM {
                     .join(", ");
 
                 if function_counter < 2 {
-                    writeln!(output, "- ### {fn_name}{arg_string} <br> \n\t{help_msg}");
+                    writeln!(output, "## {fn_name}{arg_string} <br> \n{help_msg}");
                 } else {
-                    writeln!(output, "- ### {fn_name}({arg_string}) <br> \n\t{help_msg}");
+                    writeln!(output, "## {fn_name}({arg_string}) <br> \n{help_msg}");
                 }
             } else {
                 writeln!(
                     output,
-                    "- ### {fn_name} [{len} overloads]",
+                    "## {fn_name} [{len} overloads]",
                     len = overloads.len()
                 );
 
@@ -1812,11 +1811,12 @@ impl VM {
 
                     writeln!(
                         output,
-                        "\t- ### {fn_name}({arg_string}) <br> \n\t\t{help_msg}"
+                        "- ### {fn_name}({arg_string}) <br> \n\t{help_msg}"
                     );
                 }
             }
 
+            writeln!(output, "<hr>\n");
             function_counter += 1;
         }
 
@@ -1845,7 +1845,7 @@ impl VM {
         methods.sort_by_key(|(ty, _)| ty.to_string());
 
         for (on_type, methods) in methods.into_iter() {
-            writeln!(output, "## {on_type} [{} methods]\n", methods.len()).unwrap();
+            writeln!(output, "---\n## {on_type} [{} methods]\n", methods.len()).unwrap();
 
             let mut methods = Vec::from_iter(methods.into_iter());
 
