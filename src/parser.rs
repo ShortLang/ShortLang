@@ -24,6 +24,11 @@ pub enum Op {
     MulEq,
     DivEq,
     Rem,
+    And,
+    Equal,
+    NotEqual,
+    Or,
+    Xor,
 }
 impl fmt::Display for Op {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -31,6 +36,11 @@ impl fmt::Display for Op {
             f,
             "{}",
             match self {
+                Self::Equal => "==",
+                Self::NotEqual => "!=",
+                Self::Xor => "^",
+                Self::And => "&&",
+                Self::Or => "||",
                 Self::Greater => ">",
                 Self::Less => "<",
                 Self::GreaterEq => ">=",
@@ -75,12 +85,16 @@ pub enum Token {
     Colon,
     Semicolon,
     Dollar,
+    Question,
+    Comma,
     Eof,
 }
 
 impl fmt::Display for Token {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Self::Comma => write!(f, "`,`"),
+            Self::Question => write!(f, "`?`"),
             Self::Eof => write!(f, "<eof>"),
             Self::Open(d) => {
                 write!(
@@ -161,25 +175,27 @@ pub fn lexer() -> impl Parser<char, Vec<(Token, Span)>, Error = Error> {
         .map(Token::Str)
         .labelled("string");
 
-    let operator = choice((
-        just(">").to(Op::Greater),
-        just("<").to(Op::Less),
-        just(">=").to(Op::GreaterEq),
-        just("<=").to(Op::LessEq),
-        just("+").to(Op::Add),
-        just("-").to(Op::Sub),
-        just("%").to(Op::Rem),
-        just("*").to(Op::Times),
-        just("/").to(Op::Div),
-        just("++").to(Op::Increase),
-        just("--").to(Op::Decrease),
-        just("+=").to(Op::AddEq),
-        just("-=").to(Op::SubEq),
-        just("*=").to(Op::MulEq),
-        just("/=").to(Op::DivEq),
-    ))
-    .map(Token::Op);
-
+    let operator = just(">=")
+        .to(Op::GreaterEq)
+        .or(just("<=").to(Op::LessEq))
+        .or(just(">").to(Op::Greater))
+        .or(just("<").to(Op::Less))
+        .or(just("+").to(Op::Add))
+        .or(just("-").to(Op::Sub))
+        .or(just("%").to(Op::Rem))
+        .or(just("*").to(Op::Times))
+        .or(just("/").to(Op::Div))
+        .or(just("++").to(Op::Increase))
+        .or(just("--").to(Op::Decrease))
+        .or(just("==").to(Op::Equal))
+        .or(just("^").to(Op::Xor))
+        .or(just("+=").to(Op::AddEq))
+        .or(just("-=").to(Op::SubEq))
+        .or(just("*=").to(Op::MulEq))
+        .or(just("/=").to(Op::DivEq))
+        .or(just("&&").to(Op::And))
+        .or(just("||").to(Op::Or))
+        .map(Token::Op);
     let ident = text::ident().map(Token::Ident);
 
     let comment = just("#")
@@ -200,17 +216,20 @@ pub fn lexer() -> impl Parser<char, Vec<(Token, Span)>, Error = Error> {
     let symbols = choice((
         just(';').to(Token::Semicolon),
         just(':').to(Token::Colon),
+        just(',').to(Token::Comma),
         just('=').to(Token::Equal),
         just('$').to(Token::Dollar),
+        just('?').to(Token::Question),
     ));
 
-    let token = choice((
-        float, int, hex_num, ident, string, operator, newline, delimiters, symbols, comment,
-    ))
-    .or(any().map(Token::Error).validate(|t, span, emit| {
-        emit(Error::expected_input_found(span, None, Some(t.clone())));
-        t
-    }));
+    let token = operator
+        .or(choice((
+            float, int, hex_num, ident, string, newline, delimiters, symbols, comment,
+        )))
+        .or(any().map(Token::Error).validate(|t, span, emit| {
+            emit(Error::expected_input_found(span, None, Some(t.clone())));
+            t
+        }));
 
     let ws = just(' ').or(just('\r')).or(just('\t'));
 
@@ -241,13 +260,22 @@ pub enum BinOp {
     Le,
     Rem,
     Pow,
+    And,
+    Xor,
+    Or,
 }
 #[derive(Debug, Clone)]
 pub enum ExprKind {
     Int(i64),
     Float(f64),
+    Call(String, Vec<Expr>),
     Binary(Box<Expr>, BinOp, Box<Expr>),
     String(String),
+    Ternary {
+        condition: Box<Expr>,
+        then: Box<Expr>,
+        else_do: Option<Box<Expr>>,
+    },
     Ident(String),
     Error,
 }
@@ -261,7 +289,9 @@ impl Expr {
     pub fn new(inner: ExprKind, span: Span) -> Expr {
         Self { inner, span }
     }
-
+    pub fn boxed(self) -> Box<Self> {
+        Box::new(self)
+    }
     pub fn span(&self) -> Span {
         self.span.clone()
     }
@@ -296,6 +326,10 @@ pub fn nested_parser<'a, T: 'a>(
 }
 
 pub fn parser() -> p!(Vec<Expr>) {
+    let identifier = select! {
+        Token::Ident(ident) => ident,
+    };
+
     let expr = recursive(|expr| {
         let literal = select! {
             Token::Int(n) => ExprKind::Int(n.parse().unwrap()),
@@ -306,11 +340,33 @@ pub fn parser() -> p!(Vec<Expr>) {
         .map_err(|e: Error| e.expected(Pattern::Literal))
         .map_with_span(|lit, span| Expr { inner: lit, span });
 
+        let expr_list = expr
+            .clone()
+            .separated_by(just(Token::Comma))
+            .allow_leading()
+            .allow_trailing()
+            .collect::<Vec<_>>();
+
+        let call = identifier
+            .clone()
+            .then(nested_parser(expr_list, Delimiter::Paren, |_| vec![]))
+            .map_with_span(|(name, exprs), span| Expr::new(ExprKind::Call(name, exprs), span));
+
         let cons = nested_parser(expr.clone(), Delimiter::Paren, |s| {
             Expr::new(ExprKind::Error, s)
         });
 
-        let atom = literal.or(cons).boxed();
+        // let ternary = expr
+        //     .clone()
+        //     .then_ignore(just(Token::Question))
+        //     .then(expr.clone())
+        //     // .then(just(Token::Colon).ignore_then(expr).or_not())
+        //     .map_with_span(|(condition, then), s| {
+        //         println!("{condition:?} {then:?}");
+        //         panic!();
+        //     });
+
+        let atom = call.or(literal).or(cons).boxed();
 
         let op = choice((
             just(Token::Op(Op::Times)).to(BinOp::Mul),
@@ -318,7 +374,7 @@ pub fn parser() -> p!(Vec<Expr>) {
         ));
         let product = atom
             .clone()
-            .then(op.then(atom.labelled("binary operand")).repeated())
+            .then(op.then(atom.clone().labelled("binary operand")).repeated())
             .foldl(|a, (op, b)| {
                 let span = a.span().union(b.span());
                 Expr::new(ExprKind::Binary(Box::new(a), op, Box::new(b)), span)
@@ -338,8 +394,55 @@ pub fn parser() -> p!(Vec<Expr>) {
                 Expr::new(ExprKind::Binary(Box::new(a), op, Box::new(b)), span)
             })
             .boxed();
+        let op = choice((
+            just(Token::Op(Op::Less)).to(BinOp::Lt),
+            just(Token::Op(Op::LessEq)).to(BinOp::Le),
+            just(Token::Op(Op::Greater)).to(BinOp::Gt),
+            just(Token::Op(Op::GreaterEq)).to(BinOp::Ge),
+            just(Token::Op(Op::Equal)).to(BinOp::Eq),
+            just(Token::Op(Op::NotEqual)).to(BinOp::Neq),
+        ));
 
-        sum
+        let comparison = sum
+            .clone()
+            .then(op.then(sum.labelled("binary operand")).repeated())
+            .foldl(|a, (op, b)| {
+                let span = a.span().union(b.span());
+                Expr::new(ExprKind::Binary(Box::new(a), op, Box::new(b)), span)
+            })
+            .boxed();
+
+        let op = just(Token::Op(Op::And))
+            .to(BinOp::And)
+            .or(just(Token::Op(Op::Or)).to(BinOp::Or))
+            .or(just(Token::Op(Op::Xor)).to(BinOp::Xor));
+
+        let logical = comparison
+            .clone()
+            .then(op.then(comparison.labelled("binary operand")).repeated())
+            .foldl(|a, (op, b)| {
+                let span = a.span().union(b.span());
+                Expr::new(ExprKind::Binary(Box::new(a), op, Box::new(b)), span)
+            })
+            .boxed();
+
+        let ternary = logical
+            .clone()
+            .then_ignore(just(Token::Question))
+            .then(expr.clone())
+            .then(just(Token::Colon).ignore_then(expr).or_not())
+            .map_with_span(|((condition, then), else_do), f| {
+                Expr::new(
+                    ExprKind::Ternary {
+                        condition: condition.boxed(),
+                        then: then.boxed(),
+                        else_do: else_do.map(Box::new),
+                    },
+                    f,
+                )
+            });
+
+        ternary.or(logical)
     });
 
     let separator = just(Token::Newline)
@@ -357,7 +460,7 @@ pub fn parser() -> p!(Vec<Expr>) {
 }
 #[test]
 fn e() {
-    let src = String::from("5 + (5 - 2 * (9 - 8))");
+    let src = String::from("5 > 8 ? 6 : 8");
     let len = src.len();
     let span = |i| Span::new(i, i + 1, "file".into());
     let stream = Stream::from_iter(
@@ -365,8 +468,10 @@ fn e() {
         src.chars().enumerate().map(|(i, c)| (c, span(i))),
     );
     let l = lexer().parse_recovery(stream);
+
     match l.0 {
         Some(x) => {
+            println!("{:?}", x);
             let mut x = x;
             let last_span = if x.last().is_some() {
                 x.last().unwrap().1.clone()
