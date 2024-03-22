@@ -175,27 +175,25 @@ pub fn lexer() -> impl Parser<char, Vec<(Token, Span)>, Error = Error> {
         .map(Token::Str)
         .labelled("string");
 
-    let operator = just(">=")
-        .to(Op::GreaterEq)
-        .or(just("<=").to(Op::LessEq))
-        .or(just(">").to(Op::Greater))
-        .or(just("<").to(Op::Less))
-        .or(just("+").to(Op::Add))
-        .or(just("-").to(Op::Sub))
-        .or(just("%").to(Op::Rem))
-        .or(just("*").to(Op::Times))
-        .or(just("/").to(Op::Div))
-        .or(just("++").to(Op::Increase))
-        .or(just("--").to(Op::Decrease))
-        .or(just("==").to(Op::Equal))
-        .or(just("^").to(Op::Xor))
-        .or(just("+=").to(Op::AddEq))
-        .or(just("-=").to(Op::SubEq))
-        .or(just("*=").to(Op::MulEq))
-        .or(just("/=").to(Op::DivEq))
-        .or(just("&&").to(Op::And))
-        .or(just("||").to(Op::Or))
-        .map(Token::Op);
+    let operator = choice((
+        just(">=").to(Op::GreaterEq),
+        just("<=").to(Op::LessEq),
+        just(">").to(Op::Greater),
+        just("<").to(Op::Less),
+        just("+").to(Op::Add),
+        just("-").to(Op::Sub),
+        just("%").to(Op::Rem),
+        just("*").to(Op::Times),
+        just("/").to(Op::Div),
+        just("++").to(Op::Increase),
+        just("--").to(Op::Decrease),
+        just("+=").to(Op::AddEq),
+        just("-=").to(Op::SubEq),
+        just("*=").to(Op::MulEq),
+        just("/=").to(Op::DivEq),
+    ))
+    .map(Token::Op);
+
     let ident = text::ident().map(Token::Ident);
 
     let comment = just("#")
