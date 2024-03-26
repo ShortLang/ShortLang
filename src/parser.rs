@@ -1,6 +1,8 @@
 use std::fmt;
 
-use chumsky::{prelude::*, text::newline, Stream};
+use chumsky::{prelude::*, Stream};
+
+use rug::{ops::CompleteRound, Complete, Float, Integer};
 
 use crate::{
     errors::{Error, ErrorKind, Pattern},
@@ -80,19 +82,20 @@ pub enum Token {
     Nil,
     Comment,
     Error(char),
-    Newline,
     Equal,
     Colon,
     Semicolon,
     Dollar,
     Question,
     Comma,
+    Inf,
     Eof,
 }
 
 impl fmt::Display for Token {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Self::Inf => write!(f, "`inf`"),
             Self::Comma => write!(f, "`,`"),
             Self::Question => write!(f, "`?`"),
             Self::Eof => write!(f, "<eof>"),
@@ -119,7 +122,6 @@ impl fmt::Display for Token {
                 )
             }
             Self::Dollar => write!(f, "`$`"),
-            Self::Newline => write!(f, "newline"),
             Self::Semicolon => write!(f, "`;`"),
             Self::Ident(i) => write!(f, "`{}`", i),
             Self::Op(op) => write!(f, "`{}`", op),
@@ -200,8 +202,6 @@ pub fn lexer() -> impl Parser<char, Vec<(Token, Span)>, Error = Error> {
         .then_ignore(none_of('\n').ignored().repeated().ignored())
         .map(|_| Token::Comment);
 
-    let newline = just('\n').map(|_| Token::Newline);
-
     let delimiters = choice((
         just('(').to(Token::Open(Delimiter::Paren)),
         just(')').to(Token::Close(Delimiter::Paren)),
@@ -221,15 +221,16 @@ pub fn lexer() -> impl Parser<char, Vec<(Token, Span)>, Error = Error> {
     ));
 
     let token = operator
+        .or(just("inf").to(Token::Inf))
         .or(choice((
-            float, int, hex_num, ident, string, newline, delimiters, symbols, comment,
+            float, int, hex_num, ident, string, delimiters, symbols, comment,
         )))
         .or(any().map(Token::Error).validate(|t, span, emit| {
             emit(Error::expected_input_found(span, None, Some(t.clone())));
             t
         }));
 
-    let ws = just(' ').or(just('\r')).or(just('\t'));
+    let ws = just(' ').or(just('\n')).or(just('\r')).or(just('\t'));
 
     let token = token
         .map_with_span(|token, span| (token, span))
@@ -264,11 +265,18 @@ pub enum BinOp {
 }
 #[derive(Debug, Clone)]
 pub enum ExprKind {
-    Int(i64),
-    Float(f64),
+    Int(Integer),
+    Float(Float),
     Call(String, Vec<Expr>),
     Binary(Box<Expr>, BinOp, Box<Expr>),
     String(String),
+    Set(String, Box<Expr>),
+    Function {
+        name: String,
+        params: Vec<String>,
+        exprs: Vec<Expr>,
+        inline: bool,
+    },
     Ternary {
         condition: Box<Expr>,
         then: Box<Expr>,
@@ -330,8 +338,9 @@ pub fn parser() -> p!(Vec<Expr>) {
 
     let expr = recursive(|expr| {
         let literal = select! {
-            Token::Int(n) => ExprKind::Int(n.parse().unwrap()),
-            Token::Float(f) => ExprKind::Float(f.parse().unwrap()),
+            Token::Int(n) => ExprKind::Int(Integer::parse(n).unwrap().complete()),
+            Token::Float(f) => ExprKind::Float(Float::parse(f).unwrap().complete(53)),
+            Token::Inf => ExprKind::Float(Float::with_val(53, rug::float::Special::Infinity)),
             Token::Str(s) => ExprKind::String(s),
             Token::Ident(ident) => ExprKind::Ident(ident),
         }
@@ -443,22 +452,63 @@ pub fn parser() -> p!(Vec<Expr>) {
         ternary.or(logical)
     });
 
-    let separator = just(Token::Newline)
-        .or(just(Token::Semicolon))
-        .or(just(Token::Eof));
+    let stmts = recursive(|stmt| {
+        let variable = identifier
+            .clone()
+            .then_ignore(just(Token::Equal))
+            .then(expr.clone())
+            .map_with_span(|(x, b), span| Expr::new(ExprKind::Set(x, b.boxed()), span));
 
-    expr.separated_by(separator.repeated().validate(|x, span, emit| {
-        let len = x.len();
+        let block = nested_parser(
+            stmt.separated_by(just(Token::Semicolon).or_not())
+                .collect::<Vec<_>>(),
+            Delimiter::Brace,
+            |_| vec![],
+        );
+        let inline_function = identifier
+            .clone()
+            .then(identifier.repeated().collect::<Vec<_>>())
+            .then_ignore(just(Token::Colon))
+            .then(expr.clone())
+            .map_with_span(|((name, params), expr), s| {
+                Expr::new(
+                    ExprKind::Function {
+                        name,
+                        params,
+                        exprs: vec![expr],
+                        inline: true,
+                    },
+                    s,
+                )
+            });
 
-        if len == 0 {
-            emit(Error::new(ErrorKind::ExpectedSeparator, span))
-        }
-    }))
-    .collect::<Vec<_>>()
+        let function = identifier
+            .clone()
+            .then(identifier.repeated().collect::<Vec<_>>())
+            .then_ignore(just(Token::Colon))
+            .then(block)
+            .map_with_span(|((name, params), exprs), s| {
+                Expr::new(
+                    ExprKind::Function {
+                        name,
+                        params,
+                        exprs,
+                        inline: false,
+                    },
+                    s,
+                )
+            });
+
+        variable.or(function).or(inline_function).or(expr.clone())
+    });
+
+    stmts
+        .separated_by(just(Token::Semicolon).or_not())
+        .collect::<Vec<_>>()
 }
 #[test]
 fn e() {
-    let src = String::from("5 > 8 ? 6 : 8");
+    let src = String::from("f a b c d: { hi(5 > 8 ? 6 : 8); }  x = inf");
     let len = src.len();
     let span = |i| Span::new(i, i + 1, "file".into());
     let stream = Stream::from_iter(

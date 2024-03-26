@@ -8,3 +8,4 @@ edition = "2021"
 [dependencies]
 ariadne = "0.4.0"
 chumsky = "0.8.0"
+rug = "1.24.0"
