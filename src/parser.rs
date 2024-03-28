@@ -271,6 +271,7 @@ pub enum ExprKind {
     Binary(Box<Expr>, BinOp, Box<Expr>),
     String(String),
     Set(String, Box<Expr>),
+    Print(Box<Expr>),
     Function {
         name: String,
         params: Vec<String>,
@@ -282,6 +283,7 @@ pub enum ExprKind {
         then: Box<Expr>,
         else_do: Option<Box<Expr>>,
     },
+    Array(Vec<Expr>),
     Ident(String),
     Error,
 }
@@ -342,7 +344,15 @@ pub fn parser() -> p!(Vec<Expr>) {
             Token::Float(f) => ExprKind::Float(Float::parse(f).unwrap().complete(53)),
             Token::Inf => ExprKind::Float(Float::with_val(53, rug::float::Special::Infinity)),
             Token::Str(s) => ExprKind::String(s),
-            Token::Ident(ident) => ExprKind::Ident(ident),
+            Token::Ident(ident) => {
+                if ident.starts_with("_") && ident.len() > 1 {
+                    let mut new = ident.clone();
+                    new.remove(0);
+                    ExprKind::String(new.replace("_", " "))
+                } else {
+                    ExprKind::Ident(ident)
+                }
+            },
         }
         .map_err(|e: Error| e.expected(Pattern::Literal))
         .map_with_span(|lit, span| Expr { inner: lit, span });
@@ -372,8 +382,14 @@ pub fn parser() -> p!(Vec<Expr>) {
         //         println!("{condition:?} {then:?}");
         //         panic!();
         //     });
+        let array = nested_parser(
+            expr.clone().separated_by(just(Token::Comma)),
+            Delimiter::Square,
+            |_| vec![],
+        )
+        .map_with_span(|elements, span| Expr::new(ExprKind::Array(elements), span));
 
-        let atom = call.or(literal).or(cons).boxed();
+        let atom = call.or(literal).or(array).or(cons).boxed();
 
         let op = choice((
             just(Token::Op(Op::Times)).to(BinOp::Mul),
@@ -437,7 +453,7 @@ pub fn parser() -> p!(Vec<Expr>) {
             .clone()
             .then_ignore(just(Token::Question))
             .then(expr.clone())
-            .then(just(Token::Colon).ignore_then(expr).or_not())
+            .then(just(Token::Colon).ignore_then(expr.clone()).or_not())
             .map_with_span(|((condition, then), else_do), f| {
                 Expr::new(
                     ExprKind::Ternary {
@@ -449,7 +465,11 @@ pub fn parser() -> p!(Vec<Expr>) {
                 )
             });
 
-        ternary.or(logical)
+        let print_expr = just(Token::Dollar)
+            .ignore_then(expr.clone())
+            .map_with_span(|expr, span| Expr::new(ExprKind::Print(expr.boxed()), span));
+
+        ternary.or(logical).or(print_expr)
     });
 
     let stmts = recursive(|stmt| {
@@ -508,7 +528,7 @@ pub fn parser() -> p!(Vec<Expr>) {
 }
 #[test]
 fn e() {
-    let src = String::from("f a b c d: { hi(5 > 8 ? 6 : 8); }  x = inf");
+    let src = String::from("[no, way, bro, fr, 6]");
     let len = src.len();
     let span = |i| Span::new(i, i + 1, "file".into());
     let stream = Stream::from_iter(
