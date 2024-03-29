@@ -272,6 +272,12 @@ pub enum ExprKind {
     String(String),
     Set(String, Box<Expr>),
     Print(Box<Expr>),
+    Slice {
+        expr: Box<Expr>,
+        start: Option<Box<Expr>>,
+        end: Option<Box<Expr>>,
+        step: Option<Box<Expr>>,
+    },
     Function {
         name: String,
         params: Vec<String>,
@@ -337,6 +343,11 @@ pub fn parser() -> p!(Vec<Expr>) {
     let identifier = select! {
         Token::Ident(ident) => ident,
     };
+    let int = select! {
+        Token::Int(n) => ExprKind::Int(Integer::parse(n).unwrap().complete())
+    }
+    .map_err(|e: Error| e.expected(Pattern::Literal))
+    .map_with_span(|l, span| Expr::new(l, span));
 
     let expr = recursive(|expr| {
         let literal = select! {
@@ -356,6 +367,30 @@ pub fn parser() -> p!(Vec<Expr>) {
         }
         .map_err(|e: Error| e.expected(Pattern::Literal))
         .map_with_span(|lit, span| Expr { inner: lit, span });
+
+        let slice = expr
+            .clone()
+            .then(nested_parser(
+                int.clone()
+                    .or_not()
+                    .then_ignore(just(Token::Colon))
+                    .then(int.clone().or_not())
+                    .then_ignore(just(Token::Colon))
+                    .then(int.clone().or_not()),
+                Delimiter::Square,
+                |_| ((None, None), None),
+            ))
+            .map_with_span(|(array, ((start, end), step)), span| {
+                Expr::new(
+                    ExprKind::Slice {
+                        expr: Box::new(array),
+                        start: start.map(Box::new),
+                        end: end.map(Box::new),
+                        step: step.map(Box::new),
+                    },
+                    span,
+                )
+            });
 
         let expr_list = expr
             .clone()
@@ -389,7 +424,7 @@ pub fn parser() -> p!(Vec<Expr>) {
         )
         .map_with_span(|elements, span| Expr::new(ExprKind::Array(elements), span));
 
-        let atom = call.or(literal).or(array).or(cons).boxed();
+        let atom = call.or(literal).or(array).or(cons).or(slice).boxed();
 
         let op = choice((
             just(Token::Op(Op::Times)).to(BinOp::Mul),
@@ -528,7 +563,7 @@ pub fn parser() -> p!(Vec<Expr>) {
 }
 #[test]
 fn e() {
-    let src = String::from("[no, way, bro, fr, 6]");
+    let src = String::from("x[0:5]");
     let len = src.len();
     let span = |i| Span::new(i, i + 1, "file".into());
     let stream = Stream::from_iter(
